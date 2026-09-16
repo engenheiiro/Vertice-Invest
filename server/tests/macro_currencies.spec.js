@@ -39,7 +39,18 @@ const yahooBody = {
  *
  * Só o `Date` é falsificado; timers não entram, porque nada aqui espera tempo.
  */
-const SEXTA_UTIL = new Date('2026-09-04T15:00:00.000Z');
+const SEXTA_UTIL = new Date('2026-09-04T15:00:00.000Z'); // 12h BRT — manhã
+
+/**
+ * A MESMA sexta, depois do boletim (14h BRT).
+ *
+ * `SEXTA_UTIL` cai às 12h de Brasília, e essa hora passou a ter significado: antes
+ * das 13h a PTAX não é consultada, porque a fixação do dia ainda não existe (ver
+ * `ptaxSkipReason`). Os casos que exercitam a REDE precisam de um relógio em que
+ * perguntar faça sentido — com o da manhã eles estariam medindo o pulo, não a
+ * leitura.
+ */
+const SEXTA_POS_BOLETIM = new Date('2026-09-04T17:00:00.000Z'); // 14h BRT
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(SEXTA_UTIL);
@@ -248,6 +259,9 @@ describe('_fetchBtcCoinbase — rede final do bitcoin', () => {
 });
 
 describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
+    // Depois do boletim: é a única janela em que a consulta acontece de verdade.
+    // Os casos de pulo (feriado, sábado, manhã) movem o relógio no próprio corpo.
+    beforeEach(() => vi.setSystemTime(SEXTA_POS_BOLETIM));
     afterEach(() => vi.restoreAllMocks());
 
     const ptax = (dia, venda) => ({ dataHoraCotacao: `${dia} 13:03:59.556874`, cotacaoVenda: venda });
@@ -309,9 +323,53 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
         expect(rede).not.toHaveBeenCalled();
     });
 
-    // Antes das ~13h o Olinda devolve 200 com os dias anteriores: resposta CHEIA,
-    // e sem a única linha que serve. Medir "dado" pelo tamanho da série faria o
-    // card se contradizer com o ledger de escaladas.
+    // ── A JANELA DA MANHÃ ───────────────────────────────────────────────────
+    // O card apareceu "Instável" no painel de 16/09/2026 com "última entrega —".
+    // A causa não era o Banco Central: `failures` soma `fail + empty`
+    // (utils/sourceHealth.js) e, antes das 13h, o Olinda devolve 200 com os dias
+    // anteriores e SEM a fixação de hoje — vazio certo, cobrado como falha. Uma
+    // consulta matinal bastava para pintar a fonte de amarelo até o processo
+    // reiniciar, porque a estatística é cumulativa desde o boot e a PTAX quase não
+    // é chamada de novo. É a mesma certeza do feriado, com outro nome.
+    it('antes do boletim nem chega a perguntar, e a razão fica no painel', async () => {
+        resetSourceStats();
+        vi.setSystemTime(SEXTA_UTIL); // 12h BRT, dia útil
+        const rede = vi.spyOn(axios, 'get');
+
+        await expect(macroDataService._fetchPtaxUsd()).resolves.toBeNull();
+
+        expect(rede).not.toHaveBeenCalled();
+        const card = getSourceStats().find((s) => s.id === 'ptax');
+        expect(card.attempts).toBe(0);   // pular não é falhar
+        expect(card.failures).toBe(0);   // e não pode pintar o card de amarelo
+        expect(card.skipped).toBe(1);
+        expect(card.lastSkipReason).toMatch(/boletim/i);
+    });
+
+    // O elo pulado não pode entrar no ledger como TENTADO: o painel conta um
+    // `missed` por elo alcançado que não resolveu, e acusar a fonte por uma
+    // chamada que não houve é o mesmo defeito, um andar acima.
+    it('na trilha da manhã, a PTAX aparece como não consultada', async () => {
+        resetSourceStats();
+        vi.setSystemTime(SEXTA_UTIL);
+        vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
+        vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue(null);
+        vi.spyOn(macroDataService, '_fetchCurrenciesCoinbaseRates')
+            .mockResolvedValue({ usd: 5.127075, usdChange: 0.3, btc: 79997.92, btcChange: -1.2 });
+
+        await macroDataService.updateCurrencies();
+
+        const usd = getEscalations().find((e) => e.chain === 'fx' && e.subject === 'USD');
+        expect(usd.tried).toContain('ptax');     // o elo segue no caminho…
+        expect(usd.skipped).toContain('ptax');   // …mas riscado, não cobrado
+        const porFonte = buildEscalationView(getEscalations(), getSourceStats()).bySource;
+        expect(porFonte.get('ptax').missed).toBe(0);
+    });
+
+    // DEPOIS do boletim o vazio volta a ser notícia: aí o Olinda respondeu sem a
+    // linha que serve num horário em que ela deveria existir, e isso é atraso de
+    // verdade. Medir "dado" pelo tamanho da série faria o card se contradizer com
+    // o ledger de escaladas.
     it('série sem a fixação de hoje conta como resposta SEM dado, não como entrega', async () => {
         resetSourceStats();
         vi.spyOn(axios, 'get').mockResolvedValue({

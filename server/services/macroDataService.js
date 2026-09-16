@@ -15,6 +15,7 @@ import { fetchTesouroCsv } from './treasuryPriceService.js';
 import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
 import { trackSource, recordEscalation, recordSourceSkip } from '../utils/sourceHealth.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
+import { brNow } from '../utils/sourceSchedule.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
@@ -71,6 +72,43 @@ export const isPlausibleBtc = (value) => Number.isFinite(value) && value >= 1000
  * anterior, publicado em hora não garantida — não é cotação corrente por
  * construção.
  */
+/**
+ * Hora (BRT) a partir da qual a fixação do dia PODE existir. O boletim de
+ * fechamento da PTAX sai por volta das 13h; antes disso o dia corrente não está
+ * na série, e isso é calendário do Banco Central, não indisponibilidade.
+ */
+const PTAX_BULLETIN_HOUR = 13;
+
+/**
+ * Razão para NÃO consultar a PTAX agora — ou `null` quando vale perguntar.
+ *
+ * Existe porque, no painel, "respondeu vazio" conta como falha (`failures =
+ * fail + empty`, em `utils/sourceHealth.js`), e antes das 13h o vazio é
+ * CERTEZA: o Olinda devolve 200 com os dias anteriores e sem a única linha que a
+ * regra de aceitação admite. Perguntar ali é gastar uma chamada condenada e
+ * cobrar da fonte um atraso que é do calendário — o card virava "Instável" por
+ * uma manhã e ficava assim até o processo reiniciar, porque a estatística é
+ * cumulativa desde o boot e a PTAX quase não é chamada de novo.
+ *
+ * É a MESMA regra que já valia para fim de semana e feriado, estendida à única
+ * outra janela em que a resposta é conhecida de antemão. Depois das 13h o vazio
+ * volta a ser notícia — aí o boletim está atrasado de verdade, e o painel deve
+ * dizer isso.
+ *
+ * Pura de propósito: quem CHAMA (`_fetchPtaxUsd`) e quem desenha o CAMINHO no
+ * painel (`updateCurrencies`, que precisa marcar o elo como não consultado em
+ * vez de tentado) têm que decidir igual. Duas cópias divergiriam.
+ */
+export const ptaxSkipReason = (now = new Date()) => {
+    if (!isBrBusinessDay(brazilDateKey(now))) {
+        return 'Sem fixação em fim de semana ou feriado — o Banco Central não publica hoje';
+    }
+    if (brNow(now).hour < PTAX_BULLETIN_HOUR) {
+        return `Boletim de fechamento sai ~${PTAX_BULLETIN_HOUR}h BRT — a fixação de hoje ainda não existe`;
+    }
+    return null;
+};
+
 const CURRENCY_SOURCES = [
     {
         name: 'Yahoo',
@@ -107,6 +145,13 @@ const CURRENCY_SOURCES = [
         name: 'PTAX/BCB',
         id: 'ptax',
         covers: ['usd'],
+        // `skipWhen` não impede a chamada — quem decide isso é o próprio
+        // `_fetchPtaxUsd`, dono único do registro do pulo. Ele serve ao LEDGER:
+        // sem ele a PTAX entraria como "tentada e não resolveu" num momento em
+        // que ninguém a consultou, e o painel lhe daria um `missed` por uma
+        // chamada que não houve (ver o tratamento de `skipped` em
+        // `utils/dataSourceStatus.js`).
+        skipWhen: () => ptaxSkipReason(),
         fetch: (service) => service._fetchPtaxUsd(),
     },
     // ÚLTIMO RECURSO, e existe por causa de uma lacuna com HORA MARCADA: a PTAX
@@ -545,11 +590,17 @@ export const macroDataService = {
          */
         const trilha = { usd: [], btc: [] };
 
-        for (const [i, { name, id, covers, fetch }] of CURRENCY_SOURCES.entries()) {
+        // Elos que estavam no caminho e NÃO foram consultados (ver `skipWhen`).
+        // O painel desenha os dois estados diferente, e com razão: silêncio de
+        // quem ninguém chamou não é silêncio de quem falhou.
+        const naoConsultadas = new Set();
+
+        for (const [i, { name, id, covers, fetch, skipWhen }] of CURRENCY_SOURCES.entries()) {
             if (reading.usd !== null && reading.btc !== null) break;
             if (i > 0) {
                 logger.warn(`⚠️ [Câmbio] ${CURRENCY_SOURCES[i - 1].name} não cobriu ${missingLabel()}; tentando ${name}.`);
             }
+            if (skipWhen?.()) naoConsultadas.add(id);
             for (const moeda of covers) {
                 if (reading[moeda] === null) trilha[moeda].push(id);
             }
@@ -572,6 +623,7 @@ export const macroDataService = {
                 chain: 'fx',
                 subject: assunto,
                 tried,
+                skipped: [...naoConsultadas],
                 resolvedBy,
                 reason: 'O Yahoo não trouxe esta cotação',
             });
@@ -714,9 +766,14 @@ export const macroDataService = {
      *    marcado como defasado, que é a resposta honesta.
      * 2. **Só dólar.** O BCB não cota cripto; `btc` sai indefinido de propósito e
      *    o chamador trata a cobertura parcial.
-     * 3. **Em dia não útil ela nem é chamada.** Consequência direta do item 1, e
-     *    não uma otimização: se a aceitação exige fixação de HOJE e o BCB não fixa
-     *    em sábado, domingo ou feriado, a chamada está condenada antes de sair.
+     * 3. **Quando a resposta já é conhecida, ela nem é chamada.** Consequência
+     *    direta do item 1, e não uma otimização: se a aceitação exige fixação de
+     *    HOJE, a chamada está condenada antes de sair em sábado, domingo, feriado
+     *    — e também antes das ~13h de um dia útil, que é a MESMA certeza com outro
+     *    nome. A janela da manhã ficou de fora quando o pulo foi criado, e o preço
+     *    disso aparecia no painel: `failures` soma `fail + empty`, então uma
+     *    consulta matinal pintava a fonte de "Instável" até o processo reiniciar,
+     *    por um atraso que é do calendário do BCB. `ptaxSkipReason` é a regra.
      *    Em 07/09/2026 (feriado da Independência) o Yahoo falhou no dólar às
      *    12h20, a PTAX foi consultada, respondeu 200 com os 10 dias pedidos, e a
      *    fixação mais recente era de sexta — recusada, corretamente. O painel
@@ -736,9 +793,14 @@ export const macroDataService = {
     async _fetchPtaxUsd() {
         try {
             const hojeBr = brazilDateKey();
-            if (!isBrBusinessDay(hojeBr)) {
-                recordSourceSkip('ptax', 'Sem fixação em fim de semana ou feriado — o Banco Central não publica hoje');
-                logger.info(`ℹ️ [Câmbio] PTAX não consultada: ${hojeBr} não é dia útil no Brasil e não há fixação a buscar.`);
+            // Fim de semana, feriado e manhã caem na MESMA regra: a resposta já é
+            // conhecida, então a chamada não sai e a razão fica escrita no card
+            // (ver `ptaxSkipReason`). Pular não é falhar — `recordSourceSkip`
+            // mantém a tentativa fora da conta de desempenho da fonte.
+            const motivoPulo = ptaxSkipReason();
+            if (motivoPulo) {
+                recordSourceSkip('ptax', motivoPulo);
+                logger.info(`ℹ️ [Câmbio] PTAX não consultada em ${hojeBr}: ${motivoPulo}.`);
                 return null;
             }
 
