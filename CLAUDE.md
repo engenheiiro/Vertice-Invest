@@ -38,6 +38,7 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Suporte — serviço, rotas e anexos | `server/services/supportService.js`, `routes/supportRoutes.js` |
 | Suporte — tela do usuário (widget + `/suporte`) | `client/src/components/support/SupportCenter.tsx` |
 | Suporte — fila do Admin | `client/src/pages/admin/AdminSuporteTab.tsx` |
+| Namespace do ticker canônico (colisão entre classes) | `server/config/tickerNamespace.js` |
 | Setores macro | `server/config/sectorTaxonomy.js` |
 | Constantes financeiras | `server/config/financialConstants.js` |
 | Matemática financeira segura | `server/utils/mathUtils.js` |
@@ -107,6 +108,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 10. **Rate limiting em novas rotas:** usar os limiters **por usuário** de `middleware/rateLimiters.js` (`walletWriteLimiter` 50/15min em POST/PUT/DELETE de wallet; `researchHeavyLimiter` 20/15min em rotas caras). Auth já tem `authLimiter` (20/15min); geral `apiLimiter` (3000/15min). Validar escrita com schema Zod (`validate`).
 11. **Data de pagamento de provento só vem de FONTE.** `DividendEvent.paymentDate` é preenchido apenas por `dividendPaymentDateService` (B3 no sync diário; Fundamentus no backfill manual), sempre com `paymentDateSource` junto. Nulo é o estado honesto: `resolvePaymentDate` cai na estimativa ex+15 e a tela marca "Previsto". **Nunca gravar data deduzida** — pagamento ambíguo (uma linha nossa somando pagamentos com datas diferentes), valor que não bate ou fonte fora do ar deixam o campo nulo. Como qualquer valor não-nulo é tratado como oficial, uma data inventada vira "Agendado" na tela: foi o defeito dos 442 eventos ex+16 apagados em 09/09/2026.
 12. **Nota interna de ticket nunca cruza a fronteira.** O corte do que o usuário vê acontece no SERVIDOR (`serializeTicketForUser`), não na tela: nota interna, contexto técnico e etiquetas de triagem são removidos antes de o JSON sair. Filtrar no front deixaria o texto trafegando — mesma disciplina do link público de carteira, onde o valor sai normalizado da API em vez de mascarado no CSS.
+13. **Uma classe por sigla.** `MarketAsset.ticker` é `unique: true` — a chave é o ticker, não `{ ticker, type }`. Catálogo novo (ou moeda nova em `config/cryptoList.js`) não pode reivindicar sigla que outra classe já tem: o seed usa `filter: { ticker }` + `$setOnInsert`, então o segundo dono casa com a linha do primeiro, **não insere nada e não levanta erro** — e a cotação de um vaza para a linha do outro. `config/tickerNamespace.js` é o dono da regra, `tests/ticker_namespace.spec.js` trava o catálogo, e o seed de cripto consulta o BANCO antes de semear (fail-closed: sigla ocupada fica de fora, nomeada no log) porque a linha conflitante pode vir de onde nenhum catálogo alcança. Foi o defeito do `STX` — Stacks no catálogo, Seagate no S&P 500 —, que punha a ação a US$ 0,24 em todo run do sync até o refresh seguinte. Repetição dentro da MESMA classe não é colisão: deduplica mesclando (ver `US_UNIVERSE`).
 
 ---
 

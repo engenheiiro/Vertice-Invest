@@ -10,7 +10,29 @@ import logger from '../config/logger.js';
 
 // Universo completo do Exterior: ações do S&P 500 + ETFs/REITs/Ouro curados.
 // Mapa ticker→sub-tipo (dica inicial; a heurística classifyUsAsset confirma no sync).
-const US_UNIVERSE = [...SP500_STOCKS, ...US_ETF_LIST];
+//
+// A CONCATENAÇÃO CRUA REPETIA CINCO TICKERS. Os REITs individuais (O, PLD, AMT,
+// SPG, EQIX) moram nas DUAS listas — são componentes do S&P 500 e entraram no
+// `usEtfList` para carregar a dica `usSubType: 'REIT'`. As duas classes são a
+// mesma (`STOCK_US`), então isso nunca corrompeu linha nenhuma; o que custava era
+// trabalho duplicado (cada um perguntado duas vezes ao Yahoo em toda varredura
+// diária de fundamentos) e a dica `REIT` caindo no chão, porque `$setOnInsert` só
+// olha a PRIMEIRA ocorrência e a do S&P 500 vem antes, sem `usSubType`.
+//
+// Deduplicar mesclando resolve os dois: a primeira entrada define a identidade,
+// as seguintes só PREENCHEM o que faltava. Colisão entre CLASSES diferentes é
+// outro assunto e não se resolve mesclando — ver `config/tickerNamespace.js`.
+const US_UNIVERSE = (() => {
+    const porTicker = new Map();
+    for (const asset of [...SP500_STOCKS, ...US_ETF_LIST]) {
+        const anterior = porTicker.get(asset.ticker);
+        if (!anterior) porTicker.set(asset.ticker, { ...asset });
+        else for (const [campo, valor] of Object.entries(asset)) {
+            if (anterior[campo] === undefined || anterior[campo] === null) anterior[campo] = valor;
+        }
+    }
+    return [...porTicker.values()];
+})();
 
 const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
 

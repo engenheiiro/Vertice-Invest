@@ -74,8 +74,23 @@ describe('catálogo', () => {
 
 describe('tradução ciente do tipo', () => {
   it('o caso Seagate: sigla de cripto num ativo que NÃO é cripto', () => {
-    expect(simbolo('STX', 'STOCK_US')).toBe('STX');
-    expect(simbolo('STX', 'CRYPTO')).toBe('STX4847-USD');
+    // O exemplo mudou de STX para ARB em 16/09/2026, e a razão é que o caso
+    // Seagate foi fechado UM ANDAR ABAIXO: `STX` saiu do catálogo de cripto
+    // porque `MarketAsset.ticker` é único e a sigla já era da Seagate (ver
+    // `config/tickerNamespace.js`). Traduzir o símbolo certo nunca bastou — a
+    // resposta ainda era gravada na linha do outro ativo.
+    //
+    // A régua que este teste trava continua valendo para as 49 moedas restantes:
+    // classe conhecida e não-cripto encerra o assunto, e nunca vira `-USD`.
+    expect(simbolo('ARB', 'STOCK_US')).toBe('ARB');
+    expect(simbolo('ARB', 'CRYPTO')).toBe('ARB11841-USD');
+  });
+
+  it('e STX não é mais palpite de cripto em lugar nenhum', () => {
+    // Sem tipo, o palpite sai do catálogo. Com a Stacks fora dele, `STX` volta a
+    // ser tratado como o que a linha do banco diz que é: ação.
+    expect(isKnownCryptoTicker('STX')).toBe(false);
+    expect(simbolo('STX', null)).toBe('STX');
   });
 
   it('cripto fora do catálogo ainda recebe o sufixo padrão', () => {

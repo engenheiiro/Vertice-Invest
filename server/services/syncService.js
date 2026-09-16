@@ -364,8 +364,44 @@ export const syncService = {
             // errado nas siglas disputadas.
             const existingCryptos = new Set(assetsForExternal.filter(a => a.type === 'CRYPTO').map(a => a.ticker));
 
+            // TICKER QUE JÁ TEM DONO DE OUTRA CLASSE NÃO É SEMEADO NEM COTADO.
+            //
+            // `MarketAsset.ticker` é único: a sigla é um namespace global, e a
+            // classe é campo da linha, não parte da chave. Este seed usa
+            // `filter: { ticker }` + `$setOnInsert` — quando a sigla já pertence a
+            // outra classe, o upsert CASA com a linha alheia, não insere nada e
+            // segue em silêncio. Até 16/09/2026 o loop empurrava a moeda para a
+            // fila de cotação assim mesmo, e a gravação (também por `{ ticker }`)
+            // punha o preço da MOEDA na linha da AÇÃO: `STX` era Stacks aqui e
+            // Seagate no S&P 500, e a linha da Seagate ia a US$ 0,24 todo run até
+            // o `refreshQuotesBatch` seguinte devolvê-la a US$ 771,81. O único
+            // sintoma era o juiz de magnitude acusando 319888% — que parece erro
+            // de fonte e era, na verdade, duas identidades numa linha só.
+            //
+            // O catálogo em si está travado por `tests/ticker_namespace.spec.js`
+            // (ver `config/tickerNamespace.js`), mas a linha do banco pode ter
+            // vindo de onde nenhum catálogo alcança — holding de usuário, ticker
+            // herdado, renome. Por isso a régua aqui é o BANCO, e ela é
+            // fail-closed: na dúvida a moeda fica de fora, nomeada no log. Ficar
+            // de fora custa uma moeda ausente do ranking; entrar custa o preço
+            // errado num ativo que alguém tem em carteira.
+            const foreignOwned = new Map(
+                (await MarketAsset.find({
+                    ticker: { $in: CRYPTO_ASSETS.map(c => c.ticker) },
+                    type: { $ne: 'CRYPTO' },
+                }).select('ticker type name').lean()).map(d => [d.ticker, d]),
+            );
+            if (foreignOwned.size > 0) {
+                logger.warn(
+                    `⚠️ [Sync] ${foreignOwned.size} moeda(s) do catálogo têm o ticker ocupado por outra classe — não semeadas nem cotadas: ` +
+                    [...foreignOwned.values()].map(d => `${d.ticker} (${d.type}: ${d.name})`).join(', '),
+                    { colisaoDeTicker: [...foreignOwned.keys()] },
+                );
+            }
+
             for (const cripto of CRYPTO_ASSETS) {
                 const ticker = cripto.ticker;
+                if (foreignOwned.has(ticker)) continue;
                 operations.push({
                     updateOne: {
                         filter: { ticker },

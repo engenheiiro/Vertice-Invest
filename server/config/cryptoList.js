@@ -74,10 +74,22 @@ export const CRYPTO_ASSETS = [
     { ticker: 'DAI', name: 'Dai' },
     { ticker: 'UNI', name: 'Uniswap', yahoo: 'UNI7083-USD' },
     { ticker: 'APT', name: 'Aptos', yahoo: 'APT21794-USD' },
-    // STX é sigla disputada em DOIS mercados: Stacks na cripto e Seagate na
-    // NASDAQ. Ver a nota de `cryptoYahooSymbol` — é por isso que a decisão
-    // "isto é cripto?" não pode sair do texto do ticker.
-    { ticker: 'STX', name: 'Stacks', yahoo: 'STX4847-USD' },
+    // STACKS (STX) FOI BAIXADA EM 16/09/2026 — e a razão não é o provedor.
+    //
+    // `STX` é Stacks aqui e Seagate Technology no S&P 500, e `MarketAsset.ticker`
+    // é ÚNICO: o banco comporta uma linha por sigla, não uma por sigla+classe.
+    // Com a Seagate já ocupando a linha, o seed daqui encontrava `STX` "já
+    // existente", não inseria nada — e mesmo assim empurrava a moeda para a fila
+    // de cotação. A linha da AÇÃO recebia o preço da MOEDA (0,24 no lugar de
+    // 771,81) até o refresh seguinte devolvê-la ao normal, todo run do sync.
+    //
+    // O campo `yahoo` resolvia a PERGUNTA (`STX4847-USD` é mesmo a Stacks); o que
+    // não tinha conserto do lado de fora era a LINHA. Entre uma ação do S&P 500
+    // com histórico, fundamentos e carteira possível, e uma moeda que em nenhum
+    // momento chegou a existir no banco, a sigla fica com a Seagate.
+    //
+    // Ver `config/tickerNamespace.js`: o teste `tests/ticker_namespace.spec.js`
+    // impede que a próxima moeda entre por cima de um ticker que já tem dono.
     { ticker: 'ETC', name: 'Ethereum Classic' },
     { ticker: 'MNT', name: 'Mantle', yahoo: 'MNT27075-USD' },
     { ticker: 'FIL', name: 'Filecoin' },
