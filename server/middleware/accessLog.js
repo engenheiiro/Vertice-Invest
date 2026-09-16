@@ -1,7 +1,7 @@
 
 import { performance } from 'perf_hooks';
 import logger from '../config/logger.js';
-import { recordHttpMetric } from '../utils/performanceMetrics.js';
+import { recordHttpMetric, fullRequestPath } from '../utils/performanceMetrics.js';
 
 // Probes e documentação: alto volume, zero informação de negócio.
 const isNoise = (path) => path === '/api/health' || path.startsWith('/api/docs');
@@ -11,7 +11,7 @@ const isNoise = (path) => path === '/api/health' || path.startsWith('/api/docs')
  * `http`. Sai em desenvolvimento e fica silencioso em produção (o nível do logger
  * lá é `info`, que não alcança `http`).
  *
- * Loga `req.path`, NUNCA `req.originalUrl`: a query string crua é entrada do
+ * Loga o caminho da ROTA, NUNCA `req.originalUrl`: a query string crua é entrada do
  * cliente e cairia em texto puro no console e — se alguém subir o nível para
  * `debug` para depurar algo em produção — dentro de `combined.log`/`combined.json.log`,
  * que rotacionam e ficam em disco. Hoje só trafega `walletId` ali, mas basta uma
@@ -26,12 +26,18 @@ const isNoise = (path) => path === '/api/health' || path.startsWith('/api/docs')
 export const accessLog = (req, res, next) => {
   const start = performance.now();
   res.on('finish', () => {
-    if (isNoise(req.path)) return;
+    // `fullRequestPath`, não `req.path`: aqui dentro do `finish` o Express já
+    // aparou o prefixo do router (ver o helper). Com o caminho cortado, a linha
+    // saía como "GET /performance 200" — sem o `/api/wallet` que diz de qual
+    // rota se fala — e o filtro de ruído deixava de reconhecer `/api/docs`, que
+    // é montado e portanto chega aqui como "/" ou "/swagger-ui.css".
+    const caminho = fullRequestPath(req);
+    if (isNoise(caminho)) return;
     const durationMs = performance.now() - start;
     recordHttpMetric(req, res.statusCode, durationMs);
     const meta = { ms: Math.round(durationMs) };
     if (req.walletId) meta.walletId = req.walletId;
-    logger.http(`${req.method} ${req.path} ${res.statusCode}`, meta);
+    logger.http(`${req.method} ${caminho} ${res.statusCode}`, meta);
   });
   next();
 };

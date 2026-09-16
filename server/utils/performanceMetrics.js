@@ -194,6 +194,31 @@ export const routeMetricKey = (req) => {
 };
 
 /**
+ * Caminho COMPLETO da requisição — `/api/wallet/performance`, não `/performance`.
+ *
+ * `req.path` sozinho NÃO responde isso aqui, e o motivo é de TEMPO: quem chama
+ * este módulo roda dentro do `res.on('finish')`, e a essa altura o Express já
+ * aparou o prefixo do mount e não o restaurou. A restauração só acontece quando a
+ * requisição SEGUE para fora do router, e a rota que respondeu não segue. Em
+ * produção, então, `GET /api/wallet/performance` chega com `req.path` valendo
+ * `/performance` e `req.baseUrl` valendo `/api/wallet` — e como `req.path` é
+ * truthy, um `req.path || req.originalUrl` nunca alcança o segundo.
+ *
+ * Foi o defeito que esvaziou o medidor de API: TODA rota montada em sub-router
+ * (ou seja, todas menos `/api/health`) caía no domínio de arquivo, e o card de
+ * erro anunciava "0 erro em 0 requisições" com o site inteiro passando por ali.
+ * Um teste que monta `req` à mão com o caminho já inteiro não alcança isso — só a
+ * forma que o Express entrega alcança.
+ *
+ * Nunca `originalUrl` como fonte primária: ele carrega a query string crua, que é
+ * entrada do cliente (ver `middleware/accessLog.js`). `baseUrl + path` devolve o
+ * caminho inteiro sem ela; o fallback cobre o `req` que não tem nenhum dos dois.
+ */
+export const fullRequestPath = (req) => (
+  `${req?.baseUrl || ''}${req?.path || ''}` || String(req?.originalUrl || '').split('?')[0]
+);
+
+/**
  * Entrega de arquivo do build (bundle, CSS, imagem) e do shell da SPA vive num
  * domínio SEPARADO de `http`.
  *
@@ -207,7 +232,7 @@ export const routeMetricKey = (req) => {
  * A fronteira é `/api`: o que não é API é arquivo servido (inclusive o deep link
  * da SPA, que devolve o `index.html`).
  */
-const isApiRequest = (req) => String(req?.path || req?.originalUrl || '').startsWith('/api');
+const isApiRequest = (req) => fullRequestPath(req).startsWith('/api');
 
 export const recordHttpMetric = (req, statusCode, durationMs) => {
   const statusClass = `${Math.floor(Number(statusCode || 0) / 100)}xx`;

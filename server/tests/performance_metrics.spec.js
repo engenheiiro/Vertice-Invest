@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import express from 'express';
+import { accessLog } from '../middleware/accessLog.js';
+import logger from '../config/logger.js';
 import {
   PerformanceMetricsRegistry,
   measurePerformance,
@@ -108,5 +111,60 @@ describe('recordHttpMetric — API e entrega de arquivo em séries separadas', (
   it('deep link da SPA conta como arquivo, não como API', () => {
     recordHttpMetric({ method: 'GET', path: '/carteira' }, 200, 90);
     expect(keys('web')).toContain('GET /carteira 2xx');
+  });
+});
+
+/**
+ * A FORMA QUE SÓ O EXPRESS PRODUZ — e que os casos acima não alcançam.
+ *
+ * Ali o `req` é montado à mão, com o caminho inteiro em `req.path`. Nenhuma
+ * requisição de produção chega assim: a medição roda no `res.on('finish')`, e a
+ * essa altura o Express já aparou o prefixo do mount. `/api/wallet/performance`
+ * chega como `req.path` `/performance` + `req.baseUrl` `/api/wallet`, e a
+ * fronteira do `/api` lida de `req.path` dava FALSO para todas elas.
+ *
+ * O estrago não era cosmético: com toda rota montada caindo no domínio de arquivo,
+ * o medidor de latência da API ficava em "aguardando tráfego" e o card de erro em
+ * "0 erro em 0 requisições" — o painel não tinha como acender numa tempestade de
+ * 500. Por isso este caso sobe um Express de verdade, com o middleware de verdade:
+ * é a única forma que reproduz o corte do caminho.
+ */
+describe('recordHttpMetric — a rota montada, como o Express a entrega', () => {
+  const chaves = (domain) => (getPerformanceSnapshot().durations[domain] || []).map((m) => m.key);
+
+  /** Sobe um app com o router MONTADO (a forma de todas as rotas do produto). */
+  const pedir = async (prefixo, rota, caminho) => {
+    vi.spyOn(logger, 'http').mockImplementation(() => logger);
+    const app = express();
+    app.use(accessLog);
+    const router = express.Router();
+    router.get(rota, (_req, res) => res.json({ ok: true }));
+    app.use(prefixo, router);
+
+    const server = app.listen(0);
+    await new Promise((pronto) => server.once('listening', pronto));
+    try {
+      await fetch(`http://127.0.0.1:${server.address().port}${caminho}`);
+      // `finish` é emitido depois que o último byte sai; o corpo já lido garante
+      // que o evento correu antes das asserções.
+      await new Promise((pronto) => setTimeout(pronto, 50));
+    } finally {
+      server.close();
+      vi.restoreAllMocks();
+    }
+  };
+
+  it('rota de sub-router continua sendo API, com o prefixo do mount de volta', async () => {
+    await pedir('/api/wallet', '/performance', '/api/wallet/performance');
+
+    expect(chaves('http')).toContain('GET /api/wallet/performance 2xx');
+    expect(chaves('web')).not.toContain('GET /api/wallet/performance 2xx');
+  });
+
+  it('arquivo servido pela raiz segue fora do medidor de API', async () => {
+    await pedir('/', '/robots.txt', '/robots.txt');
+
+    expect(chaves('web')).toContain('GET /robots.txt 2xx');
+    expect(chaves('http')).not.toContain('GET /robots.txt 2xx');
   });
 });
