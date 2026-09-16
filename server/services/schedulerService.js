@@ -52,7 +52,7 @@ import { recoverUniverseTipWithB3, timeSeriesWorker } from './workers/timeSeries
 import { ensureWalletDayCandles } from './walletDayCandleService.js';
 import { reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } from './walletCandleRecoveryService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
-import { trackJobSafe } from '../utils/jobRun.js';
+import { trackJobSafe, closeOrphanRuns } from '../utils/jobRun.js';
 import { withJobLease } from '../utils/jobLease.js';
 import { withJobWatchdog } from '../utils/jobWatchdog.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
@@ -595,6 +595,11 @@ export const initScheduler = () => {
     }
 
     logger.info("⏰ Scheduler Service Inicializado");
+
+    // Execuções que o processo ANTERIOR deixou abertas. Fica aqui, depois do guard
+    // de instância, porque o `.env` de desenvolvimento aponta para o Mongo de
+    // produção: a máquina do dev não pode fechar a escrituração do host.
+    closeOrphanRuns().catch((e) => logger.warn(`Varredura de execuções órfãs: ${e.message}`));
 
     // (RESILIÊNCIA) Recuperação de snapshots perdidos no BOOT. Um deploy/reinício
     // que caia sobre 23:59 BRT não reexecuta o tick do cron — este catch-up fecha

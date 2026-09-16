@@ -50,6 +50,8 @@ vi.mock('node-cron', () => ({ default: { schedule: vi.fn() } }));
 vi.mock('../utils/jobRun.js', () => ({
     trackJob: vi.fn(),
     trackJobSafe: vi.fn(async (jobId) => jobId),
+    // O boot do scheduler varre execuções deixadas abertas por um processo morto.
+    closeOrphanRuns: vi.fn(async () => ({ closed: 0 })),
 }));
 
 const { default: axios } = await import('axios');

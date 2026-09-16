@@ -16,7 +16,7 @@ import os from 'os';
 import mongoose from 'mongoose';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
-import { getJobLabel } from '../config/jobCatalog.js';
+import { getJobLabel, getJobMaxRuntimeMs } from '../config/jobCatalog.js';
 import { recordJobError } from '../services/errorLogService.js';
 
 const canPersist = () => mongoose.connection?.readyState === 1;
@@ -41,6 +41,68 @@ const safeClose = async (runId, patch) => {
         await JobRun.updateOne({ _id: runId }, { $set: patch });
     } catch (err) {
         logger.debug(`[JobRun] Falha ao fechar execução: ${err.message}`);
+    }
+};
+
+/** Folga mínima sobre o teto do job antes de considerar uma execução órfã. */
+const ORPHAN_GRACE_MS = 30 * 60 * 1000;
+
+export const ORPHAN_ERROR = 'Execução órfã: o processo que a abriu não existe mais (reinício/deploy no meio do job).';
+
+/**
+ * Fecha execuções que ficaram ABERTAS num processo que já morreu.
+ *
+ * Quem abre um `JobRun` é quem o fecha. Quando o processo morre no meio — deploy,
+ * reinício, OOM — não sobra ninguém para fechar, e a linha fica em RUNNING para
+ * sempre. Eram 29 delas em 16/09/2026.
+ *
+ * Isso não é contabilidade: a sentinela lê a ÚLTIMA execução de cada job, então
+ * uma órfã recente faz o painel dizer "execução travada segura memória do
+ * processo" sobre um processo que já reiniciou — alarme certo pelo motivo errado,
+ * que é o tipo de aviso que ensina a ignorar o painel. Fechada como FAILED, a
+ * mesma linha diz a verdade: a rotina daquele dia não terminou.
+ *
+ * DUAS CONDIÇÕES, e as duas importam porque o banco é compartilhado (Render Cron
+ * Jobs e `sync:prod` rodam em processos próprios):
+ *
+ *  - `instance` diferente da minha: nunca fecho o que EU abri e ainda estou
+ *    rodando.
+ *  - mais velha que o teto do job + folga: com o watchdog, nenhuma execução viva
+ *    passa do próprio teto sem ser derrubada por quem a abriu. Passou disso e não
+ *    é minha, o dono não existe mais.
+ *
+ * `durationMs` fica NULO de propósito: sabemos quando a execução começou e que
+ * ela não terminou — a hora em que o processo morreu, não. Preencher com "agora
+ * menos o começo" inventaria uma duração de dias e envenenaria a medição que
+ * calibra os tetos.
+ */
+export const closeOrphanRuns = async (now = new Date()) => {
+    if (!canPersist()) return { closed: 0 };
+
+    try {
+        const abertas = await JobRun.find({
+            status: 'RUNNING',
+            instance: { $ne: INSTANCE_ID },
+        }).select('jobId startedAt instance').lean();
+
+        const orfas = abertas.filter(({ jobId, startedAt }) => {
+            const limite = Math.max(getJobMaxRuntimeMs(jobId), ORPHAN_GRACE_MS);
+            return now.getTime() - new Date(startedAt).getTime() > limite;
+        });
+
+        if (!orfas.length) return { closed: 0 };
+
+        await JobRun.updateMany(
+            { _id: { $in: orfas.map((o) => o._id) } },
+            { $set: { status: 'FAILED', finishedAt: now, durationMs: null, error: ORPHAN_ERROR } },
+        );
+
+        const porJob = [...new Set(orfas.map((o) => o.jobId))].join(', ');
+        logger.warn(`🧹 [JobRun] ${orfas.length} execução(ões) órfã(s) fechada(s) no boot: ${porJob}.`);
+        return { closed: orfas.length };
+    } catch (err) {
+        logger.warn(`[JobRun] Varredura de execuções órfãs falhou: ${err.message}`);
+        return { closed: 0 };
     }
 };
 
