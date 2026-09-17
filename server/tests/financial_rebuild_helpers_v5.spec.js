@@ -53,15 +53,27 @@ describe('financialService V5 — preços históricos', () => {
 describe('financialService V5 — resolver histórico USD/BRL', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  /**
+   * Espelha a cadeia real da consulta: `findOne(...).select('history').lean()`.
+   * A projeção não é enfeite — `USD-BRL` é isenta do teto de 400 candles
+   * (HISTORY_CAP_EXEMPT_TICKERS) e cresce um ponto por dia, então é o maior
+   * documento que o caminho da carteira lê.
+   */
+  const serie = (history) => {
+    const lean = vi.fn().mockResolvedValue({ history });
+    const select = vi.fn(() => ({ lean }));
+    mocks.assetHistoryFindOne.mockReturnValue({ select });
+    return { select };
+  };
+
   it('resolve exato, gap pela taxa anterior, antes da série pela primeira e depois pela cotação corrente', async () => {
-    mocks.assetHistoryFindOne.mockReturnValue({ lean: vi.fn().mockResolvedValue({
-      history: [
-        { date: '2026-07-01', close: 5.4 },
-        { date: '2026-07-10', adjClose: 5.5 },
-        { date: '2026-07-20', close: 5.3 },
-      ],
-    }) });
+    const { select } = serie([
+      { date: '2026-07-01', close: 5.4 },
+      { date: '2026-07-10', adjClose: 5.5 },
+      { date: '2026-07-20', close: 5.3 },
+    ]);
     const resolve = await financialService._loadUsdRateResolver(5.75);
+    expect(select).toHaveBeenCalledWith('history');
     expect(resolve('2026-07-10')).toBe(5.5);
     expect(resolve('2026-07-15')).toBe(5.5);
     expect(resolve('2026-06-01')).toBe(5.4);
@@ -72,13 +84,11 @@ describe('financialService V5 — resolver histórico USD/BRL', () => {
   });
 
   it('ignora candles corrompidos e usa fallback atual saneado', async () => {
-    mocks.assetHistoryFindOne.mockReturnValue({ lean: vi.fn().mockResolvedValue({
-      history: [
-        { date: '2026-02-30', close: 5 },
-        { date: '2026-07-01', close: Infinity },
-        { date: '2026-07-02', close: -1 },
-      ],
-    }) });
+    serie([
+      { date: '2026-02-30', close: 5 },
+      { date: '2026-07-01', close: Infinity },
+      { date: '2026-07-02', close: -1 },
+    ]);
     const resolve = await financialService._loadUsdRateResolver(Infinity);
     expect(resolve('2026-07-15')).toBe(5.75);
     expect(() => resolve('data inválida')).toThrow('Data de câmbio inválida');

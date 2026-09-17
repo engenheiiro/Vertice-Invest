@@ -47,6 +47,7 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 | Casamento provento nosso × calendário da fonte | `server/utils/dividendPaymentMatch.js` |
 | Provento provisório derivado do gap do dia-ex | `server/utils/dividendGap.js` |
 | Valorização de RF (curva × mercado) | `server/utils/fixedIncome.js` |
+| Curva histórica do CDI (e quem precisa dela) | `server/utils/cdiCurve.js` |
 | Série de PU do Tesouro (ingestão) | `server/services/treasuryPriceService.js` |
 | Identidade de título do Tesouro | `server/utils/treasuryTitle.js` |
 | Middleware JWT + downgrade + cache de plano | `server/middleware/authMiddleware.js`, `utils/userCache.js` |

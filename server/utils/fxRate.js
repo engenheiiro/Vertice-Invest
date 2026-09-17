@@ -76,7 +76,11 @@ export const buildUsdRateResolver = (historyEntries, currentUsdRate) => {
  */
 export const loadUsdRateResolver = async (currentUsdRate) => {
     const { default: AssetHistory } = await import('../models/AssetHistory.js');
-    const doc = await AssetHistory.findOne({ ticker: 'USD-BRL' }).lean();
+    // Só `history` importa aqui, e a projeção não é detalhe: `USD-BRL` está em
+    // HISTORY_CAP_EXEMPT_TICKERS (config/financialConstants.js), ou seja, é uma
+    // das poucas séries que NUNCA é truncada nos 400 candles — ela cresce um
+    // ponto por dia, para sempre, e este documento é o maior que a carteira lê.
+    const doc = await AssetHistory.findOne({ ticker: 'USD-BRL' }).select('history').lean();
     return buildUsdRateResolver(doc?.history, currentUsdRate);
 };
 

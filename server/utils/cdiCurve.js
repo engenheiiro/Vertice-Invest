@@ -86,6 +86,10 @@ export const loadCdiCurve = async ({ since, currentRate } = {}) => {
     }
 };
 
+/** A carteira tem alguma posição que a curva do CDI valoriza? */
+export const hasFixedIncome = (assets) => (assets || [])
+    .some((asset) => asset?.type === 'CASH' || asset?.type === 'FIXED_INCOME');
+
 /**
  * Data do lote mais antigo de renda fixa/caixa de um conjunto de posições — o
  * ponto a partir do qual a curva precisa existir. `null` quando não há RF.
@@ -102,4 +106,28 @@ export const earliestFixedIncomeLotDate = (assets) => {
         }
     }
     return earliest;
+};
+
+/**
+ * A curva que ESTAS posições precisam — ou nenhuma leitura, se nenhuma precisa.
+ *
+ * Porta única para os caminhos da carteira, e existe por causa de um vão entre
+ * duas funções que pareciam combinar e não combinavam: `earliestFixedIncomeLotDate`
+ * devolve `null` para carteira SEM renda fixa, e `loadCdiCurve` sem `since` lê a
+ * série SELIC INTEIRA (está escrito acima). Juntas, faziam toda carteira só de
+ * ação/FII/cripto puxar todos os dias úteis já gravados da SELIC, montar o Map de
+ * todos eles e jogar tudo fora — `cdiCurve` só é lido dentro do ramo
+ * `CASH || FIXED_INCOME` de `processWalletAsset`. Uma ida ao banco por
+ * carregamento de carteira, para nada.
+ *
+ * A guarda é "tem renda fixa?", não "achei uma data": posição de RF sem data de
+ * lote utilizável continua lendo a série inteira, que é o fallback seguro —
+ * devolver curva vazia ali trocaria um desperdício por um número pior na tela.
+ *
+ * Mesma forma de `loadTreasuryPricing`, que já filtra assim e é chamada no mesmo
+ * lote — era a única das duas que se protegia.
+ */
+export const loadCdiCurveForAssets = async (assets, { currentRate } = {}) => {
+    if (!hasFixedIncome(assets)) return EMPTY_CDI_CURVE;
+    return loadCdiCurve({ since: earliestFixedIncomeLotDate(assets), currentRate });
 };

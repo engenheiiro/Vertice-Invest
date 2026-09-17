@@ -24,7 +24,7 @@ import { loadClosesForDay } from '../utils/dayCloses.js';
 import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
 import { createSettledReader } from '../utils/settledReader.js';
 import { recordError } from '../services/errorLogService.js';
-import { loadCdiCurve, earliestFixedIncomeLotDate } from '../utils/cdiCurve.js';
+import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
 import { allocationBucket, resolveAllocationClass } from '../utils/assetAllocation.js';
 import { cashFlowTickerCondition } from '../utils/cashFlowFilter.js';
 import logger from '../config/logger.js';
@@ -77,10 +77,7 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
     const selic = usdConfig?.selic;
     const ipca = usdConfig?.ipca;
     const calcDate = brazilToday();
-    const cdiCurve = await loadCdiCurve({
-        since: earliestFixedIncomeLotDate(activeAssets),
-        currentRate: currentCdi,
-    });
+    const cdiCurve = await loadCdiCurveForAssets(activeAssets, { currentRate: currentCdi });
 
     for (const asset of activeAssets) {
         const multiplier = isDollarized(asset) ? usdRate : 1;
@@ -729,7 +726,31 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
 // --- CÁLCULO LIVE TWRR + VOLATILIDADE (SOURCE OF TRUTH BLINDADA) ---
 // Beta omitido aqui pois exigiria buscar histórico do Ibovespa (pesado) —
 // disponível em getWalletPerformance.
-const computePendingFlowBRL = async ({ userId, walletId, anchor, currentUsd }) => {
+/**
+ * Carregador da série USD-BRL com UMA leitura por requisição.
+ *
+ * `loadUsdRateResolver` puxa o documento `USD-BRL` inteiro e remonta Map + sort
+ * da série toda — e ele é a série que `HISTORY_CAP_EXEMPT_TICKERS` isenta do teto
+ * de 400 candles, logo a mais longa que a carteira lê. O caminho de `GET /wallet`
+ * pedia isso DUAS vezes: uma para resolver um único dia (o câmbio do dia-âncora) e
+ * outra lá no fim, dentro do fluxo do período. Duas idas ao banco, dois Maps, para
+ * o mesmo dado imutável dentro da requisição.
+ *
+ * Preguiçoso de propósito: carteira sem snapshot e sem dia-âncora não precisa da
+ * série, e neste caso nenhuma leitura acontece.
+ *
+ * Exportado para teste: "quantas vezes foi ao banco" é o contrato, e ele não
+ * aparece em nenhum valor de retorno de `buildWalletPayload`.
+ */
+export const usdRateLoaderOnce = (currentUsd) => {
+    let pending = null;
+    return () => {
+        if (!pending) pending = financialService._loadUsdRateResolver(currentUsd || 5.75);
+        return pending;
+    };
+};
+
+const computePendingFlowBRL = async ({ userId, walletId, anchor, currentUsd, loadUsdRate = null }) => {
     if (!anchor) return 0;
     const txs = await AssetTransaction.find({
         user: userId,
@@ -741,11 +762,15 @@ const computePendingFlowBRL = async ({ userId, walletId, anchor, currentUsd }) =
     const tickers = [...new Set(txs.map((tx) => tx.ticker))];
     const assets = await UserAsset.find({ user: userId, wallet: walletId, ticker: { $in: tickers } }).lean();
     const assetsByTicker = new Map(assets.map((asset) => [asset.ticker, asset]));
-    const getUsdRateForDate = await financialService._loadUsdRateResolver(currentUsd || 5.75);
+    // O chamador que já vai ler a série passa o carregador dele; quem não tem um
+    // (o /performance) carrega por conta, como sempre carregou.
+    const getUsdRateForDate = loadUsdRate
+        ? await loadUsdRate()
+        : await financialService._loadUsdRateResolver(currentUsd || 5.75);
     return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
 };
 
-const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd }) => {
+const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd, pendingFlow = null }) => {
     const now = new Date();
     let weightedRentability = 0;
     let dataQuality = 'AUDITED'; // Default Audited
@@ -774,9 +799,14 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots
         const missedCloses = businessDaysBetween(anchorDayKey, brazilDateKey(now));
         if (missedCloses.length > 0) dataQuality = 'ESTIMATED';
 
-        const periodFlow = await computePendingFlowBRL({
-            userId, walletId, anchor: lastSnapshot, currentUsd,
-        });
+        // O fluxo do período costuma vir pronto: quem chama já o disparou lá em
+        // cima, junto do resto, porque ele não depende de NADA que o laço de
+        // ativos produz. Aqui ele só é colhido. Sem a promessa (chamador que não
+        // pôde adiantar), busca na hora — mesmo resultado, três idas ao banco
+        // enfileiradas na cauda da requisição.
+        const periodFlow = pendingFlow !== null
+            ? await pendingFlow
+            : await computePendingFlowBRL({ userId, walletId, anchor: lastSnapshot, currentUsd });
 
         // Fonte única da cota live (utils/mathUtils.computeLiveQuota) — mesmo
         // cálculo que getWalletPerformance usa no ponto live.
@@ -850,11 +880,9 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : DEFAULT_SELIC_FALLBACK);
         // Curva histórica do CDI junto do macro: `processWalletAsset` já repassa
         // `macroRates` inteiro a `valueFixedIncomeAsset`, então a renda fixa do card
-        // rende pela taxa vigente em cada dia — a mesma régua do rebuild.
-        const cdiCurve = await loadCdiCurve({
-            since: earliestFixedIncomeLotDate(activeAssets),
-            currentRate: currentCdi,
-        });
+        // rende pela taxa vigente em cada dia — a mesma régua do rebuild. Carteira
+        // sem renda fixa não vai ao banco (ver `loadCdiCurveForAssets`).
+        const cdiCurve = await loadCdiCurveForAssets(activeAssets, { currentRate: currentCdi });
         const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca, cdiCurve };
 
         const totalRealizedProfit = closedAssets.reduce((acc, curr) => {
@@ -871,10 +899,39 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         // recorte de proventos do dia. Fixar os quatro no mesmo dia é o que impede a
         // tela de mostrar um card, um gráfico e uma cota discordando sobre hoje.
         const anchorDayKey = resolveAnchorDayKey(snapshots, brazilTodayStr);
+
+        // Uma leitura da série de câmbio para os DOIS consumidores desta requisição
+        // (o câmbio do dia-âncora, aqui, e o fluxo do período, no fim) — ver
+        // `usdRateLoaderOnce`.
+        const loadUsdRate = usdRateLoaderOnce(usdRate);
+
+        // O fluxo do período (aportes/resgates desde o âncora) sai AGORA, não no fim.
+        // Ele depende do snapshot-âncora e do câmbio — os dois já na mão — e de mais
+        // nada que o laço de ativos produza. Awaitado só lá embaixo, ele enfileirava
+        // três idas ao banco na cauda da requisição, com tudo o mais já pronto.
+        //
+        // A condição é a MESMA que `computeWalletMetrics` aplica: fora dela o valor
+        // não é consumido, e disparar mesmo assim trocaria uma espera por um
+        // desperdício. `Promise.resolve(0)` mantém o tipo e não deixa promessa
+        // rejeitada sem dono.
+        const flowAnchor = selectAnchorSnapshot(snapshots);
+        const pendingFlow = flowAnchor?.quotaPrice
+            ? computePendingFlowBRL({
+                userId, walletId, anchor: flowAnchor, currentUsd: usdRate, loadUsdRate,
+            })
+            : Promise.resolve(0);
+        // Promessa que sai na frente precisa de dono desde já. Se a requisição
+        // morrer no meio (uma exceção no laço de ativos, por exemplo), ninguém
+        // chega ao `await` lá embaixo e a rejeição vira `unhandledRejection` — que
+        // no Node derruba o processo inteiro por causa de UMA carteira. Este
+        // `catch` só marca a rejeição como tratada; quem aguarda a promessa
+        // continua recebendo o erro normalmente.
+        pendingFlow.catch(() => {});
+
         const [anchorCloses, anchorUsdRate] = anchorDayKey
             ? await Promise.all([
                 loadClosesForDay(activeAssets, anchorDayKey),
-                financialService._loadUsdRateResolver(usdRate)
+                loadUsdRate()
                     .then((resolve) => safeFloat(resolve(anchorDayKey)))
                     .catch(() => 0),
             ])
@@ -940,7 +997,8 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
 
         const { weightedRentability, dataQuality, sharpeRatio, sharpeConfidence, sharpeStandardError, sharpeSample, beta } =
             await computeWalletMetrics({
-                userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd: usdRate,
+                userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi,
+                currentUsd: usdRate, pendingFlow,
             });
 
         return {

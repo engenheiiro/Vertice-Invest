@@ -26,7 +26,7 @@ import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
 import { calculateDailyDietz, safeAdd, safeCurrency, safeMult, safeValue } from '../utils/mathUtils.js';
 import { valueFixedIncomeAsset } from '../utils/fixedIncome.js';
-import { loadCdiCurve, earliestFixedIncomeLotDate } from '../utils/cdiCurve.js';
+import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import { runAnchorPublication } from './anchorPublicationService.js';
@@ -164,10 +164,7 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensur
     // rebuild leem a mesma taxa por dia sem cada um carregar a série por conta.
     const fixedIncomeAssets = await UserAsset.find({ type: { $in: ['CASH', 'FIXED_INCOME'] } })
         .select('type taxLots startDate').lean();
-    const cdiCurve = await loadCdiCurve({
-        since: earliestFixedIncomeLotDate(fixedIncomeAssets),
-        currentRate: currentCdi,
-    });
+    const cdiCurve = await loadCdiCurveForAssets(fixedIncomeAssets, { currentRate: currentCdi });
     const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca, cdiCurve };
     // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
     const liveAssets = await UserAsset.find({ type: { $nin: ['CASH', 'FIXED_INCOME'] } }).select('ticker type quantity').lean();
