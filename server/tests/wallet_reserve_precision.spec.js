@@ -63,6 +63,35 @@ describe('processWalletAsset — precisão de renda fixa/caixa', () => {
         const asset = makeReserve(100);
         expect(processWalletAsset(asset, ctx).processed.totalValue).toBe(expectedAccrued(asset));
     });
+
+    // Os dois casos acima só flagram o defeito nos DIAS em que o accrual de 15.000
+    // cai por acaso na faixa do arredondamento duplo (~0,5% dos valores) — foi o que
+    // os deixou verdes por meses e vermelhos de repente. Este monta a faixa de
+    // propósito, em qualquer data: o accrual é linear no principal, então o valor de
+    // 1 unidade É o fator do dia, e dividir o alvo por ele devolve a quantidade que
+    // acerta o alvo hoje, amanhã e depois do próximo feriado.
+    it('arredonda UMA vez: total na faixa x,xx495 não sobe um centavo sozinho', () => {
+        const fatorDoDia = accrueFixedIncomeValue(makeReserve(1), { ...macroRates, calcDate: brazilToday() });
+        expect(fatorDoDia).toBeGreaterThan(1); // sem dia útil decorrido não há faixa a testar
+
+        // Meio da faixa: acima de x,xx495 (onde a quantização a 4 casas arredonda
+        // para x,xx50 e o centavo sobe) e abaixo de x,xx50 (onde subir é correto).
+        const alvo = 15447.694975;
+        const asset = makeReserve(alvo / fatorDoDia);
+        const accrued = accrueFixedIncomeValue(asset, { ...macroRates, calcDate: brazilToday() });
+        expect(accrued).toBeGreaterThan(15447.69495);
+        expect(accrued).toBeLessThan(15447.695);
+
+        const { processed } = processWalletAsset(asset, ctx);
+
+        // Arredondamento único do total acumulado. O caminho antigo passava por
+        // safeMult/safeSub (safeFloat a 4 casas) e devolvia 15447.70 / lucro um
+        // centavo maior — patrimônio inflado, e um centavo de distância do
+        // snapshot, que guarda o mesmo accrual com precisão integral.
+        expect(processed.totalValue).toBe(15447.69);
+        expect(processed.totalValue).toBe(safeCurrency(accrued));
+        expect(processed.profit).toBe(safeCurrency(accrued - asset.totalCost));
+    });
 });
 
 describe('processWalletAsset — classe econômica', () => {

@@ -581,8 +581,18 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     const valueBase = asset.type === 'CASH' ? asset.quantity : safeValue(asset.quantity, currentPrice);
     // Renda fixa/caixa: multiplica o TOTAL acumulado (preciso) pelo câmbio, em vez de
     // reconstruir via quantidade × preço unitário arredondado (que perdia centavos).
+    //
+    // Multiplicação CRUA (sem safeMult) pelo mesmo motivo da divisão logo abaixo:
+    // safeMult passa por safeFloat e QUANTIZA o total a 4 casas antes de ele ser
+    // arredondado a centavos na saída. Dois arredondamentos em sequência não são
+    // um arredondamento: um accrual de 15.447,6949… virava 15.447,695 e daí subia
+    // para 15.447,70 — um centavo acima do 15.447,69 que a mesma conta dá quando
+    // arredondada UMA vez. Cai nessa faixa (x,xx495–x,xx4999) ~0,5% dos valores, e
+    // sempre para CIMA: é patrimônio inflado, não ruído simétrico. E o snapshot
+    // (`computeEquityAt`) acumula esse mesmo accrual com precisão integral —
+    // quantizar só aqui é a divergência KPI × snapshot que a invariante 9 proíbe.
     const totalValueBr = accruedTotalValue !== null
-        ? safeMult(accruedTotalValue, currentMultiplier)
+        ? accruedTotalValue * currentMultiplier
         : safeMult(valueBase, currentMultiplier);
 
     // Custo em BRL com o câmbio de CADA compra congelado. Reconverter o custo em
@@ -618,10 +628,16 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     const dayChangeValueBr = safeSub(totalValueBr, valueStartBr);
     const combinedChangePct = valueStartBr > 0 ? ((totalValueBr / valueStartBr) - 1) * 100 : 0;
 
-    const unrealizedProfitBr = safeSub(totalValueBr, totalCostBr);
+    // Subtração e soma CRUAS pelo mesmo motivo de `totalValueBr`: estes dois
+    // números existem só para virar `processed.profit`, que já arredonda a
+    // centavos. Passar por safeSub/safeAdd reintroduziria a quantização a 4 casas
+    // no meio do caminho e o lucro voltaria a subir um centavo sozinho — no MESMO
+    // valor em que `totalValue` não sobe mais, deixando saldo, custo e lucro
+    // discordando por um centavo dentro da mesma linha da tela.
+    const unrealizedProfitBr = totalValueBr - totalCostBr;
     // Cada venda convertida pelo câmbio do dia dela (não o de hoje).
     const realizedProfitBr = safeFloat(positionRealizedProfitBRL(asset, usdRate));
-    const positionTotalResult = safeAdd(unrealizedProfitBr, realizedProfitBr);
+    const positionTotalResult = unrealizedProfitBr + realizedProfitBr;
 
     let profitPercent = 0;
     if (totalCostBr > 0) {
