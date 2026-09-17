@@ -17,11 +17,22 @@ export interface PerformanceDurationMetric {
 
 export interface PerformanceRuntime {
     uptimeSeconds: number;
+    /**
+     * Denominadores da memória, lidos do PROCESSO — não chutados aqui. `heap` é o
+     * `--max-old-space-size` como o V8 o resolveu; `container` é o tamanho da
+     * instância. Opcionais porque um servidor ainda não atualizado não os envia.
+     */
+    limitsMb?: {
+        container: number;
+        heap: number;
+    };
     memoryMb: {
         rss: number;
         heapUsed: number;
         heapTotal: number;
         external: number;
+        /** RSS menos o heap comprometido. Opcional pelo mesmo motivo acima. */
+        offHeap?: number;
     };
     eventLoopDelayMs: {
         mean: number | null;

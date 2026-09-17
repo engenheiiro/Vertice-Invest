@@ -10,12 +10,15 @@ import {
 } from '../../services/performance';
 
 /**
- * Teto de memória da instância. Sem um denominador, "180 MB" não diz nada — o
- * mesmo número é folgado num plano e é véspera de reinício em outro. O processo
- * sobe com `--max-old-space-size=400` dentro de uma instância de 512 MB, e é
- * contra esse teto que o alerta faz sentido.
+ * Teto de memória da instância quando o servidor não informa o seu.
+ *
+ * Sem um denominador, "180 MB" não diz nada — o mesmo número é folgado num plano
+ * e é véspera de reinício em outro. O valor bom vem de `runtime.limitsMb`, que o
+ * processo MEDE; este aqui é só a rede de segurança para um servidor ainda não
+ * atualizado. Cravar o número dos dois lados foi o que deixou o painel e o
+ * `--max-old-space-size` do `npm start` livres para discordarem em silêncio.
  */
-const MEMORY_LIMIT_MB = 512;
+const DEFAULT_MEMORY_LIMIT_MB = 512;
 
 const formatMs = (value: number | null | undefined) => {
     if (value === null || value === undefined || !Number.isFinite(value)) return '—';
@@ -67,11 +70,17 @@ const gradeDescending = (value: number | null | undefined, watch: number, bad: n
 };
 
 const MetricCard = ({
-    label, value, detail, Icon, verdict, meaning,
+    label, value, detail, detailTitle, Icon, verdict, meaning,
 }: {
     label: string;
     value: string;
     detail: string;
+    /**
+     * Texto do `title` do detalhe, quando a leitura completa não cabe no card.
+     * Só a memória usa: o card mostra o essencial e o balão traz os quatro
+     * números medidos, sem obrigar a abrir os detalhes técnicos.
+     */
+    detailTitle?: string;
     Icon: React.ElementType;
     verdict?: Verdict;
     /** Uma frase dizendo o que o número significa. É o que torna o card legível. */
@@ -98,7 +107,7 @@ const MetricCard = ({
             {/* Sem truncar: no card da chamada mais lenta o `detail` É o nome da
                 rota, e cortá-lo no meio ("GET /api/wallet/histo…") apaga a única
                 informação acionável do medidor. */}
-            <p className="mt-0.5 text-[10px] text-slate-500 leading-snug break-words" title={detail}>{detail}</p>
+            <p className="mt-0.5 text-[10px] text-slate-500 leading-snug break-words" title={detailTitle ?? detail}>{detail}</p>
         </div>
     );
 };
@@ -189,14 +198,65 @@ export const PerformanceOverview = ({
 
         const errorRate = requests > 0 ? errors / requests : null;
         const cacheRate = cacheAttempts > 0 ? cacheHits / cacheAttempts : null;
-        const memoryMb = snapshot?.runtime ? snapshot.runtime.memoryMb.rss : null;
+
+        const memory = snapshot?.runtime?.memoryMb ?? null;
+        // O teto vem do processo; o constante local só entra se o servidor for
+        // antigo demais para informá-lo.
+        const memoryLimitMb = snapshot?.runtime?.limitsMb?.container ?? DEFAULT_MEMORY_LIMIT_MB;
+        const heapLimitMb = snapshot?.runtime?.limitsMb?.heap ?? null;
+        const memoryMb = memory ? memory.rss : null;
+
+        /**
+         * A leitura completa da memória, em uma linha.
+         *
+         * O card mostrava RSS e `heapUsed` e engolia `heapTotal` e `external` —
+         * justamente os dois que explicam o vão entre eles. Com 407 MB de RSS e
+         * 117 MB de heap em uso, o que sobra são 290 MB que o card afirmava
+         * existir sem dizer de quem são: página que o V8 comprometeu e não
+         * devolveu (normal depois de um job pesado) ou memória nativa presa
+         * (Buffer, fragmentação) — diagnósticos opostos, mesmo número na tela.
+         */
+        const memoryDetail = memory
+            ? `Heap ${memory.heapUsed.toFixed(0)} de ${memory.heapTotal.toFixed(0)} MB`
+                + (memory.offHeap === undefined ? '' : ` · ${memory.offHeap.toFixed(0)} MB fora do heap`)
+            : 'Sem leitura';
+        const memoryDetailTitle = memory
+            ? [
+                `Total do processo (RSS): ${memory.rss.toFixed(0)} MB de ${memoryLimitMb} MB da instância`,
+                `Heap em uso: ${memory.heapUsed.toFixed(0)} MB`,
+                `Heap reservado pelo V8: ${memory.heapTotal.toFixed(0)} MB`
+                    + (heapLimitMb === null ? '' : ` (teto de ${heapLimitMb} MB)`),
+                `Buffers e nativo (external): ${memory.external.toFixed(0)} MB`,
+                memory.offHeap === undefined
+                    ? null
+                    : `Fora do heap (RSS − heap reservado): ${memory.offHeap.toFixed(0)} MB`,
+            ].filter(Boolean).join('\n')
+            : undefined;
+
+        /**
+         * O TETO DO HEAP NÃO CABE NA INSTÂNCIA.
+         *
+         * Um número sozinho não denuncia isto, e por isso ficou de pé: o processo
+         * sobe com `--max-old-space-size=400` dentro de 512 MB, e o V8 entende
+         * esse valor como "pode crescer até lá" — só que RSS é o heap MAIS tudo
+         * que roda fora dele. Quando o V8 finalmente aperta o GC, perto do teto
+         * dele, o container já matou o processo. É um teto que não protege nada.
+         *
+         * Não é medição, é configuração: fica numa linha própria, sem cor de
+         * veredito, porque não muda com o tráfego e não se resolve reiniciando.
+         * A tela também não arbitra o valor certo — ela só mostra que os dois
+         * lados se contradizem, com os dois números na mão.
+         */
+        const heapCeilingOverflow = heapLimitMb !== null && heapLimitMb > memoryLimitMb
+            ? { heapLimitMb, memoryLimitMb }
+            : null;
 
         // Uma frase no lugar de cinco números soltos: quem abre a aba quer saber
         // se precisa agir, não interpretar percentis.
         const verdicts = [
             gradeAscending(slowestHttp?.p95Ms, 1000, 3000),
             gradeAscending(errorRate, 0.01, 0.05),
-            gradeAscending(memoryMb, MEMORY_LIMIT_MB * 0.75, MEMORY_LIMIT_MB * 0.9),
+            gradeAscending(memoryMb, memoryLimitMb * 0.75, memoryLimitMb * 0.9),
             gradeAscending(snapshot?.runtime?.eventLoopDelayMs?.p95, 100, 500),
             gradeDescending(cacheRate, 0.5, 0.2),
         ];
@@ -218,6 +278,11 @@ export const PerformanceOverview = ({
             cacheAttempts,
             detailRows,
             verdictLabel,
+            memoryMb,
+            memoryLimitMb,
+            memoryDetail,
+            memoryDetailTitle,
+            heapCeilingOverflow,
         };
     }, [snapshot]);
 
@@ -299,14 +364,15 @@ export const PerformanceOverview = ({
                         />
                         <MetricCard
                             label="Memória do servidor"
-                            value={snapshot.runtime ? `${snapshot.runtime.memoryMb.rss.toFixed(0)} MB` : '—'}
-                            meaning={`De ${MEMORY_LIMIT_MB} MB disponíveis no plano`}
-                            detail={snapshot.runtime ? `Heap ${snapshot.runtime.memoryMb.heapUsed.toFixed(0)} MB` : 'Sem leitura'}
+                            value={summary.memoryMb === null ? '—' : `${summary.memoryMb.toFixed(0)} MB`}
+                            meaning={`De ${summary.memoryLimitMb} MB disponíveis no plano`}
+                            detail={summary.memoryDetail}
+                            detailTitle={summary.memoryDetailTitle}
                             Icon={MemoryStick}
                             verdict={gradeAscending(
-                                snapshot.runtime ? snapshot.runtime.memoryMb.rss : null,
-                                MEMORY_LIMIT_MB * 0.75,
-                                MEMORY_LIMIT_MB * 0.9,
+                                summary.memoryMb,
+                                summary.memoryLimitMb * 0.75,
+                                summary.memoryLimitMb * 0.9,
                             )}
                         />
                         <MetricCard
@@ -326,6 +392,30 @@ export const PerformanceOverview = ({
                             verdict={gradeDescending(summary.cacheRate, 0.5, 0.2)}
                         />
                     </div>
+
+                    {/* CONFIGURAÇÃO, não medição: não muda com o tráfego nem passa
+                        sozinha. Ganha destaque próprio porque é o tipo de defeito que
+                        nenhum dos cinco medidores acende — eles dizem como o servidor
+                        está agora, e este diz que o limite que deveria protegê-lo não
+                        protege. Ver `heapCeilingOverflow`. */}
+                    {summary.heapCeilingOverflow && (
+                        <div className="mt-3 flex items-start gap-3 rounded-xl border border-yellow-900/40 bg-yellow-900/10 p-3">
+                            <AlertTriangle size={15} className="text-yellow-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs font-bold text-yellow-400">
+                                    O limite de memória do Node não cabe na instância
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+                                    O processo pode crescer até {summary.heapCeilingOverflow.heapLimitMb} MB só de heap,
+                                    numa instância de {summary.heapCeilingOverflow.memoryLimitMb} MB — e ainda usa memória
+                                    fora do heap. Na prática, a instância derruba o processo antes de o Node achar que
+                                    precisa liberar memória. Reduza o <span className="font-mono text-slate-300">--max-old-space-size</span>{' '}
+                                    do <span className="font-mono text-slate-300">npm start</span> até o teto acima caber
+                                    em {summary.heapCeilingOverflow.memoryLimitMb} MB com folga para o que roda fora do heap.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Fora da grade e sem veredito, de propósito: é medição de banda
                         do visitante, não de saúde do servidor. Fica visível porque a

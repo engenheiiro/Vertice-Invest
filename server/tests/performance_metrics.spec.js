@@ -78,6 +78,32 @@ describe('performanceMetrics', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/password|authorization|cookie|query/i);
   });
 
+  /**
+   * "407 MB de 512, Heap 117 MB" deixava 290 MB sem dono na tela. O snapshot
+   * media `heapTotal` e `external` e não os publicava de forma utilizável, e o
+   * denominador (512) estava CRAVADO no card — livre para divergir do
+   * `--max-old-space-size` do `npm start` e do plano realmente contratado.
+   * Os dois tetos agora saem daqui: um do ambiente, o outro medido no V8.
+   */
+  it('publica os tetos de memória junto da leitura, para o número ter denominador', () => {
+    const { runtime } = getPerformanceSnapshot();
+
+    expect(runtime.limitsMb.container).toBeGreaterThan(0);
+    // Teto real do heap, como o V8 o resolveu — não o que se supõe ter passado
+    // na linha de comando.
+    expect(runtime.limitsMb.heap).toBeGreaterThan(0);
+
+    const { rss, heapUsed, heapTotal, external, offHeap } = runtime.memoryMb;
+    for (const valor of [rss, heapUsed, heapTotal, external, offHeap]) {
+      expect(Number.isFinite(valor)).toBe(true);
+      expect(valor).toBeGreaterThanOrEqual(0);
+    }
+    expect(heapUsed).toBeLessThanOrEqual(heapTotal);
+    // Derivado, com piso em zero: `heapTotal` conta página reservada que pode não
+    // estar residente, e depois de um GC a subtração chega a virar negativa.
+    expect(offHeap).toBe(Math.max(0, Number((rss - heapTotal).toFixed(2))));
+  });
+
   it('measurePerformance preserva retorno e exceção do trabalho medido', async () => {
     await expect(measurePerformance('pipeline', 'ranking STOCK', async () => 42)).resolves.toBe(42);
     await expect(measurePerformance('pipeline', 'ranking STOCK', async () => { throw new Error('falha original'); }))

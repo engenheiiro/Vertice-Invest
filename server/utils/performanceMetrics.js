@@ -1,4 +1,5 @@
 import { monitorEventLoopDelay, performance } from 'perf_hooks';
+import v8 from 'v8';
 
 const parseBoolean = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
 export const resolveMetricsEnabled = (value) => {
@@ -147,15 +148,42 @@ const nsToMs = (value) => {
   return Number.isFinite(numeric) ? round(numeric / 1e6, 3) : null;
 };
 
+/**
+ * Teto de RAM da INSTÂNCIA, em MB.
+ *
+ * O painel precisa de um denominador: "407 MB" sozinho é folga num plano e
+ * véspera de reinício em outro. Vem do ambiente porque quem sabe o tamanho da
+ * instância é o deploy, não o código — e estava chutado em dois lugares livres
+ * para divergirem entre si e do plano contratado: o `512` cravado no card e o
+ * `--max-old-space-size` do `npm start`.
+ */
+const CONTAINER_MEMORY_MB = Number(process.env.MEMORY_LIMIT_MB) || 512;
+
 const runtimeSnapshot = () => {
   const memory = process.memoryUsage();
+  // Teto REAL do heap do V8 — o que `--max-old-space-size` virou de fato, não o
+  // que alguém acha que passou na linha de comando. É a metade da conta que
+  // faltava para ler o RSS: heap de 117 MB sob um teto de 400 não é a mesma
+  // coisa que 117 sob um teto de 160, e só com os dois dá para dizer se o vão
+  // entre RSS e heap é página que o V8 comprometeu ou memória nativa presa.
+  const heapLimitMb = round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024);
   return {
     uptimeSeconds: round(process.uptime(), 1),
+    limitsMb: {
+      container: CONTAINER_MEMORY_MB,
+      heap: heapLimitMb,
+    },
     memoryMb: {
       rss: round(memory.rss / 1024 / 1024),
       heapUsed: round(memory.heapUsed / 1024 / 1024),
       heapTotal: round(memory.heapTotal / 1024 / 1024),
       external: round(memory.external / 1024 / 1024),
+      // Tudo que o processo ocupa FORA do heap comprometido: código, pilhas,
+      // Buffer de download (o arquivo diário da B3 tem 8,5 MB) e o que o
+      // allocator nativo reteve sem devolver ao SO. É DERIVADO, não medido — daí
+      // o piso em zero: `heapTotal` conta página reservada que pode não estar
+      // residente, e logo depois de um GC a subtração chega a virar negativa.
+      offHeap: Math.max(0, round((memory.rss - memory.heapTotal) / 1024 / 1024)),
     },
     eventLoopDelayMs: eventLoopHistogram
       ? {

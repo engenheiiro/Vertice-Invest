@@ -131,6 +131,131 @@ describe('medidores de desempenho no Admin', () => {
 });
 
 /**
+ * "407 MB de 512, Heap 117 MB" — e os outros 290 MB, de quem são?
+ *
+ * O card media RSS e imprimia `heapUsed`, engolindo `heapTotal` e `external`:
+ * justamente os dois que fecham a conta. Sem eles, o mesmo par de números serve
+ * para dois diagnósticos opostos — página que o V8 comprometeu e não devolveu
+ * (esperado depois de um job pesado) ou memória nativa presa —, e não havia como
+ * escolher entre eles sem ir ao JSON cru da rota.
+ */
+describe('memória do servidor — a conta inteira, não metade dela', () => {
+    const comMemoria = () => snapshot({
+        runtime: {
+            uptimeSeconds: 7200,
+            limitsMb: { container: 512, heap: 400 },
+            memoryMb: { rss: 407, heapUsed: 117, heapTotal: 150, external: 22, offHeap: 257 },
+            eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
+        },
+    });
+
+    it('mostra o heap reservado e o que está fora dele', async () => {
+        getSnapshot.mockResolvedValue(comMemoria());
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText('407 MB')).toBeInTheDocument();
+        expect(screen.getByText('Heap 117 de 150 MB · 257 MB fora do heap')).toBeInTheDocument();
+    });
+
+    it('o balão traz os quatro números medidos, incluindo o teto real do heap', async () => {
+        getSnapshot.mockResolvedValue(comMemoria());
+        render(<PerformanceOverview />);
+
+        const detalhe = await screen.findByText('Heap 117 de 150 MB · 257 MB fora do heap');
+        expect(detalhe.getAttribute('title')).toContain('teto de 400 MB');
+        expect(detalhe.getAttribute('title')).toContain('external): 22 MB');
+    });
+
+    // O teto é do DEPLOY, não do código: cravá-lo aqui foi o que deixou o painel
+    // e o `--max-old-space-size` do `npm start` discordarem em silêncio.
+    it('o denominador vem do processo, não de um número cravado na tela', async () => {
+        // Sem tráfego nem cache, a memória é o ÚNICO medidor que pode emitir
+        // veredito — então a frase do topo fala só dela.
+        const soMemoria = (container: number) => snapshot({
+            durations: { http: [] },
+            counters: { cache: {} },
+            runtime: {
+                uptimeSeconds: 7200,
+                limitsMb: { container, heap: 800 },
+                memoryMb: { rss: 407, heapUsed: 117, heapTotal: 150, external: 22, offHeap: 257 },
+                eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
+            },
+        });
+
+        // Os mesmos 407 MB: apertado numa instância de 512, folgado numa de 1024.
+        getSnapshot.mockResolvedValue(soMemoria(512));
+        const { unmount } = render(<PerformanceOverview />);
+        expect(await screen.findByText('De 512 MB disponíveis no plano')).toBeInTheDocument();
+        expect(screen.getByText(/merecendo o olho/)).toBeInTheDocument();
+        unmount();
+
+        getSnapshot.mockResolvedValue(soMemoria(1024));
+        render(<PerformanceOverview />);
+        expect(await screen.findByText('De 1024 MB disponíveis no plano')).toBeInTheDocument();
+        expect(screen.getByText(/Tudo dentro do normal/)).toBeInTheDocument();
+    });
+
+    // Servidor ainda não atualizado não manda os campos novos — a tela continua
+    // legível, só sem a parte que ele não sabe informar.
+    it('servidor antigo cai no teto padrão e omite o que não veio', async () => {
+        getSnapshot.mockResolvedValue(snapshot());
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText('De 512 MB disponíveis no plano')).toBeInTheDocument();
+        expect(screen.getByText('Heap 76 de 100 MB')).toBeInTheDocument();
+    });
+});
+
+/**
+ * O teto que não protege nada.
+ *
+ * `--max-old-space-size=400` numa instância de 512 MB faz o V8 reportar um
+ * `heap_size_limit` de ~592 MB (o sinalizador governa a geração velha; as outras
+ * áreas entram por cima) — maior que a instância INTEIRA, e ainda sem contar o
+ * que roda fora do heap. O container mata o processo muito antes de o V8 sentir
+ * pressão, então o limite existe sem defender coisa alguma.
+ *
+ * Nenhum dos cinco medidores acende para isto: todos falam de AGORA, e este é um
+ * defeito de configuração, que não passa com o tráfego nem com um reinício.
+ */
+describe('teto de heap × tamanho da instância', () => {
+    const comTeto = (heap: number, container: number) => snapshot({
+        runtime: {
+            uptimeSeconds: 7200,
+            limitsMb: { container, heap },
+            memoryMb: { rss: 407, heapUsed: 117, heapTotal: 150, external: 22, offHeap: 257 },
+            eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
+        },
+    });
+
+    it('denuncia quando o heap pode passar do tamanho da instância', async () => {
+        getSnapshot.mockResolvedValue(comTeto(592, 512));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText('O limite de memória do Node não cabe na instância')).toBeInTheDocument();
+        expect(screen.getByText(/592 MB só de heap/)).toBeInTheDocument();
+        expect(screen.getByText(/--max-old-space-size/)).toBeInTheDocument();
+    });
+
+    it('cala quando o teto cabe', async () => {
+        getSnapshot.mockResolvedValue(comTeto(320, 512));
+        render(<PerformanceOverview />);
+
+        await screen.findByText('407 MB');
+        expect(screen.queryByText('O limite de memória do Node não cabe na instância')).not.toBeInTheDocument();
+    });
+
+    // Servidor que não informa os tetos não pode ser acusado de nada.
+    it('sem a leitura dos tetos, não inventa acusação', async () => {
+        getSnapshot.mockResolvedValue(snapshot());
+        render(<PerformanceOverview />);
+
+        await screen.findByText('148 MB');
+        expect(screen.queryByText('O limite de memória do Node não cabe na instância')).not.toBeInTheDocument();
+    });
+});
+
+/**
  * Em 04/09/2026 o painel mostrou "Página mais lenta: 1,48 s" e ninguém conseguia
  * dizer de que página se tratava. Medido até o último byte, o bundle de ~400 KB
  * concorre no mesmo p95 das rotas de API e vence sempre — só que o tempo dele é a

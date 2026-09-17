@@ -10,7 +10,8 @@ const activeSnapshot: PerformanceSnapshot = {
     limits: { maxSeries: 200, maxSamplesPerSeries: 500 },
     runtime: {
         uptimeSeconds: 7200,
-        memoryMb: { rss: 148, heapUsed: 76, heapTotal: 100, external: 4 },
+        limitsMb: { container: 512, heap: 400 },
+        memoryMb: { rss: 148, heapUsed: 76, heapTotal: 100, external: 4, offHeap: 48 },
         eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
     },
     durations: {
