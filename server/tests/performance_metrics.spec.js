@@ -99,9 +99,17 @@ describe('performanceMetrics', () => {
       expect(valor).toBeGreaterThanOrEqual(0);
     }
     expect(heapUsed).toBeLessThanOrEqual(heapTotal);
-    // Derivado, com piso em zero: `heapTotal` conta página reservada que pode não
-    // estar residente, e depois de um GC a subtração chega a virar negativa.
-    expect(offHeap).toBe(Math.max(0, Number((rss - heapTotal).toFixed(2))));
+
+    // `offHeap` é derivado, com piso em zero: `heapTotal` conta página reservada
+    // que pode não estar residente, e depois de um GC a subtração chega a virar
+    // negativa.
+    //
+    // A tolerância NÃO é frouxidão — é a mesma lição do centavo da reserva: o
+    // código subtrai os BYTES crus e arredonda UMA vez; refazer a conta a partir
+    // de `rss` e `heapTotal`, que já vêm arredondados, arredonda DUAS e erra por
+    // 0,01 conforme a hora do dia em que o teste roda. Reproduzir a aritmética
+    // aqui só travaria a ordem dos arredondamentos; o contrato é o valor.
+    expect(offHeap).toBeCloseTo(Math.max(0, rss - heapTotal), 1);
   });
 
   it('measurePerformance preserva retorno e exceção do trabalho medido', async () => {
