@@ -154,14 +154,14 @@ describe('memória do servidor — a conta inteira, não metade dela', () => {
         render(<PerformanceOverview />);
 
         expect(await screen.findByText('407 MB')).toBeInTheDocument();
-        expect(screen.getByText('Heap 117 de 150 MB · 257 MB fora do heap')).toBeInTheDocument();
+        expect(screen.getByText('Heap 117 de 150 MB · 257 MB fora do heap · Buffers 22 MB')).toBeInTheDocument();
     });
 
     it('o balão traz os quatro números medidos, incluindo o teto real do heap', async () => {
         getSnapshot.mockResolvedValue(comMemoria());
         render(<PerformanceOverview />);
 
-        const detalhe = await screen.findByText('Heap 117 de 150 MB · 257 MB fora do heap');
+        const detalhe = await screen.findByText('Heap 117 de 150 MB · 257 MB fora do heap · Buffers 22 MB');
         expect(detalhe.getAttribute('title')).toContain('teto de 400 MB');
         expect(detalhe.getAttribute('title')).toContain('external): 22 MB');
     });
@@ -202,7 +202,7 @@ describe('memória do servidor — a conta inteira, não metade dela', () => {
         render(<PerformanceOverview />);
 
         expect(await screen.findByText('De 512 MB disponíveis no plano')).toBeInTheDocument();
-        expect(screen.getByText('Heap 76 de 100 MB')).toBeInTheDocument();
+        expect(screen.getByText('Heap 76 de 100 MB · Buffers 4 MB')).toBeInTheDocument();
     });
 });
 
@@ -310,5 +310,108 @@ describe('latência de API × entrega de arquivo', () => {
         fireEvent.click(await screen.findByText('Ver detalhes técnicos'));
         expect(screen.getByText('Arquivo do site')).toBeInTheDocument();
         expect(screen.getByText('API')).toBeInTheDocument();
+    });
+});
+
+/**
+ * O medidor que o AGORA não resolve.
+ *
+ * "396 MB de 512" serve a dois diagnósticos opostos: regime de repouso de um
+ * processo que nunca passa disso, e vazamento a caminho do SIGKILL. O card lia
+ * uma amostra instantânea e o uptime não desempatava — 24h de processo vivo é
+ * compatível com os dois. Sem a janela, o amarelo permanente do repouso alto e o
+ * amarelo de uma escalada real eram a mesma cor pelo mesmo motivo aparente.
+ */
+describe('memória ao longo do tempo — platô ou vazamento', () => {
+    const comJanela = (
+        trend: Partial<NonNullable<PerformanceSnapshot['runtime']>['memoryTrend']>,
+        memoria: Partial<{ rss: number; external: number; offHeap: number }> = {},
+    ) => snapshot({
+        durations: { http: [] },
+        counters: { cache: {} },
+        runtime: {
+            uptimeSeconds: 86400,
+            limitsMb: { container: 512, heap: 492 },
+            memoryMb: {
+                rss: 396, heapUsed: 114, heapTotal: 124, external: 28, offHeap: 272, ...memoria,
+            },
+            memoryTrend: {
+                points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
+                direction: 'STABLE', rssSlopeMbPerHour: 0.2, offHeapSlopeMbPerHour: 0.1,
+                rssMinMb: 388, rssMaxMb: 402, hoursToLimit: null, ...trend,
+            },
+            eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
+        },
+    });
+
+    it('diz que o nível apertado é repouso, não escalada', async () => {
+        getSnapshot.mockResolvedValue(comJanela({}));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/Memória estável há 24h/)).toBeInTheDocument();
+        expect(screen.getByText(/entre 388 e 402 MB na janela/)).toBeInTheDocument();
+    });
+
+    /**
+     * O vão que só o nível deixava sem alarme: 300 MB de 512 é folgado, e o card
+     * pintava "normal" enquanto o processo caminhava para o SIGKILL em 6h.
+     */
+    it('subida com horizonte curto condena o medidor mesmo com o nível folgado', async () => {
+        getSnapshot.mockResolvedValue(comJanela(
+            { direction: 'RISING', rssSlopeMbPerHour: 35, offHeapSlopeMbPerHour: 33, hoursToLimit: 6 },
+            { rss: 300, offHeap: 176 },
+        ));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/Memória subindo 35.0 MB\/h/)).toBeInTheDocument();
+        expect(screen.getByText(/encosta nos 512 MB da instância em ~6h/)).toBeInTheDocument();
+        expect(screen.getByText(/fora do aceitável/)).toBeInTheDocument();
+        expect(screen.getAllByText('ruim').length).toBeGreaterThan(0);
+    });
+
+    // Onde cresce decide o que fazer: no heap o GC ainda alcança e o teto do V8
+    // ainda transforma em OOM com stack; fora dele, o container mata em silêncio.
+    it('aponta se o crescimento está dentro ou fora do heap', async () => {
+        getSnapshot.mockResolvedValue(comJanela(
+            { direction: 'RISING', rssSlopeMbPerHour: 10, offHeapSlopeMbPerHour: 9, hoursToLimit: 90 },
+        ));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/O crescimento está FORA do heap/)).toBeInTheDocument();
+        // Subida lenta não é emergência, mas também não é "normal".
+        expect(screen.getByText(/merecendo o olho/)).toBeInTheDocument();
+    });
+
+    /**
+     * 272 MB fora do heap com 28 MB de Buffers vivos: o excedente não é binário
+     * nem pilha, é memória que o allocator nativo reteve. A tela passa a dizer
+     * isso — e a dizer onde a variável funciona, porque no `.env` o dotenv lê
+     * depois de o allocator já ter decidido.
+     */
+    it('atribui o excedente fora do heap em vez de deixá-lo sem dono', async () => {
+        getSnapshot.mockResolvedValue(comJanela({}));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/os outros 244 MB estão muito acima/)).toBeInTheDocument();
+        expect(screen.getByText(/MALLOC_ARENA_MAX=2/)).toBeInTheDocument();
+    });
+
+    it('cala a acusação quando o que está fora do heap se explica', async () => {
+        getSnapshot.mockResolvedValue(comJanela({}, { rss: 200, offHeap: 76, external: 20 }));
+        render(<PerformanceOverview />);
+
+        await screen.findByText('200 MB');
+        expect(screen.queryByText(/MALLOC_ARENA_MAX/)).not.toBeInTheDocument();
+        expect(screen.getByText(/dentro do que o binário, as bibliotecas e os downloads explicam/)).toBeInTheDocument();
+    });
+
+    // Servidor sem a janela não é acusado de nada, e também não é absolvido.
+    it('sem janela, nenhuma leitura é inventada', async () => {
+        getSnapshot.mockResolvedValue(snapshot());
+        render(<PerformanceOverview />);
+
+        await screen.findByText('148 MB');
+        expect(screen.queryByText(/Memória estável/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Memória subindo/)).not.toBeInTheDocument();
     });
 });

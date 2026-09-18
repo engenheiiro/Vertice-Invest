@@ -52,3 +52,43 @@ export const MedicaoAtiva: Story = {
 export const MedicaoDesativada: Story = {
     args: { loadSnapshot: async () => ({ ...activeSnapshot, enabled: false }) },
 };
+
+const comMemoria = (
+    memoryMb: NonNullable<PerformanceSnapshot['runtime']>['memoryMb'],
+    memoryTrend: NonNullable<PerformanceSnapshot['runtime']>['memoryTrend'],
+): PerformanceSnapshot => ({
+    ...activeSnapshot,
+    runtime: { ...activeSnapshot.runtime!, uptimeSeconds: 86_400, memoryMb, memoryTrend },
+});
+
+/**
+ * O caso real de 18/09/2026: 396 MB de 512 — nível apertado, reta plana. É o
+ * estado em que o card sozinho pintava amarelo sem conseguir dizer se havia para
+ * onde escalar, e em que os 272 MB fora do heap não tinham dono.
+ */
+export const MemoriaEstavelEmRepousoAlto: Story = {
+    args: {
+        loadSnapshot: async () => comMemoria(
+            { rss: 396, heapUsed: 114, heapTotal: 124, external: 28, offHeap: 272 },
+            {
+                points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
+                direction: 'STABLE', rssSlopeMbPerHour: 0.2, offHeapSlopeMbPerHour: 0.1,
+                rssMinMb: 388, rssMaxMb: 402, hoursToLimit: null,
+            },
+        ),
+    },
+};
+
+/** O vão que só o nível deixava sem alarme: folgado agora, morto em 6h. */
+export const MemoriaSubindoRumoAoTeto: Story = {
+    args: {
+        loadSnapshot: async () => comMemoria(
+            { rss: 300, heapUsed: 110, heapTotal: 124, external: 30, offHeap: 176 },
+            {
+                points: 96, spanHours: 8, sampleIntervalMinutes: 5, retentionHours: 24,
+                direction: 'RISING', rssSlopeMbPerHour: 35, offHeapSlopeMbPerHour: 33,
+                rssMinMb: 180, rssMaxMb: 300, hoursToLimit: 6,
+            },
+        ),
+    },
+};

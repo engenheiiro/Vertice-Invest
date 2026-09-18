@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Activity, AlertTriangle, ChevronDown, ChevronRight, Clock3,
-    Database, Gauge, MemoryStick, RefreshCw, ServerCog,
+    Database, Gauge, MemoryStick, RefreshCw, ServerCog, TrendingUp,
 } from 'lucide-react';
 import {
     performanceService,
@@ -19,6 +19,26 @@ import {
  * `--max-old-space-size` do `npm start` livres para discordarem em silêncio.
  */
 const DEFAULT_MEMORY_LIMIT_MB = 512;
+
+/**
+ * Quanto de memória fora do heap um processo como este ocupa SEM ter nada de
+ * errado: o binário do Node, as bibliotecas carregadas (Express, Mongoose, a
+ * instrumentação OpenTelemetry que a Sentry soma às integrações padrão) e as
+ * pilhas das threads do libuv. Referência grosseira, e é de propósito — serve
+ * para dizer se o excedente é dezenas ou centenas de MB, não para fechar conta.
+ */
+const OFFHEAP_BASELINE_MB = 80;
+
+/**
+ * Excedente fora do heap, descontados os Buffers vivos, a partir do qual a tela
+ * aponta retenção do allocator nativo.
+ *
+ * Não é um limiar de saúde — é o ponto em que a diferença deixa de caber no
+ * baseline acima e passa a ter dono: memória que NÓS liberamos e o allocator do
+ * sistema não devolveu ao SO. Nenhum GC alcança isso, e nenhum dos cinco
+ * medidores acendia para isso: o RSS já contava esses MB sem dizer de quem eram.
+ */
+const UNATTRIBUTED_OFFHEAP_WATCH_MB = 150;
 
 const formatMs = (value: number | null | undefined) => {
     if (value === null || value === undefined || !Number.isFinite(value)) return '—';
@@ -59,6 +79,21 @@ const gradeAscending = (value: number | null | undefined, watch: number, bad: nu
     if (value >= bad) return 'BAD';
     if (value >= watch) return 'WATCH';
     return 'GOOD';
+};
+
+/**
+ * O pior de vários vereditos sobre o MESMO medidor.
+ *
+ * A memória passou a ser julgada por duas evidências independentes — o nível de
+ * agora e a inclinação da janela —, e um medidor tem uma cor só. Vence a pior:
+ * 300 MB subindo rumo ao teto em 6h não é "normal" porque 300 de 512 é folgado,
+ * e 396 MB estáveis há 24h não deixam de merecer o olho porque a reta é plana.
+ */
+const worstVerdict = (...verdicts: Verdict[]): Verdict => {
+    const rank: Record<Exclude<Verdict, null>, number> = { GOOD: 0, WATCH: 1, BAD: 2 };
+    const known = verdicts.filter((v): v is Exclude<Verdict, null> => v !== null);
+    if (!known.length) return null;
+    return known.reduce((pior, atual) => (rank[atual] > rank[pior] ? atual : pior));
 };
 
 /** Compara contra limiares decrescentes (quanto MAIOR, melhor). */
@@ -205,6 +240,7 @@ export const PerformanceOverview = ({
         const memoryLimitMb = snapshot?.runtime?.limitsMb?.container ?? DEFAULT_MEMORY_LIMIT_MB;
         const heapLimitMb = snapshot?.runtime?.limitsMb?.heap ?? null;
         const memoryMb = memory ? memory.rss : null;
+        const trend = snapshot?.runtime?.memoryTrend ?? null;
 
         /**
          * A leitura completa da memória, em uma linha.
@@ -219,6 +255,11 @@ export const PerformanceOverview = ({
         const memoryDetail = memory
             ? `Heap ${memory.heapUsed.toFixed(0)} de ${memory.heapTotal.toFixed(0)} MB`
                 + (memory.offHeap === undefined ? '' : ` · ${memory.offHeap.toFixed(0)} MB fora do heap`)
+                // `external` estava só no balão, e é ele que dá dono ao vão: sem
+                // esse número, "272 MB fora do heap" é um total sem composição, e
+                // Buffer vivo e retenção do allocator ficam indistinguíveis — que
+                // é precisamente a pergunta que o card existe para responder.
+                + ` · Buffers ${memory.external.toFixed(0)} MB`
             : 'Sem leitura';
         const memoryDetailTitle = memory
             ? [
@@ -230,8 +271,83 @@ export const PerformanceOverview = ({
                 memory.offHeap === undefined
                     ? null
                     : `Fora do heap (RSS − heap reservado): ${memory.offHeap.toFixed(0)} MB`,
+                trend?.direction
+                    ? `Janela medida: ${trend.points} amostras em ${trend.spanHours.toFixed(1)}h`
+                        + ` (mín. ${trend.rssMinMb} / máx. ${trend.rssMaxMb} MB)`
+                    : 'Janela medida: ainda acumulando amostras',
             ].filter(Boolean).join('\n')
             : undefined;
+
+        /**
+         * A LEITURA, não os números.
+         *
+         * O card dizia "396 MB de 512" e parava ali — e as duas perguntas que
+         * decidem se alguém age ficavam sem resposta: está subindo, e de quem são
+         * os MB que não estão no heap. A primeira só a janela responde; a segunda
+         * sai de `external`, que já era medido e não era publicado na linha.
+         *
+         * Vira bloco próprio, fora da grade, pelo mesmo motivo do aviso de teto de
+         * heap: são duas ou três frases de diagnóstico, e não cabem — nem se leem —
+         * dentro de um card de 10px.
+         */
+        const unattributedOffHeap = memory?.offHeap === undefined
+            ? null
+            : Math.max(0, memory.offHeap - memory.external);
+
+        const buildMemoryNote = () => {
+            if (!memory || !trend?.direction) return null;
+
+            const subindo = trend.direction === 'RISING';
+            const inclinacao = trend.rssSlopeMbPerHour ?? 0;
+            const horizonte = trend.hoursToLimit;
+
+            const title = subindo
+                ? `Memória subindo ${inclinacao.toFixed(1)} MB/h`
+                    + (horizonte === null
+                        ? ` nas últimas ${trend.spanHours.toFixed(0)}h`
+                        : ` — no mesmo ritmo, encosta nos ${memoryLimitMb} MB da instância em ~${horizonte.toFixed(0)}h`)
+                : `Memória ${trend.direction === 'FALLING' ? 'em queda' : 'estável'} há ${trend.spanHours.toFixed(0)}h`
+                    + ` — ${memory.rss.toFixed(0)} MB agora, entre ${trend.rssMinMb} e ${trend.rssMaxMb} MB na janela`;
+
+            // Onde está a subida decide o que fazer. No heap, o GC ainda alcança e
+            // o teto do V8 ainda contém — morre com OOM diagnosticável. Fora dele,
+            // nem um nem outro alcançam: o container derruba o processo em SIGKILL
+            // mudo, sem stack e sem evento no Sentry.
+            const ondeCresce = subindo && trend.offHeapSlopeMbPerHour !== null
+                ? trend.offHeapSlopeMbPerHour >= inclinacao * 0.6
+                    ? ` O crescimento está FORA do heap (${trend.offHeapSlopeMbPerHour.toFixed(1)} MB/h dos ${inclinacao.toFixed(1)}): não é objeto JavaScript vivo, então o GC não resolve e o teto do V8 não contém.`
+                    : ` O crescimento está no heap (${(inclinacao - trend.offHeapSlopeMbPerHour).toFixed(1)} MB/h dos ${inclinacao.toFixed(1)}): é objeto JavaScript retido, e o teto do V8 ainda o transforma em OOM diagnosticável antes do SIGKILL.`
+                : '';
+
+            const composicao = unattributedOffHeap === null
+                ? ''
+                : unattributedOffHeap >= UNATTRIBUTED_OFFHEAP_WATCH_MB
+                    ? ` Dos ${memory.offHeap!.toFixed(0)} MB fora do heap, ${memory.external.toFixed(0)} MB são Buffers vivos; os outros ${unattributedOffHeap.toFixed(0)} MB estão muito acima dos ~${OFFHEAP_BASELINE_MB} MB que o binário, as bibliotecas e as pilhas ocupam — é memória que o allocator nativo reteve sem devolver ao sistema. MALLOC_ARENA_MAX=2 no ambiente do processo costuma devolver parte dela; no .env não adianta, o dotenv lê depois do allocator já ter decidido.`
+                    : ` Fora do heap há ${memory.offHeap!.toFixed(0)} MB, ${memory.external.toFixed(0)} deles em Buffers vivos — dentro do que o binário, as bibliotecas e os downloads explicam.`;
+
+            return {
+                tone: subindo ? (horizonte !== null && horizonte <= 24 ? 'BAD' : 'WATCH') : 'NEUTRAL',
+                title,
+                body: `${ondeCresce}${composicao}`.trim(),
+            } as const;
+        };
+        const memoryNote = buildMemoryNote();
+
+        /**
+         * Veredito da memória: nível E inclinação.
+         *
+         * Só o nível deixava um vão inteiro sem alarme — 300 MB de 512 pinta
+         * "normal" mesmo subindo 40 MB/h rumo ao SIGKILL em 5h, porque o limiar
+         * fala de agora e o problema é de trajetória. A subida nunca CALA o nível,
+         * só pode piorá-lo: `worstVerdict`.
+         */
+        const trendVerdict: Verdict = trend?.direction !== 'RISING'
+            ? null
+            : trend.hoursToLimit !== null && trend.hoursToLimit <= 24 ? 'BAD' : 'WATCH';
+        const memoryVerdict = worstVerdict(
+            gradeAscending(memoryMb, memoryLimitMb * 0.75, memoryLimitMb * 0.9),
+            trendVerdict,
+        );
 
         /**
          * O TETO DO HEAP NÃO CABE NA INSTÂNCIA.
@@ -256,7 +372,7 @@ export const PerformanceOverview = ({
         const verdicts = [
             gradeAscending(slowestHttp?.p95Ms, 1000, 3000),
             gradeAscending(errorRate, 0.01, 0.05),
-            gradeAscending(memoryMb, memoryLimitMb * 0.75, memoryLimitMb * 0.9),
+            memoryVerdict,
             gradeAscending(snapshot?.runtime?.eventLoopDelayMs?.p95, 100, 500),
             gradeDescending(cacheRate, 0.5, 0.2),
         ];
@@ -282,6 +398,8 @@ export const PerformanceOverview = ({
             memoryLimitMb,
             memoryDetail,
             memoryDetailTitle,
+            memoryVerdict,
+            memoryNote,
             heapCeilingOverflow,
         };
     }, [snapshot]);
@@ -369,11 +487,7 @@ export const PerformanceOverview = ({
                             detail={summary.memoryDetail}
                             detailTitle={summary.memoryDetailTitle}
                             Icon={MemoryStick}
-                            verdict={gradeAscending(
-                                summary.memoryMb,
-                                summary.memoryLimitMb * 0.75,
-                                summary.memoryLimitMb * 0.9,
-                            )}
+                            verdict={summary.memoryVerdict}
                         />
                         <MetricCard
                             label="Congestionamento"
@@ -392,6 +506,33 @@ export const PerformanceOverview = ({
                             verdict={gradeDescending(summary.cacheRate, 0.5, 0.2)}
                         />
                     </div>
+
+                    {/* A leitura da memória em palavras: está subindo, e de quem são
+                        os MB que não estão no heap. Fica fora da grade porque são
+                        frases de diagnóstico — dentro de um card de 10px ninguém as
+                        lê. Ver `memoryNote`. */}
+                    {summary.memoryNote && (
+                        <div className={`mt-3 flex items-start gap-3 rounded-xl border p-3 ${
+                            summary.memoryNote.tone === 'BAD' ? 'border-red-900/40 bg-red-900/10'
+                                : summary.memoryNote.tone === 'WATCH' ? 'border-yellow-900/40 bg-yellow-900/10'
+                                    : 'border-slate-800 bg-panel'
+                        }`}>
+                            {summary.memoryNote.tone === 'NEUTRAL'
+                                ? <MemoryStick size={15} className="text-slate-500 mt-0.5 shrink-0" />
+                                : <TrendingUp size={15} className={`mt-0.5 shrink-0 ${summary.memoryNote.tone === 'BAD' ? 'text-red-400' : 'text-yellow-400'}`} />}
+                            <div>
+                                <p className={`text-xs font-bold ${
+                                    summary.memoryNote.tone === 'BAD' ? 'text-red-400'
+                                        : summary.memoryNote.tone === 'WATCH' ? 'text-yellow-400' : 'text-slate-300'
+                                }`}>
+                                    {summary.memoryNote.title}
+                                </p>
+                                {summary.memoryNote.body && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{summary.memoryNote.body}</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* CONFIGURAÇÃO, não medição: não muda com o tráfego nem passa
                         sozinha. Ganha destaque próprio porque é o tipo de defeito que

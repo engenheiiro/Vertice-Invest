@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import { accessLog } from '../middleware/accessLog.js';
 import logger from '../config/logger.js';
@@ -10,6 +10,8 @@ import {
   routeMetricKey,
   recordHttpMetric,
   getPerformanceSnapshot,
+  sampleMemory,
+  resetMemoryTrend,
 } from '../utils/performanceMetrics.js';
 import { getPerformanceMetrics } from '../controllers/performanceController.js';
 import adminRoutes from '../routes/adminRoutes.js';
@@ -110,6 +112,114 @@ describe('performanceMetrics', () => {
     // 0,01 conforme a hora do dia em que o teste roda. Reproduzir a aritmética
     // aqui só travaria a ordem dos arredondamentos; o contrato é o valor.
     expect(offHeap).toBeCloseTo(Math.max(0, rss - heapTotal), 1);
+  });
+
+  /**
+   * "396 MB de 512" não diz se alguém precisa agir.
+   *
+   * O número instantâneo serve a dois diagnósticos opostos — regime de repouso de
+   * um processo que nunca passa disso, ou vazamento a caminho do SIGKILL — e o
+   * uptime não desempata: 24h de processo vivo é compatível com os dois. A janela
+   * é a única coisa que separa um do outro.
+   */
+  describe('janela de memória — separa platô de vazamento', () => {
+    const em = (hora, rss) => () => ({
+      at: Date.parse('2026-09-18T00:00:00Z') + (hora * 3600000),
+      rss,
+      heapUsed: 114,
+      heapTotal: 124,
+      external: 28,
+      offHeap: rss - 124,
+    });
+
+    const alimentar = (horas, rssPorHora) => {
+      resetMemoryTrend();
+      horas.forEach((hora) => sampleMemory({ force: true, read: em(hora, rssPorHora(hora)) }));
+    };
+
+    afterEach(() => resetMemoryTrend());
+
+    it('não afirma direção com janela curta — ausência de dado não é "estável"', () => {
+      alimentar([0, 0.1], () => 396);
+      const { memoryTrend } = getPerformanceSnapshot().runtime;
+
+      expect(memoryTrend.points).toBe(2);
+      expect(memoryTrend.direction).toBeNull();
+      expect(memoryTrend.rssSlopeMbPerHour).toBeNull();
+      expect(memoryTrend.hoursToLimit).toBeNull();
+    });
+
+    // O caso do painel: 24h de processo em 396 MB. O nível é apertado, mas a
+    // reta é plana — e é a reta que diz que não há para onde escalar.
+    it('reconhece repouso alto como estável, mesmo com o nível apertado', () => {
+      const horas = Array.from({ length: 24 }, (_, i) => i);
+      // Respiração do GC: ±4 MB sem tendência nenhuma.
+      alimentar(horas, (h) => 396 + ((h % 3) - 1) * 4);
+      const { memoryTrend } = getPerformanceSnapshot().runtime;
+
+      expect(memoryTrend.direction).toBe('STABLE');
+      expect(Math.abs(memoryTrend.rssSlopeMbPerHour)).toBeLessThan(1);
+      // Sem subida não há horizonte: projetar daqui seria inventar uma data.
+      expect(memoryTrend.hoursToLimit).toBeNull();
+      expect(memoryTrend.rssMinMb).toBe(392);
+      expect(memoryTrend.rssMaxMb).toBe(400);
+    });
+
+    it('acha a subida e projeta quando o RSS encosta no teto da instância', () => {
+      const horas = Array.from({ length: 12 }, (_, i) => i);
+      alimentar(horas, (h) => 300 + (h * 8));
+      const { memoryTrend, memoryMb } = getPerformanceSnapshot().runtime;
+
+      expect(memoryTrend.direction).toBe('RISING');
+      expect(memoryTrend.rssSlopeMbPerHour).toBeCloseTo(8, 1);
+      // Último ponto é 388; faltam 124 MB para 512, a 8 MB/h.
+      expect(memoryTrend.hoursToLimit).toBeCloseTo(15.5, 1);
+      // A leitura de agora continua sendo a do processo real, não a da série
+      // injetada: a janela acrescenta, não substitui.
+      expect(memoryMb.rss).toBeGreaterThan(0);
+    });
+
+    // Vazamento no heap e vazamento fora dele pedem ações opostas: um o GC ainda
+    // alcança e o teto do V8 ainda transforma em OOM diagnosticável; o outro
+    // termina em SIGKILL mudo do container.
+    it('diz ONDE a memória cresce, não só que cresce', () => {
+      resetMemoryTrend();
+      Array.from({ length: 12 }, (_, h) => h).forEach((h) => sampleMemory({
+        force: true,
+        read: () => ({
+          at: Date.parse('2026-09-18T00:00:00Z') + (h * 3600000),
+          rss: 300 + (h * 10),
+          heapUsed: 114,
+          heapTotal: 124,
+          external: 28,
+          offHeap: 176 + (h * 10), // a subida inteira está fora do heap
+        }),
+      }));
+      const { memoryTrend } = getPerformanceSnapshot().runtime;
+
+      expect(memoryTrend.rssSlopeMbPerHour).toBeCloseTo(10, 1);
+      expect(memoryTrend.offHeapSlopeMbPerHour).toBeCloseTo(10, 1);
+    });
+
+    // Observabilidade que cresce sozinha vira o vazamento que deveria denunciar.
+    it('a própria série é bounded', () => {
+      resetMemoryTrend();
+      for (let i = 0; i < 400; i += 1) sampleMemory({ force: true, read: em(i, 300) });
+      expect(getPerformanceSnapshot().runtime.memoryTrend.points).toBe(288);
+    });
+
+    // O boot é um piso que o processo nunca mais revisita, e a regressão pesa
+    // mais os extremos: sem a quarentena, o fim do boot vira "subida".
+    it('descarta amostra enquanto o processo esquenta', () => {
+      resetMemoryTrend();
+      const uptime = vi.spyOn(process, 'uptime').mockReturnValue(60);
+      expect(sampleMemory()).toBeNull();
+      expect(getPerformanceSnapshot().runtime.memoryTrend.points).toBe(0);
+
+      uptime.mockReturnValue(30 * 60);
+      expect(sampleMemory()).not.toBeNull();
+      uptime.mockRestore();
+    });
   });
 
   it('measurePerformance preserva retorno e exceção do trabalho medido', async () => {

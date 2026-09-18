@@ -141,6 +141,20 @@ export const startRuntimeMetrics = () => {
   if (!performanceMetrics.enabled || eventLoopHistogram) return;
   eventLoopHistogram = monitorEventLoopDelay({ resolution: 20 });
   eventLoopHistogram.enable();
+
+  // `unref`: o amostrador NUNCA é motivo para o processo continuar de pé. Um
+  // timer de 5 min sem isto segura o event loop e transforma um encerramento
+  // limpo em espera — medir memória não pode custar o desligamento do servidor.
+  memorySamplerTimer = setInterval(() => sampleMemory(), MEMORY_TREND_INTERVAL_MS);
+  memorySamplerTimer.unref?.();
+};
+
+/** Encerra a coleta contínua. Existe para os testes e para o shutdown limpo. */
+export const stopRuntimeMetrics = () => {
+  if (memorySamplerTimer) clearInterval(memorySamplerTimer);
+  memorySamplerTimer = null;
+  if (eventLoopHistogram) eventLoopHistogram.disable();
+  eventLoopHistogram = null;
 };
 
 const nsToMs = (value) => {
@@ -158,6 +172,157 @@ const nsToMs = (value) => {
  * `--max-old-space-size` do `npm start`.
  */
 const CONTAINER_MEMORY_MB = Number(process.env.MEMORY_LIMIT_MB) || 512;
+
+/**
+ * SÉRIE DE MEMÓRIA — a metade que faltava para responder "está subindo?".
+ *
+ * `process.memoryUsage()` era chamado num lugar só, sob demanda, e nada guardava
+ * o resultado: o card exibia UMA amostra instantânea. Com ela, "396 MB de 512"
+ * serve a dois diagnósticos opostos — regime de repouso de um processo que nunca
+ * passa disso, ou vazamento a caminho do OOM — e é exatamente essa diferença que
+ * decide se alguém precisa agir. Uptime não desempata: 24h de processo vivo é
+ * compatível com os dois, e o painel tinha série temporal de latência mas não de
+ * memória, justamente o medidor em que o AGORA não basta.
+ *
+ * Fechar o vão custa ~14 KB: 288 pontos de cinco números, um a cada 5 min,
+ * cobrindo 24h. O teto é fixo pela mesma razão que as séries de duração são
+ * bounded — observabilidade que cresce sozinha vira o vazamento que deveria
+ * denunciar.
+ *
+ * Quem escreve na série é o amostrador, e só ele. Gravar também a cada
+ * `getPerformanceSnapshot()` amarraria a densidade da série ao número de admins
+ * com a aba aberta: a mesma inclinação sairia diferente conforme quem está
+ * olhando.
+ */
+const MEMORY_TREND_INTERVAL_MS = 5 * 60 * 1000;
+const MEMORY_TREND_MAX_POINTS = 288;
+
+/**
+ * Janela em que a amostra é descartada porque o processo ainda está esquentando.
+ *
+ * O RSS do primeiro minuto é o de um processo que não abriu pool do Mongo, não
+ * compilou rota nenhuma e não encheu cache nenhum — um piso que ele nunca mais
+ * revisita. Como a regressão pesa MAIS os extremos da janela, deixar esse ponto
+ * entrar inventaria uma subida que é só o boot terminando.
+ */
+const MEMORY_TREND_WARMUP_SECONDS = 10 * 60;
+
+/** Abaixo desta inclinação o que se mede é respiração do GC, não tendência. */
+const MEMORY_TREND_NOISE_MB_PER_HOUR = 1;
+
+/** Piso de evidência: sem esta janela não se afirma direção nenhuma. */
+const MEMORY_TREND_MIN_POINTS = 6;
+const MEMORY_TREND_MIN_SPAN_HOURS = 0.5;
+
+const memoryTrendPoints = [];
+let memorySamplerTimer = null;
+
+const readMemorySample = () => {
+  const memory = process.memoryUsage();
+  const mb = (bytes) => round(bytes / 1024 / 1024);
+  return {
+    at: Date.now(),
+    rss: mb(memory.rss),
+    heapUsed: mb(memory.heapUsed),
+    heapTotal: mb(memory.heapTotal),
+    external: mb(memory.external),
+    // Dos BYTES crus, como em `runtimeSnapshot`: refazer a conta a partir dos
+    // valores já arredondados arredondaria duas vezes.
+    offHeap: Math.max(0, mb(memory.rss - memory.heapTotal)),
+  };
+};
+
+/**
+ * Registra um ponto na série. `read` é injetável pelo mesmo motivo que `random`
+ * é injetável no registry: sem isso não há como testar uma inclinação sem
+ * esperar horas pelo processo real escalar.
+ */
+export const sampleMemory = ({ force = false, read = readMemorySample } = {}) => {
+  if (!force && process.uptime() < MEMORY_TREND_WARMUP_SECONDS) return null;
+  const point = read();
+  memoryTrendPoints.push(point);
+  if (memoryTrendPoints.length > MEMORY_TREND_MAX_POINTS) memoryTrendPoints.shift();
+  return point;
+};
+
+export const resetMemoryTrend = () => { memoryTrendPoints.length = 0; };
+
+/**
+ * Inclinação em MB/h por mínimos quadrados sobre a janela inteira.
+ *
+ * Primeiro ponto contra último seria mais simples e responderia errado: duas
+ * amostras pegas logo antes e logo depois de um GC diferem em dezenas de MB sem
+ * que nada tenha mudado. A regressão usa os 288 pontos, então um GC no extremo
+ * da janela não decide o veredito sozinho.
+ */
+const slopeMbPerHour = (field) => {
+  const n = memoryTrendPoints.length;
+  if (n < 2) return null;
+  const baseAt = memoryTrendPoints[0].at;
+  let sumX = 0; let sumY = 0; let sumXY = 0; let sumXX = 0;
+  for (const point of memoryTrendPoints) {
+    const x = (point.at - baseAt) / 3600000;
+    const y = Number(point[field]) || 0;
+    sumX += x; sumY += y; sumXY += x * y; sumXX += x * x;
+  }
+  const denominator = (n * sumXX) - (sumX * sumX);
+  if (!denominator) return null;
+  return round(((n * sumXY) - (sumX * sumY)) / denominator);
+};
+
+const memoryTrendSummary = () => {
+  const points = memoryTrendPoints.length;
+  const spanHours = points >= 2
+    ? round((memoryTrendPoints[points - 1].at - memoryTrendPoints[0].at) / 3600000, 2)
+    : 0;
+  const base = {
+    points,
+    spanHours,
+    sampleIntervalMinutes: MEMORY_TREND_INTERVAL_MS / 60000,
+    retentionHours: round((MEMORY_TREND_MAX_POINTS * MEMORY_TREND_INTERVAL_MS) / 3600000, 1),
+  };
+  const vazio = {
+    ...base,
+    direction: null,
+    rssSlopeMbPerHour: null,
+    offHeapSlopeMbPerHour: null,
+    rssMinMb: null,
+    rssMaxMb: null,
+    hoursToLimit: null,
+  };
+
+  // Fail-closed: janela curta não vira afirmação. Meia hora de amostra diz sobre
+  // o dia do processo o mesmo que uma requisição diz sobre o p95 — nada.
+  if (points < MEMORY_TREND_MIN_POINTS || spanHours < MEMORY_TREND_MIN_SPAN_HOURS) return vazio;
+
+  const rssSlope = slopeMbPerHour('rss');
+  if (rssSlope === null) return vazio;
+
+  const rssValues = memoryTrendPoints.map((point) => point.rss);
+  const current = memoryTrendPoints[points - 1].rss;
+  const direction = rssSlope >= MEMORY_TREND_NOISE_MB_PER_HOUR
+    ? 'RISING'
+    : rssSlope <= -MEMORY_TREND_NOISE_MB_PER_HOUR ? 'FALLING' : 'STABLE';
+
+  return {
+    ...base,
+    direction,
+    rssSlopeMbPerHour: rssSlope,
+    // Separa os dois vazamentos possíveis: objeto JavaScript vivo (heap, que o
+    // teto do V8 ainda contém e o GC ainda pode atacar) e Buffer/nativo preso
+    // (fora do heap, onde nem um nem outro alcançam).
+    offHeapSlopeMbPerHour: slopeMbPerHour('offHeap'),
+    rssMinMb: Math.min(...rssValues),
+    rssMaxMb: Math.max(...rssValues),
+    // Projeção linear até o teto da INSTÂNCIA, não do heap: quem mata o processo
+    // é o container, e ele conta o RSS inteiro. Só existe quando há subida — em
+    // regime estável a divisão devolveria um horizonte imenso ou negativo, que
+    // na tela viraria uma promessa que a medição não sustenta.
+    hoursToLimit: direction === 'RISING' && CONTAINER_MEMORY_MB > current
+      ? round((CONTAINER_MEMORY_MB - current) / rssSlope, 1)
+      : null,
+  };
+};
 
 const runtimeSnapshot = () => {
   const memory = process.memoryUsage();
@@ -185,6 +350,9 @@ const runtimeSnapshot = () => {
       // residente, e logo depois de um GC a subtração chega a virar negativa.
       offHeap: Math.max(0, round((memory.rss - memory.heapTotal) / 1024 / 1024)),
     },
+    // A leitura de agora só vira diagnóstico ao lado da janela. Ver
+    // `memoryTrendSummary`.
+    memoryTrend: memoryTrendSummary(),
     eventLoopDelayMs: eventLoopHistogram
       ? {
           mean: nsToMs(eventLoopHistogram.mean),

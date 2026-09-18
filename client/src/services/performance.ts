@@ -34,6 +34,32 @@ export interface PerformanceRuntime {
         /** RSS menos o heap comprometido. Opcional pelo mesmo motivo acima. */
         offHeap?: number;
     };
+    /**
+     * A JANELA, ao lado da leitura de agora.
+     *
+     * Uma amostra instantânea de RSS não distingue as duas únicas coisas que
+     * importam: regime de repouso alto (não passa disso) e vazamento (passa, e
+     * termina em SIGKILL). O servidor amostra a cada 5 min e publica a
+     * inclinação já calculada — 288 pontos não atravessam a rede a cada 2 min
+     * para o card refazer a mesma conta.
+     *
+     * Opcional porque um servidor ainda não atualizado não envia.
+     */
+    memoryTrend?: {
+        points: number;
+        spanHours: number;
+        sampleIntervalMinutes: number;
+        retentionHours: number;
+        /** `null` = janela curta demais para afirmar direção. Nunca "estável" por omissão. */
+        direction: 'RISING' | 'STABLE' | 'FALLING' | null;
+        rssSlopeMbPerHour: number | null;
+        /** Separa vazamento de objeto JS (heap) de Buffer/nativo preso (fora dele). */
+        offHeapSlopeMbPerHour: number | null;
+        rssMinMb: number | null;
+        rssMaxMb: number | null;
+        /** Projeção linear até o teto da instância. Só existe quando há subida. */
+        hoursToLimit: number | null;
+    };
     eventLoopDelayMs: {
         mean: number | null;
         p50: number | null;
