@@ -241,6 +241,7 @@ export const PerformanceOverview = ({
         const heapLimitMb = snapshot?.runtime?.limitsMb?.heap ?? null;
         const memoryMb = memory ? memory.rss : null;
         const trend = snapshot?.runtime?.memoryTrend ?? null;
+        const arenaMax = snapshot?.runtime?.mallocArenaMax ?? null;
 
         /**
          * A leitura completa da memória, em uma linha.
@@ -297,7 +298,10 @@ export const PerformanceOverview = ({
         const buildMemoryNote = () => {
             if (!memory || !trend?.direction) return null;
 
-            const subindo = trend.direction === 'RISING';
+            // Subida que JÁ PAROU não é subida. A janela inteira ainda a acusa
+            // porque a rampa de aquecimento continua dentro dela, e a reta não
+            // sabe que a curva achatou — quem sabe é a inclinação recente.
+            const subindo = trend.direction === 'RISING' && !trend.decelerating;
             const inclinacao = trend.rssSlopeMbPerHour ?? 0;
             const horizonte = trend.hoursToLimit;
 
@@ -306,8 +310,18 @@ export const PerformanceOverview = ({
                     + (horizonte === null
                         ? ` nas últimas ${trend.spanHours.toFixed(0)}h`
                         : ` — no mesmo ritmo, encosta nos ${memoryLimitMb} MB da instância em ~${horizonte.toFixed(0)}h`)
-                : `Memória ${trend.direction === 'FALLING' ? 'em queda' : 'estável'} há ${trend.spanHours.toFixed(0)}h`
-                    + ` — ${memory.rss.toFixed(0)} MB agora, entre ${trend.rssMinMb} e ${trend.rssMaxMb} MB na janela`;
+                : trend.decelerating
+                    ? `Memória estabilizada — plana nas últimas ${trend.recentSpanHours}h, em ${memory.rss.toFixed(0)} MB`
+                    : `Memória ${trend.direction === 'FALLING' ? 'em queda' : 'estável'} há ${trend.spanHours.toFixed(0)}h`
+                        + ` — ${memory.rss.toFixed(0)} MB agora, entre ${trend.rssMinMb} e ${trend.rssMaxMb} MB na janela`;
+
+            // A frase existe porque o número que sobra na janela longa CONTRADIZ
+            // o título, e um painel que mostra os dois sem explicar o desencontro
+            // devolve a dúvida para quem lê.
+            const aquecimento = trend.decelerating
+                ? ` A janela de ${trend.spanHours.toFixed(0)}h ainda acusa ${inclinacao.toFixed(1)} MB/h porque inclui a subida que todo processo faz ao esquentar;`
+                    + ` nas últimas ${trend.recentSpanHours}h a inclinação é ${(trend.recentSlopeMbPerHour ?? 0).toFixed(1)} MB/h.`
+                : '';
 
             // Onde está a subida decide o que fazer. No heap, o GC ainda alcança e
             // o teto do V8 ainda contém — morre com OOM diagnosticável. Fora dele,
@@ -322,13 +336,19 @@ export const PerformanceOverview = ({
             const composicao = unattributedOffHeap === null
                 ? ''
                 : unattributedOffHeap >= UNATTRIBUTED_OFFHEAP_WATCH_MB
-                    ? ` Dos ${memory.offHeap!.toFixed(0)} MB fora do heap, ${memory.external.toFixed(0)} MB são Buffers vivos; os outros ${unattributedOffHeap.toFixed(0)} MB estão muito acima dos ~${OFFHEAP_BASELINE_MB} MB que o binário, as bibliotecas e as pilhas ocupam — é memória que o allocator nativo reteve sem devolver ao sistema. MALLOC_ARENA_MAX=2 no ambiente do processo costuma devolver parte dela; no .env não adianta, o dotenv lê depois do allocator já ter decidido.`
+                    ? ` Dos ${memory.offHeap!.toFixed(0)} MB fora do heap, ${memory.external.toFixed(0)} MB são Buffers vivos; os outros ${unattributedOffHeap.toFixed(0)} MB estão muito acima dos ~${OFFHEAP_BASELINE_MB} MB que o binário, as bibliotecas e as pilhas ocupam — é memória que o allocator nativo reteve sem devolver ao sistema.`
+                        // Conselho já aplicado é ruído que nunca apaga, e ensina a
+                        // ignorar o bloco inteiro. Quem sabe se a variável valeu é o
+                        // processo, porque é do ambiente dele que o glibc a lê.
+                        + (arenaMax === null || arenaMax === undefined
+                            ? ' MALLOC_ARENA_MAX=2 no ambiente do processo costuma devolver parte dela; no .env não adianta, o dotenv lê depois do allocator já ter decidido.'
+                            : ` As arenas já estão limitadas a ${arenaMax}, então isto é o que o processo de fato segura — o próximo passo é reduzir o que ele aloca, não como o allocator agrupa.`)
                     : ` Fora do heap há ${memory.offHeap!.toFixed(0)} MB, ${memory.external.toFixed(0)} deles em Buffers vivos — dentro do que o binário, as bibliotecas e os downloads explicam.`;
 
             return {
                 tone: subindo ? (horizonte !== null && horizonte <= 24 ? 'BAD' : 'WATCH') : 'NEUTRAL',
                 title,
-                body: `${ondeCresce}${composicao}`.trim(),
+                body: `${aquecimento}${ondeCresce}${composicao}`.trim(),
             } as const;
         };
         const memoryNote = buildMemoryNote();
@@ -341,7 +361,7 @@ export const PerformanceOverview = ({
          * fala de agora e o problema é de trajetória. A subida nunca CALA o nível,
          * só pode piorá-lo: `worstVerdict`.
          */
-        const trendVerdict: Verdict = trend?.direction !== 'RISING'
+        const trendVerdict: Verdict = trend?.direction !== 'RISING' || trend.decelerating
             ? null
             : trend.hoursToLimit !== null && trend.hoursToLimit <= 24 ? 'BAD' : 'WATCH';
         const memoryVerdict = worstVerdict(

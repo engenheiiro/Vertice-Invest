@@ -338,6 +338,7 @@ describe('memória ao longo do tempo — platô ou vazamento', () => {
             memoryTrend: {
                 points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
                 direction: 'STABLE', rssSlopeMbPerHour: 0.2, offHeapSlopeMbPerHour: 0.1,
+                recentSlopeMbPerHour: 0.1, recentSpanHours: 4, decelerating: false,
                 rssMinMb: 388, rssMaxMb: 402, hoursToLimit: null, ...trend,
             },
             eventLoopDelayMs: { mean: 12, p50: 11, p95: 24, p99: 31, max: 40 },
@@ -413,5 +414,119 @@ describe('memória ao longo do tempo — platô ou vazamento', () => {
         await screen.findByText('148 MB');
         expect(screen.queryByText(/Memória estável/)).not.toBeInTheDocument();
         expect(screen.queryByText(/Memória subindo/)).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * O alarme que acendia depois de TODO deploy.
+ *
+ * 19/09/2026, 26h de uptime: o RSS vinha caindo de 330 para 324 havia 19 horas e
+ * o card anunciava "subindo 1,1 MB/h — encosta nos 512 MB em ~184h". A rampa de
+ * aquecimento é côncava (sobe enquanto o processo enche cache e abre conexão,
+ * achata depois) e mínimos quadrados só sabem traçar reta: com as primeiras
+ * horas ainda dentro da janela, a reta sobe num processo parado.
+ *
+ * A saída não foi calar nem alargar a quarentena — foi medir se a inclinação
+ * está caindo. Alarme que acende sempre se aprende a ignorar, e era esse o vício
+ * que tínhamos acabado de tirar do amarelo permanente do card.
+ */
+describe('rampa de aquecimento não é vazamento', () => {
+    const emRepouso = (over: Record<string, unknown> = {}) => snapshot({
+        durations: { http: [] },
+        counters: { cache: {} },
+        runtime: {
+            uptimeSeconds: 93_600,
+            limitsMb: { container: 512, heap: 492 },
+            memoryMb: { rss: 324, heapUsed: 109, heapTotal: 120, external: 41, offHeap: 204 },
+            memoryTrend: {
+                points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
+                direction: 'RISING', rssSlopeMbPerHour: 1.1, offHeapSlopeMbPerHour: 0.8,
+                recentSlopeMbPerHour: -0.3, recentSpanHours: 4, decelerating: true,
+                rssMinMb: 270, rssMaxMb: 331, hoursToLimit: null, ...over,
+            },
+            eventLoopDelayMs: { mean: 12, p50: 11, p95: 21, p99: 31, max: 40 },
+        },
+    });
+
+    it('lê subida que já parou como processo estabilizado', async () => {
+        getSnapshot.mockResolvedValue(emRepouso());
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/Memória estabilizada — plana nas últimas 4h, em 324 MB/)).toBeInTheDocument();
+        expect(screen.queryByText(/Memória subindo/)).not.toBeInTheDocument();
+    });
+
+    // O número da janela longa continua na tela e CONTRADIZ o título. Mostrar os
+    // dois sem explicar o desencontro devolveria a dúvida para quem lê.
+    it('explica por que a janela longa ainda acusa subida', async () => {
+        getSnapshot.mockResolvedValue(emRepouso());
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/A janela de 24h ainda acusa 1.1 MB\/h porque inclui a subida que todo processo faz ao esquentar/))
+            .toBeInTheDocument();
+        expect(screen.getByText(/nas últimas 4h a inclinação é -0.3 MB\/h/)).toBeInTheDocument();
+    });
+
+    it('e o medidor volta a ser julgado só pelo nível', async () => {
+        getSnapshot.mockResolvedValue(emRepouso());
+        render(<PerformanceOverview />);
+
+        // 324 de 512 é folgado, e não há subida em curso para piorar isso.
+        await screen.findByText('324 MB');
+        expect(screen.getByText(/Tudo dentro do normal/)).toBeInTheDocument();
+    });
+
+    // A comparação mede, não anistia: subida que se mantém segue condenada.
+    it('não perdoa vazamento cuja inclinação recente se mantém', async () => {
+        getSnapshot.mockResolvedValue(emRepouso({
+            rssSlopeMbPerHour: 12, recentSlopeMbPerHour: 11.4, decelerating: false, hoursToLimit: 15,
+        }));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/Memória subindo 12.0 MB\/h/)).toBeInTheDocument();
+        expect(screen.getByText(/fora do aceitável/)).toBeInTheDocument();
+    });
+});
+
+/**
+ * O painel não repete conselho já aplicado.
+ *
+ * "Ligue MALLOC_ARENA_MAX" para quem já ligou é ruído que nunca apaga, e ensina
+ * a ignorar o bloco inteiro — o mesmo vício do amarelo permanente. Quem sabe se
+ * a variável valeu é o processo: é do ambiente dele que o glibc a lê.
+ */
+describe('conselho do allocator só aparece para quem ainda não o aplicou', () => {
+    const comArena = (mallocArenaMax: number | null) => snapshot({
+        durations: { http: [] },
+        counters: { cache: {} },
+        runtime: {
+            uptimeSeconds: 93_600,
+            limitsMb: { container: 512, heap: 492 },
+            memoryMb: { rss: 324, heapUsed: 109, heapTotal: 120, external: 41, offHeap: 204 },
+            mallocArenaMax,
+            memoryTrend: {
+                points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
+                direction: 'STABLE', rssSlopeMbPerHour: 0.1, offHeapSlopeMbPerHour: 0.1,
+                recentSlopeMbPerHour: 0.1, recentSpanHours: 4, decelerating: false,
+                rssMinMb: 318, rssMaxMb: 331, hoursToLimit: null,
+            },
+            eventLoopDelayMs: { mean: 12, p50: 11, p95: 21, p99: 31, max: 40 },
+        },
+    });
+
+    it('sugere a variável quando ninguém a definiu', async () => {
+        getSnapshot.mockResolvedValue(comArena(null));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/MALLOC_ARENA_MAX=2 no ambiente do processo/)).toBeInTheDocument();
+    });
+
+    it('e muda de assunto quando já está aplicada', async () => {
+        getSnapshot.mockResolvedValue(comArena(2));
+        render(<PerformanceOverview />);
+
+        expect(await screen.findByText(/As arenas já estão limitadas a 2/)).toBeInTheDocument();
+        expect(screen.getByText(/reduzir o que ele aloca, não como o allocator agrupa/)).toBeInTheDocument();
+        expect(screen.queryByText(/MALLOC_ARENA_MAX=2 no ambiente do processo/)).not.toBeInTheDocument();
     });
 });

@@ -55,11 +55,31 @@ export interface PerformanceRuntime {
         rssSlopeMbPerHour: number | null;
         /** Separa vazamento de objeto JS (heap) de Buffer/nativo preso (fora dele). */
         offHeapSlopeMbPerHour: number | null;
+        /**
+         * Inclinação só das últimas `recentSpanHours`. `null` enquanto a janela
+         * inteira não tiver o dobro disso — comparar antes é traçar a mesma reta
+         * duas vezes.
+         */
+        recentSlopeMbPerHour: number | null;
+        recentSpanHours: number;
+        /**
+         * A janela inteira sobe por causa do começo dela, e AGORA está parado.
+         * É a rampa de aquecimento do processo, que é côncava enquanto mínimos
+         * quadrados só sabem traçar reta. Vazamento verdadeiro mantém as duas
+         * inclinações iguais e não recebe este perdão.
+         */
+        decelerating: boolean;
         rssMinMb: number | null;
         rssMaxMb: number | null;
         /** Projeção linear até o teto da instância. Só existe quando há subida. */
         hoursToLimit: number | null;
     };
+    /**
+     * Teto de arenas de malloc, quando alguém o definiu no ambiente do processo.
+     * Existe para a tela não repetir um conselho já aplicado. `null` = não está
+     * definido, ou o servidor é antigo demais para informar.
+     */
+    mallocArenaMax?: number | null;
     eventLoopDelayMs: {
         mean: number | null;
         p50: number | null;

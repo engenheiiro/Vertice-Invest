@@ -58,7 +58,7 @@ const comMemoria = (
     memoryTrend: NonNullable<PerformanceSnapshot['runtime']>['memoryTrend'],
 ): PerformanceSnapshot => ({
     ...activeSnapshot,
-    runtime: { ...activeSnapshot.runtime!, uptimeSeconds: 86_400, memoryMb, memoryTrend },
+    runtime: { ...activeSnapshot.runtime!, uptimeSeconds: 86_400, memoryMb, memoryTrend, mallocArenaMax: 2 },
 });
 
 /**
@@ -73,6 +73,7 @@ export const MemoriaEstavelEmRepousoAlto: Story = {
             {
                 points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
                 direction: 'STABLE', rssSlopeMbPerHour: 0.2, offHeapSlopeMbPerHour: 0.1,
+                recentSlopeMbPerHour: 0.1, recentSpanHours: 4, decelerating: false,
                 rssMinMb: 388, rssMaxMb: 402, hoursToLimit: null,
             },
         ),
@@ -87,7 +88,28 @@ export const MemoriaSubindoRumoAoTeto: Story = {
             {
                 points: 96, spanHours: 8, sampleIntervalMinutes: 5, retentionHours: 24,
                 direction: 'RISING', rssSlopeMbPerHour: 35, offHeapSlopeMbPerHour: 33,
+                recentSlopeMbPerHour: 36, recentSpanHours: 4, decelerating: false,
                 rssMinMb: 180, rssMaxMb: 300, hoursToLimit: 6,
+            },
+        ),
+    },
+};
+
+/**
+ * 19/09/2026, 26h de uptime: o RSS vinha CAINDO de 330 para 324 havia 19 horas e
+ * o card anunciava "subindo 1,1 MB/h — encosta nos 512 MB em ~184h". A janela
+ * inteira ainda carregava a rampa de aquecimento, e mínimos quadrados só sabem
+ * traçar reta. A inclinação das últimas 4h é que desempata.
+ */
+export const MemoriaEstabilizadaAposAquecimento: Story = {
+    args: {
+        loadSnapshot: async () => comMemoria(
+            { rss: 324, heapUsed: 109, heapTotal: 120, external: 41, offHeap: 204 },
+            {
+                points: 288, spanHours: 24, sampleIntervalMinutes: 5, retentionHours: 24,
+                direction: 'RISING', rssSlopeMbPerHour: 1.1, offHeapSlopeMbPerHour: 0.8,
+                recentSlopeMbPerHour: -0.3, recentSpanHours: 4, decelerating: true,
+                rssMinMb: 270, rssMaxMb: 331, hoursToLimit: null,
             },
         ),
     },

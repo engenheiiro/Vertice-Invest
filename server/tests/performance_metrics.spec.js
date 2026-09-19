@@ -201,6 +201,66 @@ describe('performanceMetrics', () => {
       expect(memoryTrend.offHeapSlopeMbPerHour).toBeCloseTo(10, 1);
     });
 
+    /**
+     * 19/09/2026, 26h de uptime: RSS caindo de 330 para 324 nas últimas 19h, e o
+     * card anunciando "subindo 1,1 MB/h, encosta nos 512 MB em ~184h".
+     *
+     * Não era erro de medição: a rampa de aquecimento é côncava — sobe rápido
+     * enquanto o processo enche cache e abre conexão, achata depois — e mínimos
+     * quadrados só sabem traçar reta. Com as primeiras horas ainda dentro da
+     * janela, a reta sobe embora o processo esteja parado. Sem isto o card grita
+     * depois de TODO deploy, e alarme que acende sempre se aprende a ignorar.
+     */
+    it('não confunde rampa de aquecimento que já achatou com vazamento', () => {
+      resetMemoryTrend();
+      // A curva medida: 6h de aquecimento (270 → 330) e 18h de platô cedendo de
+      // volta para ~324. Devolve +1,3 MB/h na janela inteira e −0,3 nas últimas
+      // 4h — os mesmos números que estavam na tela.
+      Array.from({ length: 145 }, (_, i) => i * 0.166).forEach((hora) => sampleMemory({
+        force: true,
+        read: em(hora, hora < 6 ? 270 + (hora * 10) : 330 - ((hora - 6) * 0.3)),
+      }));
+      const { memoryTrend } = getPerformanceSnapshot().runtime;
+
+      // A janela inteira continua subindo: é o começo dela que pesa.
+      expect(memoryTrend.direction).toBe('RISING');
+      expect(memoryTrend.rssSlopeMbPerHour).toBeGreaterThan(0);
+      // Mas o ritmo de AGORA é indistinguível de parado.
+      expect(Math.abs(memoryTrend.recentSlopeMbPerHour)).toBeLessThan(1);
+      expect(memoryTrend.decelerating).toBe(true);
+      // E por isso nenhuma data de morte é publicada: extrapolar reta de curva
+      // achatada põe na tela um número que a medição não sustenta.
+      expect(memoryTrend.hoursToLimit).toBeNull();
+    });
+
+    // O outro lado: a comparação não pode virar anistia. Subida que se mantém
+    // deixa as duas retas iguais e continua acusada.
+    it('vazamento constante não é absolvido pela comparação', () => {
+      resetMemoryTrend();
+      Array.from({ length: 145 }, (_, i) => i * 0.166)
+        .forEach((hora) => sampleMemory({ force: true, read: em(hora, 200 + (hora * 8)) }));
+      const { memoryTrend } = getPerformanceSnapshot().runtime;
+
+      expect(memoryTrend.direction).toBe('RISING');
+      expect(memoryTrend.recentSlopeMbPerHour).toBeCloseTo(8, 0);
+      expect(memoryTrend.decelerating).toBe(false);
+      expect(memoryTrend.hoursToLimit).not.toBeNull();
+    });
+
+    // Janela curta não sustenta a comparação: "recente" e "inteira" seriam a
+    // mesma reta medida duas vezes, e uma subida real seria perdoada por isso.
+    it('não compara antes de a janela ter o dobro da recente', () => {
+      resetMemoryTrend();
+      Array.from({ length: 36 }, (_, i) => i * 0.166)
+        .forEach((hora) => sampleMemory({ force: true, read: em(hora, 300 + (hora * 6)) }));
+      const { memoryTrend } = getPerformanceSnapshot().runtime;
+
+      expect(memoryTrend.spanHours).toBeLessThan(8);
+      expect(memoryTrend.recentSlopeMbPerHour).toBeNull();
+      expect(memoryTrend.decelerating).toBe(false);
+      expect(memoryTrend.hoursToLimit).not.toBeNull();
+    });
+
     // Observabilidade que cresce sozinha vira o vazamento que deveria denunciar.
     it('a própria série é bounded', () => {
       resetMemoryTrend();
@@ -310,5 +370,35 @@ describe('recordHttpMetric — a rota montada, como o Express a entrega', () => 
 
     expect(chaves('web')).toContain('GET /robots.txt 2xx');
     expect(chaves('http')).not.toContain('GET /robots.txt 2xx');
+  });
+});
+
+/**
+ * Conselho já aplicado é ruído que nunca apaga.
+ *
+ * O card aponta retenção do allocator e manda ligar MALLOC_ARENA_MAX. Repetir
+ * isso para quem já ligou ensina a ignorar o bloco inteiro — e quem sabe se a
+ * variável valeu é o PROCESSO, porque é do ambiente dele que o glibc a lê. Foi
+ * por isso que pôr no .env nunca funcionou: o dotenv escreve em process.env
+ * depois, com o allocator já decidido.
+ */
+describe('teto de arenas do allocator', () => {
+  const original = process.env.MALLOC_ARENA_MAX;
+  afterEach(() => {
+    if (original === undefined) delete process.env.MALLOC_ARENA_MAX;
+    else process.env.MALLOC_ARENA_MAX = original;
+  });
+
+  it('publica o teto quando o ambiente o define', () => {
+    process.env.MALLOC_ARENA_MAX = '2';
+    expect(getPerformanceSnapshot().runtime.mallocArenaMax).toBe(2);
+  });
+
+  it('não inventa teto quando ninguém definiu, nem aceita lixo', () => {
+    delete process.env.MALLOC_ARENA_MAX;
+    expect(getPerformanceSnapshot().runtime.mallocArenaMax).toBeNull();
+
+    process.env.MALLOC_ARENA_MAX = 'talvez';
+    expect(getPerformanceSnapshot().runtime.mallocArenaMax).toBeNull();
   });
 });

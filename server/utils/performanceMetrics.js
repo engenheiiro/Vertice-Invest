@@ -207,6 +207,31 @@ const MEMORY_TREND_MAX_POINTS = 288;
  */
 const MEMORY_TREND_WARMUP_SECONDS = 10 * 60;
 
+/**
+ * Janela recente, comparada com a janela inteira para separar RAMPA de VAZAMENTO.
+ *
+ * A quarentena acima protege contra o pico do primeiro minuto e não contra o que
+ * veio depois: o processo leva horas enchendo cache, abrindo conexão e rodando
+ * cada job pela primeira vez, e o allocator retém o que foi tocado. Essa subida
+ * é côncava — rápida no começo, plana depois —, e mínimos quadrados só sabem
+ * traçar reta. Medido em 19/09/2026: 26h de uptime, RSS caindo de 330 para 324
+ * nas últimas 19h, e a regressão da janela inteira ainda lendo +1,1 MB/h porque
+ * as primeiras horas continuavam dentro dela. O card acusava subida num processo
+ * parado, e a projeção extrapolava uma reta de uma curva que já tinha achatado.
+ *
+ * A saída não é calar nem alargar a quarentena — é MEDIR se a inclinação está
+ * caindo. A janela inteira segue decidindo a direção, porque é ela que enxerga
+ * vazamento lento demais para aparecer em poucas horas; a janela recente diz se
+ * aquela subida ainda está acontecendo AGORA. Vazamento real mantém as duas
+ * iguais, e a comparação não o absolve.
+ *
+ * 4h porque precisa ser longa contra o ruído do GC (que se mede em minutos) e
+ * curta o bastante para a comparação existir cedo: ela só vale quando a janela
+ * inteira tem pelo menos o dobro disso, senão "recente" e "inteira" são a mesma
+ * reta comparada consigo mesma.
+ */
+const MEMORY_TREND_RECENT_HOURS = 4;
+
 /** Abaixo desta inclinação o que se mede é respiração do GC, não tendência. */
 const MEMORY_TREND_NOISE_MB_PER_HOUR = 1;
 
@@ -255,12 +280,12 @@ export const resetMemoryTrend = () => { memoryTrendPoints.length = 0; };
  * que nada tenha mudado. A regressão usa os 288 pontos, então um GC no extremo
  * da janela não decide o veredito sozinho.
  */
-const slopeMbPerHour = (field) => {
-  const n = memoryTrendPoints.length;
+const slopeMbPerHour = (points, field) => {
+  const n = points.length;
   if (n < 2) return null;
-  const baseAt = memoryTrendPoints[0].at;
+  const baseAt = points[0].at;
   let sumX = 0; let sumY = 0; let sumXY = 0; let sumXX = 0;
-  for (const point of memoryTrendPoints) {
+  for (const point of points) {
     const x = (point.at - baseAt) / 3600000;
     const y = Number(point[field]) || 0;
     sumX += x; sumY += y; sumXY += x * y; sumXX += x * x;
@@ -286,6 +311,9 @@ const memoryTrendSummary = () => {
     direction: null,
     rssSlopeMbPerHour: null,
     offHeapSlopeMbPerHour: null,
+    recentSlopeMbPerHour: null,
+    recentSpanHours: MEMORY_TREND_RECENT_HOURS,
+    decelerating: false,
     rssMinMb: null,
     rssMaxMb: null,
     hoursToLimit: null,
@@ -295,7 +323,7 @@ const memoryTrendSummary = () => {
   // o dia do processo o mesmo que uma requisição diz sobre o p95 — nada.
   if (points < MEMORY_TREND_MIN_POINTS || spanHours < MEMORY_TREND_MIN_SPAN_HOURS) return vazio;
 
-  const rssSlope = slopeMbPerHour('rss');
+  const rssSlope = slopeMbPerHour(memoryTrendPoints, 'rss');
   if (rssSlope === null) return vazio;
 
   const rssValues = memoryTrendPoints.map((point) => point.rss);
@@ -304,24 +332,74 @@ const memoryTrendSummary = () => {
     ? 'RISING'
     : rssSlope <= -MEMORY_TREND_NOISE_MB_PER_HOUR ? 'FALLING' : 'STABLE';
 
+  // A subida ainda está acontecendo, ou é o começo da janela que ainda pesa?
+  // Só se pergunta isso quando a janela inteira tem pelo menos o DOBRO da
+  // recente: abaixo disso, comparar é traçar a mesma reta duas vezes.
+  const recentPoints = spanHours >= MEMORY_TREND_RECENT_HOURS * 2
+    ? memoryTrendPoints.filter((point) => (
+      point.at >= memoryTrendPoints[points - 1].at - (MEMORY_TREND_RECENT_HOURS * 3600000)
+    ))
+    : [];
+  const recentSlope = recentPoints.length >= MEMORY_TREND_MIN_POINTS
+    ? slopeMbPerHour(recentPoints, 'rss')
+    : null;
+
+  /**
+   * Rampa que já achatou, não vazamento.
+   *
+   * O critério é o valor ABSOLUTO da inclinação recente, não a razão entre as
+   * duas: "caiu pela metade" ainda pode ser 5 MB/h a caminho do teto. Só se
+   * declara desaceleração quando o ritmo de AGORA é indistinguível de parado —
+   * e uma subida que se mantém, ou acelera, deixa as duas retas parecidas e não
+   * passa por aqui.
+   */
+  const decelerating = direction === 'RISING'
+    && recentSlope !== null
+    && Math.abs(recentSlope) < MEMORY_TREND_NOISE_MB_PER_HOUR;
+
   return {
     ...base,
     direction,
     rssSlopeMbPerHour: rssSlope,
+    recentSlopeMbPerHour: recentSlope,
+    recentSpanHours: MEMORY_TREND_RECENT_HOURS,
+    decelerating,
     // Separa os dois vazamentos possíveis: objeto JavaScript vivo (heap, que o
     // teto do V8 ainda contém e o GC ainda pode atacar) e Buffer/nativo preso
     // (fora do heap, onde nem um nem outro alcançam).
-    offHeapSlopeMbPerHour: slopeMbPerHour('offHeap'),
+    offHeapSlopeMbPerHour: slopeMbPerHour(memoryTrendPoints, 'offHeap'),
     rssMinMb: Math.min(...rssValues),
     rssMaxMb: Math.max(...rssValues),
     // Projeção linear até o teto da INSTÂNCIA, não do heap: quem mata o processo
     // é o container, e ele conta o RSS inteiro. Só existe quando há subida — em
     // regime estável a divisão devolveria um horizonte imenso ou negativo, que
     // na tela viraria uma promessa que a medição não sustenta.
-    hoursToLimit: direction === 'RISING' && CONTAINER_MEMORY_MB > current
+    // ...e nem quando a subida já parou: extrapolar reta de uma curva que
+    // achatou põe uma data na tela que a medição não sustenta. Em 19/09/2026 o
+    // card anunciou "encosta nos 512 MB em ~184h" sobre um processo cujo RSS
+    // vinha CAINDO havia 19 horas.
+    hoursToLimit: direction === 'RISING' && !decelerating && CONTAINER_MEMORY_MB > current
       ? round((CONTAINER_MEMORY_MB - current) / rssSlope, 1)
       : null,
   };
+};
+
+/**
+ * Quantas arenas de malloc o processo recebeu, se alguém limitou.
+ *
+ * Existe para a tela não dar conselho vencido. O card aponta retenção do
+ * allocator quando sobra muito fora do heap sem Buffer vivo, e a resposta é
+ * `MALLOC_ARENA_MAX` — mas repetir essa frase para quem já a aplicou é ruído que
+ * nunca apaga, e ensina a ignorar o bloco inteiro.
+ *
+ * Ler `process.env` responde de verdade porque quem consome essa variável é o
+ * glibc, no arranque, a partir do ambiente do processo: se ela está aqui, ela
+ * valeu. Foi por isso, aliás, que pôr no `.env` não funcionava — o dotenv escreve
+ * em `process.env` depois, quando o allocator já decidiu.
+ */
+const mallocArenaMax = () => {
+  const raw = Number(process.env.MALLOC_ARENA_MAX);
+  return Number.isFinite(raw) && raw > 0 ? raw : null;
 };
 
 const runtimeSnapshot = () => {
@@ -353,6 +431,7 @@ const runtimeSnapshot = () => {
     // A leitura de agora só vira diagnóstico ao lado da janela. Ver
     // `memoryTrendSummary`.
     memoryTrend: memoryTrendSummary(),
+    mallocArenaMax: mallocArenaMax(),
     eventLoopDelayMs: eventLoopHistogram
       ? {
           mean: nsToMs(eventLoopHistogram.mean),
