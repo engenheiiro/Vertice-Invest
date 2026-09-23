@@ -123,7 +123,7 @@ Fluxo: `scoringEngine` → `portfolioEngine` draft → penalidade concentração
 - **`UserAsset`**: holdings — `taxLots[]` para FIFO, `totalCost`, `realizedProfit`, `fifoRealizedProfit`. Índice único `{ user, ticker }`.
 - **`WalletSnapshot`**: snapshot patrimonial diário — `equity`, `invested`, `result`, `twrr`, `dividends`. Gerado por `schedulerService.runDailySnapshot()`.
 - **`QuantSignal`**: sinal técnico salvo — `ticker`, `type`, `strength`, `rsiValue`, `volumeRatio`.
-- **`TreasuryPriceHistory`**: série diária de PU por título do Tesouro (`titleKey` `FAMILIA|YYYY-MM-DD`, `history[{date, pu, puBuy, rate}]`). Base da marcação a mercado da RF. Alimentada por `npm run sync:treasury` / cron 18:30 em dia útil.
+- **`TreasuryPriceHistory`**: série diária de PU por título do Tesouro (`titleKey` `FAMILIA|YYYY-MM-DD`, `history[{date, pu, puBuy, rate}]`). Base da marcação a mercado da RF. Alimentada por `npm run sync:treasury` / cron de terça a sábado às 12:30.
 - **`RefreshToken`**: tokens de refresh persistidos no banco — `token`, `user`, `expiresAt`.
 - **`UsageLog`**: auditoria de uso por feature e plano.
 - **`SupportTicket`**: atendimento — `code` (`VT-0042`), `category`, `status`, `priority`/`priorityRank`, `messages[]` (com `isInternal`), `context` (técnico), `planAtOpen`. Anexo NÃO mora aqui.

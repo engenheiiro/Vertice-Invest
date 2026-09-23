@@ -88,9 +88,9 @@ export const DEFAULT_THRESHOLDS = {
     //
     // O piso saudável NÃO é zero: o arquivo oficial sai na manhã do dia D com a
     // Data Base D-1 — medido em 19/08/2026, o arquivo publicado em 18/08 às 10:20
-    // trazia 17/08 como linha mais recente. Somado ao cron das 18:30, o painel
-    // fica estruturalmente em 1 dia útil de atraso à noite e 2 na manhã seguinte,
-    // antes da ingestão do dia. Alarmar em 2 é alarmar todo dia útil de manhã por
+    // trazia 17/08 como linha mais recente. Somado ao cron de terça a sábado às
+    // 12:30, o painel fica estruturalmente em 1 dia útil de atraso depois da
+    // ingestão e 2 na manhã, antes dela. Alarmar em 2 é alarmar todo dia útil de manhã por
     // algo que ninguém pode consertar — a forma mais rápida de tornar o alarme inútil.
     //
     // Os limiares ficam ancorados no que de fato dói: MAX_PU_STALE_DAYS = 10 dias

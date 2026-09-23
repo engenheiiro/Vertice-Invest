@@ -1,7 +1,7 @@
 /**
  * Ingestão manual da série de PU do Tesouro Direto (marcação a mercado da RF).
  *
- * Em produção isso roda sozinho (cron 12.1 do schedulerService, dias úteis 18:30).
+ * Em produção isso roda sozinho (cron 12.1 do schedulerService, terça a sábado às 12:30).
  * Este script é para primeira carga, backfill mais profundo e diagnóstico.
  *
  * Uso:

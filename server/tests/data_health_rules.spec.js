@@ -217,7 +217,7 @@ describe('FRESCOR', () => {
         // Regressão da base real (19/08/2026, 05:55): último PU 17/08, painel em
         // amarelo com 81 títulos. Não havia defeito nenhum — o arquivo oficial sai
         // na manhã de D com Data Base D-1, então toda manhã, antes do cron das
-        // 18:30, o atraso é exatamente 2. Alarmar aqui é alarmar todo dia.
+        // 12:30 (terça a sábado), o atraso é exatamente 2. Alarmar aqui é alarmar todo dia.
         const facts = healthyFacts();
         facts.treasury = { titles: 81, businessDaysStale: 2 };
         expect(byId(buildHealthReport(facts), 'freshness.treasury').status)
