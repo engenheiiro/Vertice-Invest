@@ -30,6 +30,17 @@ export const NTNB_REAL_MAX = 9.5;
 export const isPlausibleNtnbRate = (rate) =>
     Number.isFinite(rate) && rate >= NTNB_REAL_MIN && rate <= NTNB_REAL_MAX;
 
+// --- Taxa oficial da NTN-B: uma leitura por hora, não por rodada ---
+// O CSV do Tesouro é publicado UMA vez por dia útil (~10:20) e o macro-sync roda a
+// cada 15 min: eram 96 downloads de 14,6 MB por dia para ler o mesmo número, cada
+// um a até 86 s de servidor degradado (medido em 16/10/2026) e parseado inteiro na
+// heap. A taxa lida vale até o fim da hora corrente no relógio do Brasil, então a
+// busca cai na 1ª rodada de cada hora — o minuto :05 que o catálogo de fontes
+// (`tesouro` em sourceHealth.js) anuncia. Só leitura plausível entra no memo: uma
+// falha não congela nada, a rodada seguinte tenta de novo.
+let ntnbOfficialMemo = { hourKey: null, rate: null };
+const currentBrHourKey = () => `${brazilDateKey()}T${brNow().hour}`;
+
 // --- Plausibilidade das moedas ---
 // Faixas largas de propósito: o objetivo não é adivinhar o preço justo, é barrar
 // `0`, `NaN` e string mal parseada antes que virem multiplicador de patrimônio
@@ -969,9 +980,13 @@ export const macroDataService = {
             // O download mora em treasuryPriceService (que consome o MESMO arquivo
             // para a série de PU da marcação a mercado) e é memoizado por 15 min:
             // rodando no mesmo job, macro e PU dividem um único download de ~14 MB.
+            const hourKey = currentBrHourKey();
+            if (ntnbOfficialMemo.hourKey === hourKey) return ntnbOfficialMemo.rate;
             const csv = await fetchTesouroCsv();
             if (!csv) return null;
-            return this._parseNtnbFromCsv(csv);
+            const rate = this._parseNtnbFromCsv(csv);
+            if (isPlausibleNtnbRate(rate)) ntnbOfficialMemo = { hourKey, rate };
+            return rate;
         } catch (error) {
             logger.debug(`[NTN-B] Fonte oficial indisponível (${error.message}). Usando Investidor10.`);
             return null;

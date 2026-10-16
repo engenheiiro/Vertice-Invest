@@ -49,6 +49,15 @@ const SUSPICIOUS_DAILY_MOVE = 0.20;
 
 const tesouroAgent = new https.Agent({ rejectUnauthorized: true, keepAlive: true, minVersion: 'TLSv1.2' });
 
+// Medido em 16/10/2026, com o servidor degradado: 42–70 s até o primeiro byte
+// (até num 304 sem corpo) e 86 s no download inteiro, que vem sem compressão.
+// O teto antigo de 45 s ficava abaixo do tempo real e derrubava ~12% das chamadas.
+// O `timeout` do axios no Node é de INATIVIDADE do socket, não de duração — um
+// download que pinga devagar nunca o dispararia — por isso o teto total vem à
+// parte, pelo AbortSignal. Os dois cabem com folga nos 10 min do macro-sync.
+const CSV_IDLE_TIMEOUT_MS = 90_000;
+const CSV_TOTAL_TIMEOUT_MS = 180_000;
+
 // Memo do download bruto. TTL curto: serve para que macro sync e ingestão de PU,
 // que rodam no mesmo job, dividam UM download — não para servir dado velho.
 const CSV_MEMO_TTL_MS = 15 * 60 * 1000;
@@ -65,7 +74,8 @@ export const fetchTesouroCsv = async ({ force = false } = {}) => {
                 'Accept-Encoding': 'gzip',
             },
             httpsAgent: tesouroAgent,
-            timeout: 45000,
+            timeout: CSV_IDLE_TIMEOUT_MS,
+            signal: AbortSignal.timeout(CSV_TOTAL_TIMEOUT_MS),
             responseType: 'text',
             transformResponse: [(d) => d], // não deixa o axios tentar parsear como JSON
             maxContentLength: 64 * 1024 * 1024,

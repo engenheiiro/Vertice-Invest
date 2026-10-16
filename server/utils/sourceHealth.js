@@ -285,7 +285,9 @@ export const SOURCE_CATALOG = {
         role: 'Preço diário oficial',
         group: 'reference',
         feeds: 'Marcação a mercado dos títulos públicos na carteira',
-        schedule: { kind: 'minutes', at: [5, 20, 35, 50] },
+        // 1× por hora: o macro-sync roda a cada 15 min, mas a taxa da NTN-B fica
+        // em memo até virar a hora (macroDataService) — o arquivo é diário.
+        schedule: { kind: 'minutes', at: [5] },
         critical: true,
     },
     fundamentus: {

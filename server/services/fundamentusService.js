@@ -50,7 +50,7 @@ export const fundamentusService = {
         try {
             logger.info("🔎 Iniciando Scraping Detalhado Fundamentus (Ações)...");
             
-            const response = await trackSource('fundamentus', () => axios.get('https://www.fundamentus.com.br/resultado.php', {
+            const response = await trackSource('fundamentus', () => axios.get(FUNDAMENTUS_STOCKS_LAYOUT.source, {
                 headers: HEADERS,
                 responseType: 'arraybuffer',
                 timeout: 25000, // Timeout aumentado para evitar falhas em redes lentas
@@ -204,7 +204,7 @@ export const fundamentusService = {
         try {
             logger.info("🔎 Iniciando Scraping Detalhado Fundamentus (FIIs)...");
 
-            const response = await trackSource('fundamentus', () => axios.get('https://www.fundamentus.com.br/fii_resultado.php', {
+            const response = await trackSource('fundamentus', () => axios.get(FUNDAMENTUS_FIIS_LAYOUT.source, {
                 headers: HEADERS,
                 responseType: 'arraybuffer',
                 timeout: 25000,

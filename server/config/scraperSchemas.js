@@ -8,7 +8,7 @@
  *
  * Por isso cada layout é isolado e versionado aqui:
  *   - version: bump manual sempre que o site mudar e o mapa for reajustado.
- *   - source: URL raspada (documentação).
+ *   - source: URL raspada (o serviço busca exatamente esta).
  *   - table: seletor cheerio da tabela de resultados.
  *   - columns: nome semântico → índice da coluna (<td>). O serviço usa SEMPRE
  *     esses nomes, nunca números mágicos.
@@ -22,9 +22,18 @@
  * índices em `columns`/`dataSignature` e incrementar `version`.
  */
 
+/**
+ * Host único do Fundamentus — raspagem diária e backfill de proventos leem daqui.
+ * Sem `www`: o certificado renovado em 15/10/2026 cobre só `fundamentus.com.br`,
+ * e o `www` passou a falhar no TLS ("Host: www.fundamentus.com.br. is not in the
+ * cert's altnames"). Com a URL copiada em três arquivos, a troca derrubou ações,
+ * FIIs e o full-sync ao mesmo tempo; o apex serve as mesmas páginas sem redirecionar.
+ */
+export const FUNDAMENTUS_BASE_URL = 'https://fundamentus.com.br';
+
 export const FUNDAMENTUS_STOCKS_LAYOUT = {
     version: 2,
-    source: 'https://www.fundamentus.com.br/resultado.php',
+    source: `${FUNDAMENTUS_BASE_URL}/resultado.php`,
     table: 'table#resultado',
     columns: {
         ticker: 0,
@@ -91,7 +100,7 @@ export const FUNDAMENTUS_STOCKS_LAYOUT = {
 
 export const FUNDAMENTUS_FIIS_LAYOUT = {
     version: 2,
-    source: 'https://www.fundamentus.com.br/fii_resultado.php',
+    source: `${FUNDAMENTUS_BASE_URL}/fii_resultado.php`,
     table: 'table#tabelaResultado',
     columns: {
         ticker: 0,

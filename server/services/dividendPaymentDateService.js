@@ -40,6 +40,7 @@ import logger from '../config/logger.js';
 import DividendEvent from '../models/DividendEvent.js';
 import MarketAsset from '../models/MarketAsset.js';
 import { trackSource, recordEscalation } from '../utils/sourceHealth.js';
+import { FUNDAMENTUS_BASE_URL } from '../config/scraperSchemas.js';
 import { matchPaymentDate, DESFECHO } from '../utils/dividendPaymentMatch.js';
 
 const HEADERS = {
@@ -218,8 +219,8 @@ const FUNDAMENTUS_SEM_PROVENTO = /nenhum\s+provento\s+encontrado/i;
 
 const fundamentus = async (ticker, tipo) => {
     const url = tipo === 'FII'
-        ? `https://www.fundamentus.com.br/fii_proventos.php?papel=${encodeURIComponent(ticker)}&tipo=2`
-        : `https://www.fundamentus.com.br/proventos.php?papel=${encodeURIComponent(ticker)}&tipo=2`;
+        ? `${FUNDAMENTUS_BASE_URL}/fii_proventos.php?papel=${encodeURIComponent(ticker)}&tipo=2`
+        : `${FUNDAMENTUS_BASE_URL}/proventos.php?papel=${encodeURIComponent(ticker)}&tipo=2`;
     const $ = await fundamentusHtml(url);
     const eventos = parseTabelaFundamentus($);
     if (eventos !== null) return eventos;
