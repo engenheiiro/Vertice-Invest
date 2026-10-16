@@ -1020,13 +1020,32 @@ export const initScheduler = () => {
     //
     // 12:30 dá ~2h de folga sobre a publicação observada (10:20) e continua muito
     // antes do snapshot das 23:59, que é quem consome a série.
-    scheduleHeavy('30 12 * * 2-6', 'treasury-prices', async () => {
+    //
+    // DE HORA EM HORA ATÉ 20:30, e não uma tacada só. Em 16/10/2026 o servidor do
+    // Tesouro respondia 503 ("capacity problems") e levava 40–70 s até o primeiro
+    // byte: o macro-sync das 12:20 levou o 503, e a ingestão das 12:30 passou por
+    // dez minutos. Com uma tacada só, um 503 às 12:30 deixaria o snapshot da noite
+    // marcando a renda fixa pelo PU de anteontem, com a rodada seguinte só no outro
+    // dia. Cada disparo pergunta antes ao BANCO se o pregão esperado já entrou:
+    // entrou, devolve SKIPPED sem tocar no site; não entrou, baixa de novo. O custo
+    // de um dia normal continua sendo um download.
+    //
+    // E falha é FAILED: o `return` vazio de antes gravaria SUCCESS no JobRun para
+    // uma ingestão que não trouxe nada, sem sentinela nem card de erro acusando.
+    scheduleHeavy('30 12-20 * * 2-6', 'treasury-prices', async () => {
         try {
-            const { ingestTreasuryPrices } = await import('./treasuryPriceService.js');
+            const {
+                ingestTreasuryPrices, expectedTreasuryDataBase, latestStoredTreasuryDate,
+            } = await import('./treasuryPriceService.js');
+            const expected = expectedTreasuryDataBase(brDayStr(new Date()));
+            const stored = await latestStoredTreasuryDate();
+            if (expected && stored && stored >= expected) {
+                return { skipped: true, reason: `PU de ${expected} já gravado` };
+            }
             const result = await ingestTreasuryPrices();
             if (!result.ok) {
                 logger.warn(`⚠️ [Scheduler] Série de PU do Tesouro não atualizada: ${result.reason}`);
-                return;
+                return { success: false, error: `Série de PU do Tesouro não atualizada: ${result.reason}` };
             }
             // O snapshot das 23:59 de ontem foi gravado ANTES deste PU existir —
             // marcou o título pelo dia anterior. Reconcilia agora, enquanto o
@@ -1040,6 +1059,7 @@ export const initScheduler = () => {
             }
         } catch (error) {
             logger.error(`❌ [Scheduler] Sync PU do Tesouro: ${error.message}`);
+            return { success: false, error: `Sync PU do Tesouro: ${error.message}` };
         }
     });
 

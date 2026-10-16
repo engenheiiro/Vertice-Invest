@@ -21,6 +21,7 @@ import logger from '../config/logger.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
 import { classifyTreasuryLabel, treasuryTitleKey, familyHasCoupon, resolveTreasuryTitleKey } from '../utils/treasuryTitle.js';
 import { trackSource } from '../utils/sourceHealth.js';
+import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 
 export const TESOURO_CSV_URL = 'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
 
@@ -50,13 +51,14 @@ const SUSPICIOUS_DAILY_MOVE = 0.20;
 const tesouroAgent = new https.Agent({ rejectUnauthorized: true, keepAlive: true, minVersion: 'TLSv1.2' });
 
 // Medido em 16/10/2026, com o servidor degradado: 42–70 s até o primeiro byte
-// (até num 304 sem corpo) e 86 s no download inteiro, que vem sem compressão.
-// O teto antigo de 45 s ficava abaixo do tempo real e derrubava ~12% das chamadas.
-// O `timeout` do axios no Node é de INATIVIDADE do socket, não de duração — um
-// download que pinga devagar nunca o dispararia — por isso o teto total vem à
-// parte, pelo AbortSignal. Os dois cabem com folga nos 10 min do macro-sync.
+// (até num 304 sem corpo) e de 86 a 148 s no download inteiro, que vem sem
+// compressão. O teto antigo de 45 s ficava abaixo do tempo real e derrubava ~12%
+// das chamadas. O `timeout` do axios no Node é de INATIVIDADE do socket, não de
+// duração — um download que pinga devagar nunca o dispararia — por isso o teto
+// total vem à parte, pelo AbortSignal. Somado ao pior caso do macro-sync (209 s),
+// ainda cabe nos 10 min do job.
 const CSV_IDLE_TIMEOUT_MS = 90_000;
-const CSV_TOTAL_TIMEOUT_MS = 180_000;
+const CSV_TOTAL_TIMEOUT_MS = 300_000;
 
 // Memo do download bruto. TTL curto: serve para que macro sync e ingestão de PU,
 // que rodam no mesmo job, dividam UM download — não para servir dado velho.
@@ -204,6 +206,31 @@ export const findSuspiciousMoves = (history) => {
         }
     }
     return flagged;
+};
+
+/**
+ * Data Base que o arquivo já deveria trazer no dia `todayKey`: o dia útil
+ * ANTERIOR (a fonte publica D-1 na manhã de D). PURA — `isBusinessDay` é
+ * injetável para teste.
+ */
+export const expectedTreasuryDataBase = (todayKey, isBusinessDay = isBrBusinessDay) => {
+    const d = new Date(`${todayKey}T12:00:00.000Z`);
+    // 10 dias cobre qualquer emenda de feriado com fim de semana.
+    for (let i = 0; i < 10; i++) {
+        d.setUTCDate(d.getUTCDate() - 1);
+        const key = d.toISOString().slice(0, 10);
+        if (isBusinessDay(key)) return key;
+    }
+    return null;
+};
+
+/** Data Base mais recente gravada em qualquer título (`null` com a coleção vazia). */
+export const latestStoredTreasuryDate = async () => {
+    const [row] = await TreasuryPriceHistory.aggregate([
+        { $project: { last: { $max: '$history.date' } } },
+        { $group: { _id: null, max: { $max: '$last' } } },
+    ]);
+    return row?.max || null;
 };
 
 const cutoffIso = (years = HISTORY_YEARS) => {
@@ -355,6 +382,8 @@ export const loadTreasuryPricing = async (assets = []) => {
 export default {
     TESOURO_CSV_URL,
     fetchTesouroCsv,
+    expectedTreasuryDataBase,
+    latestStoredTreasuryDate,
     clearCsvMemo,
     parseTreasuryPriceCsv,
     findSuspiciousMoves,
