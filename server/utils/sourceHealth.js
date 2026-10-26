@@ -290,6 +290,17 @@ export const SOURCE_CATALOG = {
         schedule: { kind: 'minutes', at: [5] },
         critical: true,
     },
+    // Reserva oficial do CSV acima (out/2026: arquivo parado e download barrado).
+    // Só o pregão corrente — completa a ponta da série e a taxa da NTN-B.
+    'tesouro.direto': {
+        label: 'Tesouro Direto — preços do dia',
+        short: 'Tesouro Direto',
+        role: 'Preço diário oficial (reserva)',
+        group: 'reference',
+        feeds: 'PU do pregão corrente e NTN-B longa quando o CSV do Tesouro Transparente falha ou atrasa',
+        schedule: { kind: 'onFailure' },
+        critical: false,
+    },
     fundamentus: {
         label: 'Fundamentus',
         short: 'Fundamentus',

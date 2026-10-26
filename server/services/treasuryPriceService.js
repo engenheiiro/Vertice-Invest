@@ -21,9 +21,21 @@ import logger from '../config/logger.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
 import { classifyTreasuryLabel, treasuryTitleKey, familyHasCoupon, resolveTreasuryTitleKey } from '../utils/treasuryTitle.js';
 import { trackSource } from '../utils/sourceHealth.js';
-import { isBrBusinessDay } from '../utils/walletSnapshot.js';
+import { isBrBusinessDay, brazilDayKey } from '../utils/walletSnapshot.js';
 
 export const TESOURO_CSV_URL = 'https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/precotaxatesourodireto.csv';
+
+/**
+ * Reserva OFICIAL do CSV: o JSON que a própria tela de "Investir" do Tesouro
+ * Direto consome. Traz só o pregão CORRENTE (sem histórico) e só os títulos à
+ * venda (~35, contra ~80 do CSV), mas com o mesmo par de preços — PU de resgate
+ * (= "PU Venda" do CSV, o que o investidor recebe) e PU de investimento
+ * (= "PU Compra"). Existe porque em out/2026 o CSV parou de ser republicado
+ * (`last_modified` do recurso no CKAN travado em 16/10) e, de 21/10 em diante,
+ * o download passou a voltar em ~0,3 s sem o arquivo — a série de PU parou em
+ * 15/10 com o job acusando "layout mudou?".
+ */
+export const TESOURO_DIRETO_QUOTES_URL = 'https://www.tesourodireto.com.br/o/rentabilidade/investir';
 
 /**
  * Profundidade da série guardada. O arquivo cobre desde 2002, mas o que o app
@@ -65,33 +77,113 @@ const CSV_TOTAL_TIMEOUT_MS = 300_000;
 const CSV_MEMO_TTL_MS = 15 * 60 * 1000;
 let csvMemo = { at: 0, csv: null };
 
-/** Baixa o CSV oficial (memoizado por 15 min). `null` se a fonte falhar. */
-export const fetchTesouroCsv = async ({ force = false } = {}) => {
-    if (!force && csvMemo.csv && (Date.now() - csvMemo.at) < CSV_MEMO_TTL_MS) return csvMemo.csv;
+const HTML_START = /^\s*(<!doctype html|<html|<head|<body)/i;
+const RATE_LIMIT_PAGE = /muitas requisi|too many requests|acesso limitado|requisi[cç][oõ]es detectadas/i;
+const BOT_CHALLENGE_PAGE = /captcha|cf-chl|challenge-platform|attention required|just a moment/i;
+
+const htmlTitle = (body) => {
+    const m = /<title[^>]*>([^<]{0,120})<\/title>/i.exec(body);
+    return m ? m[1].replace(/\s+/g, ' ').trim() : null;
+};
+
+/**
+ * O que veio no lugar do CSV, em português de quem lê o card de erro. PURA.
+ * `null` = parece um CSV (quem decide o layout é o parser).
+ *
+ * Existe porque toda resposta que não era o arquivo virava "nenhuma série
+ * reconhecida (layout mudou?)": uma página de bloqueio de 3 KB com HTTP 200
+ * passava pelo filtro de tamanho e chegava ao parser, e o diagnóstico mandava
+ * olhar o layout de um arquivo que nem tinha sido baixado.
+ */
+export const describeTesouroDownloadProblem = ({ status = null, contentType = '', body = '', error = null } = {}) => {
+    if (error) {
+        const code = error.code || error.name || '';
+        if (/ECONNABORTED|ETIMEDOUT|TimeoutError|AbortError|ERR_CANCELED/i.test(code)) {
+            return 'tempo esgotado esperando o site do Tesouro';
+        }
+        return `falha de rede ao baixar o CSV: ${String(error.message || error).slice(0, 120)}`;
+    }
+    const text = typeof body === 'string' ? body : String(body ?? '');
+    const where = `[HTTP ${status ?? '?'}, ${contentType || 'sem content-type'}, ${text.length} B]`;
+    if (status === 429) return `o site do Tesouro bloqueou o download por excesso de requisições ${where}`;
+    if (status === 403) return `acesso negado pelo site do Tesouro ${where}`;
+    if (status === 404 || status === 410) return `o endereço do CSV não existe mais ${where}`;
+    if (status >= 500) return `site do Tesouro fora do ar ${where}`;
+    if (status != null && (status < 200 || status >= 300)) return `resposta inesperada do site do Tesouro ${where}`;
+
+    const head = text.slice(0, 4000);
+    if (HTML_START.test(head) || /text\/html/i.test(contentType || '')) {
+        if (RATE_LIMIT_PAGE.test(head)) {
+            return `o site do Tesouro devolveu a página de bloqueio "Acesso Limitado" (excesso de requisições) em vez do CSV ${where}`;
+        }
+        if (BOT_CHALLENGE_PAGE.test(head)) {
+            return `o site do Tesouro devolveu um desafio anti-robô em vez do CSV ${where}`;
+        }
+        const title = htmlTitle(head);
+        return `o site do Tesouro devolveu uma página HTML${title ? ` ("${title}")` : ''} em vez do CSV ${where}`;
+    }
+    if (text.length < 1000) return `resposta sem conteúdo útil ${where}`;
+    return null;
+};
+
+/** O arquivo veio, mas o parser não achou série: aí sim é layout. PURA. */
+export const describeCsvLayoutProblem = (csv) => {
+    const header = String(csv || '').split(/\r?\n/, 1)[0].slice(0, 160);
+    return `arquivo baixado, mas o cabeçalho não tem as colunas esperadas (layout mudou?): "${header}"`;
+};
+
+/**
+ * Baixa o CSV oficial (memoizado por 15 min). Devolve `{ csv, problem }`: `csv`
+ * nulo sempre vem com o motivo legível, que também vai para o registro de saúde
+ * da fonte (painel de Fontes) em vez de "respondeu sem dado utilizável".
+ */
+export const downloadTesouroCsv = async ({ force = false } = {}) => {
+    if (!force && csvMemo.csv && (Date.now() - csvMemo.at) < CSV_MEMO_TTL_MS) return { csv: csvMemo.csv, problem: null };
+    let problem = null;
     try {
-        const res = await trackSource('tesouro', () => axios.get(TESOURO_CSV_URL, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'text/csv, text/plain, */*',
-                'Accept-Encoding': 'gzip',
-            },
-            httpsAgent: tesouroAgent,
-            timeout: CSV_IDLE_TIMEOUT_MS,
-            signal: AbortSignal.timeout(CSV_TOTAL_TIMEOUT_MS),
-            responseType: 'text',
-            transformResponse: [(d) => d], // não deixa o axios tentar parsear como JSON
-            maxContentLength: 64 * 1024 * 1024,
-            maxBodyLength: 64 * 1024 * 1024,
-        }), { isEmpty: (r) => !(String(r?.data || '').length > 1000) });
+        const res = await trackSource('tesouro', async () => {
+            let response;
+            try {
+                response = await axios.get(TESOURO_CSV_URL, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                        'Accept': 'text/csv, text/plain, */*',
+                        'Accept-Encoding': 'gzip',
+                    },
+                    httpsAgent: tesouroAgent,
+                    timeout: CSV_IDLE_TIMEOUT_MS,
+                    signal: AbortSignal.timeout(CSV_TOTAL_TIMEOUT_MS),
+                    responseType: 'text',
+                    transformResponse: [(d) => d], // não deixa o axios tentar parsear como JSON
+                    maxContentLength: 64 * 1024 * 1024,
+                    maxBodyLength: 64 * 1024 * 1024,
+                    // Status não-2xx é lido aqui, não lançado: o diagnóstico precisa do corpo.
+                    validateStatus: () => true,
+                });
+            } catch (error) {
+                problem = describeTesouroDownloadProblem({ error });
+                throw new Error(problem);
+            }
+            problem = describeTesouroDownloadProblem({
+                status: response.status,
+                contentType: response.headers?.['content-type'],
+                body: response.data,
+            });
+            if (problem) throw new Error(problem);
+            return response;
+        });
         const csv = typeof res.data === 'string' ? res.data : String(res.data ?? '');
-        if (!csv || csv.length < 1000) return null;
         csvMemo = { at: Date.now(), csv };
-        return csv;
+        return { csv, problem: null };
     } catch (error) {
-        logger.warn(`[Tesouro PU] Download do CSV oficial falhou: ${error.message}`);
-        return null;
+        problem = problem || describeTesouroDownloadProblem({ error });
+        logger.warn(`[Tesouro PU] Download do CSV oficial falhou: ${problem}`);
+        return { csv: null, problem };
     }
 };
+
+/** Baixa o CSV oficial (memoizado por 15 min). `null` se a fonte falhar. */
+export const fetchTesouroCsv = async (opts = {}) => (await downloadTesouroCsv(opts)).csv;
 
 /** Descarta o memo (usado nos testes e no sync forçado). */
 export const clearCsvMemo = () => { csvMemo = { at: 0, csv: null }; };
@@ -208,6 +300,151 @@ export const findSuspiciousMoves = (history) => {
     return flagged;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Reserva: JSON do Tesouro Direto (pregão corrente)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TD_TIMEOUT_MS = 30_000;
+let tdMemo = { at: 0, quotes: null };
+
+/** "IPCA + 6,84%" / "12,88%" / "SELIC + 0,1089%" → 6.84 / 12.88 / 0.1089; "SELIC" → null. */
+const parseTdRate = (label) => {
+    const all = [...String(label || '').matchAll(/(-?\d+(?:,\d+)?)\s*%/g)];
+    if (all.length === 0) return null;
+    const v = Number(all[all.length - 1][1].replace(',', '.'));
+    return Number.isFinite(v) ? v : null;
+};
+
+/**
+ * JSON do Tesouro Direto → pontos `{ titleKey, family, maturity, sourceLabel,
+ * point: { date, pu, puBuy, rate } }`. PURA. A data é o dia de
+ * `lastMarketPricingDate` (horário de Brasília, sem fuso no texto); fim de
+ * semana/feriado fica de fora — é o Tesouro Reserva reprecificando no sábado,
+ * não pregão. Mesma guarda de bid-ask do CSV no PU de compra.
+ */
+export const parseTesouroDiretoQuotes = (json, { isBusinessDay = isBrBusinessDay } = {}) => {
+    const bonds = [...(json?.TesouroLegado || []), ...(json?.Tesouro24x7 || [])];
+    const out = [];
+    const seen = new Set();
+    for (const b of bonds) {
+        const family = classifyTreasuryLabel(b?.treasuryBondName);
+        if (!family) continue;
+        const maturity = /^\d{4}-\d{2}-\d{2}/.test(String(b?.maturityDate || '')) ? b.maturityDate.slice(0, 10) : null;
+        const date = /^\d{4}-\d{2}-\d{2}/.test(String(b?.lastMarketPricingDate || '')) ? b.lastMarketPricingDate.slice(0, 10) : null;
+        if (!maturity || !date || !isBusinessDay(date)) continue;
+        const pu = Number(b.unitaryRedemptionValue);
+        if (!(pu > 0)) continue;
+        const rawBuy = Number(b.unitaryInvestmentValue);
+        const puBuy = (rawBuy > 0 && rawBuy >= pu && (rawBuy / pu - 1) <= MAX_BUY_SPREAD) ? rawBuy : null;
+        const titleKey = treasuryTitleKey(family, maturity);
+        if (seen.has(titleKey)) continue;
+        seen.add(titleKey);
+        out.push({
+            titleKey,
+            family,
+            maturity,
+            sourceLabel: String(b.treasuryBondName || '').trim(),
+            point: { date, pu, puBuy, rate: parseTdRate(b.redemptionProfitabilityFeeIndexerName) },
+        });
+    }
+    return out;
+};
+
+/** Baixa e parseia o JSON (memo de 15 min). `{ quotes, problem }`. */
+export const fetchTesouroDiretoQuotes = async ({ force = false } = {}) => {
+    if (!force && tdMemo.quotes && (Date.now() - tdMemo.at) < CSV_MEMO_TTL_MS) return { quotes: tdMemo.quotes, problem: null };
+    let problem = null;
+    try {
+        const quotes = await trackSource('tesouro.direto', async () => {
+            let res;
+            try {
+                res = await axios.get(TESOURO_DIRETO_QUOTES_URL, {
+                    headers: { 'Accept': 'application/json' },
+                    httpsAgent: tesouroAgent,
+                    timeout: TD_TIMEOUT_MS,
+                    signal: AbortSignal.timeout(TD_TIMEOUT_MS),
+                    validateStatus: () => true,
+                });
+            } catch (error) {
+                problem = describeTesouroDownloadProblem({ error }).replace(/o CSV/g, 'o JSON');
+                throw new Error(problem);
+            }
+            const isJson = res.data && typeof res.data === 'object';
+            if (res.status < 200 || res.status >= 300 || !isJson) {
+                problem = (describeTesouroDownloadProblem({
+                    status: res.status,
+                    contentType: res.headers?.['content-type'],
+                    body: typeof res.data === 'string' ? res.data : JSON.stringify(res.data ?? ''),
+                }) || `resposta não é JSON [HTTP ${res.status}]`).replace(/o CSV/g, 'o JSON');
+                throw new Error(problem);
+            }
+            const parsed = parseTesouroDiretoQuotes(res.data);
+            if (parsed.length === 0) {
+                problem = 'JSON do Tesouro Direto sem nenhum título reconhecido (formato mudou?)';
+                throw new Error(problem);
+            }
+            return parsed;
+        });
+        tdMemo = { at: Date.now(), quotes };
+        return { quotes, problem: null };
+    } catch (error) {
+        problem = problem || String(error?.message || error);
+        logger.warn(`[Tesouro PU] Reserva Tesouro Direto falhou: ${problem}`);
+        return { quotes: null, problem };
+    }
+};
+
+/** Descarta o memo do JSON (testes). */
+export const clearTesouroDiretoMemo = () => { tdMemo = { at: 0, quotes: null }; };
+
+/**
+ * Quais pontos do JSON entram: só títulos que JÁ têm série (o CSV é quem cria
+ * a série, com rótulo e cupom resolvidos) e só datas POSTERIORES ao último ponto
+ * gravado — a reserva completa a ponta, nunca reescreve o que o CSV publicou.
+ * PURA. `lastByKey`: Map<titleKey, última data gravada>.
+ */
+export const selectAppendableQuotes = (quotes, lastByKey) => (quotes || []).filter((q) => {
+    if (!lastByKey.has(q.titleKey)) return false;
+    const last = lastByKey.get(q.titleKey);
+    return !last || q.point.date > last;
+});
+
+/**
+ * Acrescenta o pregão corrente do Tesouro Direto às séries existentes.
+ * O CSV, quando voltar, reescreve a série inteira e substitui estes pontos
+ * pelos do arquivo — por isso a reserva só ACRESCENTA.
+ *
+ * Limite conhecido: o JSON só tem o pregão do momento. Num dia em que o job
+ * pula (pregão esperado já gravado), aquele pregão não é capturado; a marcação
+ * usa o PU anterior mais próximo (`findTreasuryPu`), como em qualquer atraso.
+ *
+ * @returns {{ appended: number, lastBase: string|null, problem: string|null }}
+ */
+export const appendTesouroDiretoQuotes = async ({ force = false } = {}) => {
+    const { quotes, problem } = await fetchTesouroDiretoQuotes({ force });
+    if (!quotes) return { appended: 0, lastBase: null, problem };
+
+    const rows = await TreasuryPriceHistory.aggregate([
+        { $match: { titleKey: { $in: quotes.map((q) => q.titleKey) } } },
+        { $project: { titleKey: 1, last: { $max: '$history.date' } } },
+    ]);
+    const lastByKey = new Map(rows.map((r) => [r.titleKey, r.last || null]));
+    const toAppend = selectAppendableQuotes(quotes, lastByKey);
+    const quoteDate = quotes.map((q) => q.point.date).sort().pop() || null;
+
+    if (toAppend.length > 0) {
+        const now = new Date();
+        await TreasuryPriceHistory.bulkWrite(toAppend.map((q) => ({
+            updateOne: {
+                filter: { titleKey: q.titleKey },
+                update: { $push: { history: q.point }, $set: { lastUpdated: now } },
+            },
+        })));
+        logger.info(`[Tesouro PU] Reserva Tesouro Direto: pregão ${quoteDate} acrescentado em ${toAppend.length} título(s)`);
+    }
+    return { appended: toAppend.length, lastBase: quoteDate, problem: null };
+};
+
 /**
  * Data Base que o arquivo já deveria trazer no dia `todayKey`: o dia útil
  * ANTERIOR (a fonte publica D-1 na manhã de D). PURA — `isBusinessDay` é
@@ -244,24 +481,59 @@ const cutoffIso = (years = HISTORY_YEARS) => {
  * inteira: o arquivo é a fonte da verdade e reescrever é idempotente — um
  * merge incremental herdaria para sempre qualquer ponto ruim já gravado.
  *
- * @returns {{ ok: boolean, titles: number, points: number, suspicious: Array, reason?: string }}
+ * `ok` só é verdadeiro quando a série chegou ao pregão ESPERADO
+ * (`expectedTreasuryDataBase`), venha ele do CSV ou da reserva do Tesouro
+ * Direto. CSV baixado mas parado num dia antigo é falha, com o motivo dito.
+ *
+ * @returns {{ ok: boolean, titles: number, points: number, suspicious: Array,
+ *   lastBase: string|null, source: 'CSV'|'TESOURO_DIRETO'|null, reason?: string, csvProblem?: string|null }}
  */
-export const ingestTreasuryPrices = async ({ years = HISTORY_YEARS, force = false } = {}) => {
-    const csv = await fetchTesouroCsv({ force });
-    if (!csv) {
-        const reason = 'CSV oficial indisponível';
-        Sentry.captureMessage(`[Tesouro PU] Ingestão abortada: ${reason}`, 'warning');
-        return { ok: false, titles: 0, points: 0, suspicious: [], reason };
+export const ingestTreasuryPrices = async ({ years = HISTORY_YEARS, force = false, todayKey = brazilDayKey(new Date()) } = {}) => {
+    const expected = expectedTreasuryDataBase(todayKey);
+    const { csv, problem: downloadProblem } = await downloadTesouroCsv({ force });
+    let csvProblem = downloadProblem;
+    let series = new Map();
+    if (csv) {
+        series = parseTreasuryPriceCsv(csv, { sinceIso: cutoffIso(years) });
+        if (series.size === 0) csvProblem = describeCsvLayoutProblem(csv);
+    }
+    if (csvProblem) {
+        logger.error(`❌ [Tesouro PU] CSV oficial: ${csvProblem}`);
+        Sentry.captureMessage(`[Tesouro PU] CSV oficial: ${csvProblem}`, 'error');
     }
 
-    const series = parseTreasuryPriceCsv(csv, { sinceIso: cutoffIso(years) });
-    if (series.size === 0) {
-        const reason = 'nenhuma série reconhecida no arquivo (layout mudou?)';
-        logger.error(`❌ [Tesouro PU] ${reason}`);
-        Sentry.captureMessage(`[Tesouro PU] ${reason}`, 'error');
-        return { ok: false, titles: 0, points: 0, suspicious: [], reason };
+    const written = series.size > 0 ? await writeCsvSeries(series) : { titles: 0, points: 0, suspicious: [], lastBase: null };
+    let lastBase = written.lastBase;
+    let source = series.size > 0 ? 'CSV' : null;
+
+    // CSV fora ou ATRASADO (veio, mas sem o pregão esperado — em out/2026 o
+    // arquivo ficou dias parado e cada rodada gravava SUCCESS sem avançar a
+    // série): o JSON do Tesouro Direto completa a ponta.
+    let fallback = null;
+    if (!lastBase || (expected && lastBase < expected)) {
+        fallback = await appendTesouroDiretoQuotes({ force });
+        if (fallback.appended > 0 && (!lastBase || fallback.lastBase > lastBase)) {
+            lastBase = fallback.lastBase;
+            source = 'TESOURO_DIRETO';
+        }
     }
 
+    const base = { titles: written.titles, points: written.points, suspicious: written.suspicious, lastBase, source };
+    const reached = expected ? Boolean(lastBase && lastBase >= expected) : Boolean(lastBase);
+    if (!reached) {
+        const csvPart = csvProblem
+            ? `CSV oficial: ${csvProblem}`
+            : `CSV oficial ainda parado em ${written.lastBase}`;
+        let tdPart = 'Tesouro Direto: nada a acrescentar';
+        if (fallback?.problem) tdPart = `Tesouro Direto: ${fallback.problem}`;
+        else if (fallback?.lastBase) tdPart = `Tesouro Direto: só tem o pregão ${fallback.lastBase}`;
+        return { ...base, ok: false, reason: `pregão ${expected || '?'} não entrou — ${csvPart}; ${tdPart}` };
+    }
+    return { ...base, ok: true, csvProblem: csvProblem || null };
+};
+
+/** Persiste as séries do CSV (reescrita idempotente da série inteira). */
+const writeCsvSeries = async (series) => {
     const now = new Date();
     const suspicious = [];
     let points = 0;
@@ -313,7 +585,7 @@ export const ingestTreasuryPrices = async ({ years = HISTORY_YEARS, force = fals
         logger.warn(`⚠️ [Tesouro PU] ${suspicious.length} título(s) com salto diário atípico`, { suspicious });
     }
 
-    return { ok: true, titles: series.size, points, suspicious, lastBase };
+    return { titles: series.size, points, suspicious, lastBase };
 };
 
 /**
@@ -381,7 +653,11 @@ export const loadTreasuryPricing = async (assets = []) => {
 
 export default {
     TESOURO_CSV_URL,
+    TESOURO_DIRETO_QUOTES_URL,
     fetchTesouroCsv,
+    downloadTesouroCsv,
+    fetchTesouroDiretoQuotes,
+    appendTesouroDiretoQuotes,
     expectedTreasuryDataBase,
     latestStoredTreasuryDate,
     clearCsvMemo,

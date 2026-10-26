@@ -11,7 +11,7 @@ import AssetHistory from '../models/AssetHistory.js';
 import { resolveMinInvestment } from '../utils/fixedIncomeView.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
-import { fetchTesouroCsv } from './treasuryPriceService.js';
+import { fetchTesouroCsv, fetchTesouroDiretoQuotes } from './treasuryPriceService.js';
 import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
 import { trackSource, recordEscalation, recordSourceSkip } from '../utils/sourceHealth.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
@@ -983,8 +983,14 @@ export const macroDataService = {
             const hourKey = currentBrHourKey();
             if (ntnbOfficialMemo.hourKey === hourKey) return ntnbOfficialMemo.rate;
             const csv = await fetchTesouroCsv();
-            if (!csv) return null;
-            const rate = this._parseNtnbFromCsv(csv);
+            let rate = csv ? this._parseNtnbFromCsv(csv) : null;
+            // CSV fora (out/2026: download barrado): o JSON do Tesouro Direto é a
+            // mesma fonte oficial, só que do pregão corrente. Sem ele, a cadeia
+            // descia para Investidor10 e, falhando, para o 6,30 fixo.
+            if (!isPlausibleNtnbRate(rate)) {
+                const { quotes } = await fetchTesouroDiretoQuotes();
+                rate = this._pickNtnbFromTesouroDiretoQuotes(quotes);
+            }
             if (isPlausibleNtnbRate(rate)) ntnbOfficialMemo = { hourKey, rate };
             return rate;
         } catch (error) {
@@ -1061,6 +1067,24 @@ export const macroDataService = {
             return anyPlausible.rate;
         }
         return null;
+    },
+
+    // Mesma escolha do CSV (IPCA+ longo, sem Educa+/Renda+, escada 2035→2060)
+    // sobre os pontos do JSON do Tesouro Direto. Função pura.
+    _pickNtnbFromTesouroDiretoQuotes(quotes) {
+        const rows = (quotes || [])
+            .filter(q => (q.family === 'IPCA' || q.family === 'IPCA_JS') && Number.isFinite(q.point?.rate))
+            .map(q => ({ vencYear: Number(String(q.maturity).slice(0, 4)), rate: q.point.rate }))
+            .filter(r => r.vencYear >= 2035);
+        for (const year of [2035, 2040, 2045, 2050, 2055, 2060]) {
+            const hit = rows.find(r => r.vencYear === year && isPlausibleNtnbRate(r.rate));
+            if (hit) {
+                logger.debug(`🏛️ [NTN-B] Fonte oficial (Tesouro Direto JSON): ${hit.rate}% a.a. (IPCA+ ${year})`);
+                return hit.rate;
+            }
+        }
+        const any = rows.filter(r => isPlausibleNtnbRate(r.rate)).sort((a, b) => b.vencYear - a.vencYear)[0];
+        return any ? any.rate : null;
     },
 
     // Última taxa REAL de NTN-B longa já persistida e plausível.

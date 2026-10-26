@@ -1043,9 +1043,10 @@ export const initScheduler = () => {
                 return { skipped: true, reason: `PU de ${expected} já gravado` };
             }
             const result = await ingestTreasuryPrices();
+            const jobMeta = { source: result.source, lastBase: result.lastBase, expected, csvProblem: result.csvProblem || null };
             if (!result.ok) {
                 logger.warn(`⚠️ [Scheduler] Série de PU do Tesouro não atualizada: ${result.reason}`);
-                return { success: false, error: `Série de PU do Tesouro não atualizada: ${result.reason}` };
+                return { success: false, error: `Série de PU do Tesouro não atualizada: ${result.reason}`, jobMeta };
             }
             // O snapshot das 23:59 de ontem foi gravado ANTES deste PU existir —
             // marcou o título pelo dia anterior. Reconcilia agora, enquanto o
@@ -1057,6 +1058,9 @@ export const initScheduler = () => {
             } catch (e) {
                 logger.error(`❌ [Scheduler] Reconciliação do PU do Tesouro: ${e.message}`);
             }
+            // Fonte e motivo do CSV no JobRun: SUCCESS pela reserva do Tesouro
+            // Direto não pode esconder que o arquivo oficial segue fora.
+            return { jobMeta };
         } catch (error) {
             logger.error(`❌ [Scheduler] Sync PU do Tesouro: ${error.message}`);
             return { success: false, error: `Sync PU do Tesouro: ${error.message}` };
