@@ -40,6 +40,15 @@ describe('getTop5Defensive', () => {
         expect(getTop5Defensive(assets).length).toBe(2);
     });
 
+    it('empate no score: desempata pelo composite estrutural, não pela ordem de entrada', () => {
+        // Seis ativos no teto (100); o de composite mais baixo vem PRIMEIRO na
+        // entrada e precisa ficar de fora do top 5.
+        const withComposite = (ticker, c) => ({ ...mk(ticker, 'FII', 100), metrics: { structural: { quality: c, valuation: c, risk: c } } });
+        const assets = [withComposite('FRACO11', 40), ...[90, 85, 80, 75, 70].map((c, i) => withComposite(`F${i}11`, c))];
+        const top = getTop5Defensive(assets);
+        expect(top.map((a) => a.ticker)).toEqual(['F011', 'F111', 'F211', 'F311', 'F411']);
+    });
+
     it('entrada vazia/nula retorna []', () => {
         expect(getTop5Defensive([])).toEqual([]);
         expect(getTop5Defensive(undefined)).toEqual([]);

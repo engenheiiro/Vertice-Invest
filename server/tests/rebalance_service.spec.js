@@ -50,6 +50,36 @@ describe('estimateCapitalGainsTax (FIFO)', () => {
         expect(estimateCapitalGainsTax(asset, 900)).toBe(0);
     });
 
+    it('ativo em dólar: custo pelo câmbio da COMPRA, não o de hoje (Regra #8)', () => {
+        // US$100 → US$110 (+10% em dólar), câmbio 5,00 → 6,00 (+20%).
+        // Venda de 10 cotas = R$6.600; custo = 10 × 100 × 5 = R$5.000.
+        // Ganho BRL = 1.600 → IR 15% = 240. Pelo câmbio de hoje no custo, o ganho
+        // seria só 600 (IR 90): o ganho cambial sumia.
+        const asset = holding({
+            type: 'STOCK_US',
+            priceNative: 110,
+            quantity: 10,
+            multiplier: 6,
+            taxLots: [{ date: new Date('2024-01-01'), quantity: 10, price: 100, fxRate: 5 }],
+            totalCostNative: 1000,
+            totalCostBrl: 5000,
+        });
+        expect(estimateCapitalGainsTax(asset, 6600)).toBeCloseTo(240, 1);
+    });
+
+    it('lote sem câmbio carimbado usa o câmbio implícito do custo médio em BRL', () => {
+        const asset = holding({
+            type: 'STOCK_US',
+            priceNative: 110,
+            quantity: 10,
+            multiplier: 6,
+            taxLots: [{ date: new Date('2024-01-01'), quantity: 10, price: 100 }],
+            totalCostNative: 1000,
+            totalCostBrl: 5000,
+        });
+        expect(estimateCapitalGainsTax(asset, 6600)).toBeCloseTo(240, 1);
+    });
+
     it('zera IR para Renda Fixa/Caixa (alíquota 0 na tabela)', () => {
         const rf = holding({ type: 'FIXED_INCOME', priceNative: 1.2 });
         expect(estimateCapitalGainsTax(rf, 500)).toBe(0);

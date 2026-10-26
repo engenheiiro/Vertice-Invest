@@ -12,7 +12,10 @@ export const HISTORICAL_CDI_RATES = {
     2021: 4.40, // Ajustado para precisão (algumas fontes citam 4.42, mantendo padrão conservador)
     2022: 12.38,
     2023: 13.03,
-    2024: 10.80
+    2024: 10.80,
+    // 2025: Selic 12,25 → 13,25 (jan) → 14,25 (mar) → 14,75 (mai) → 15,00 (jun–dez);
+    // CDI ≈ Selic − 0,10, média ponderada pelos dias de cada regime.
+    2025: 14.32
 };
 
 /**

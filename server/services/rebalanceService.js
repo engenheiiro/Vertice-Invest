@@ -25,6 +25,7 @@ import {
 } from '../utils/subAllocation.js';
 import { BUY_THRESHOLD, CAPITAL_GAINS_TAX, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { isDollarized } from '../utils/assetCurrency.js';
+import { positionCostBRL } from '../utils/fxRate.js';
 import logger from '../config/logger.js';
 import { allocationBucket as resolveAllocationBucket, exteriorSubType, resolveAllocationClass } from '../utils/assetAllocation.js';
 
@@ -154,7 +155,9 @@ export const computeWalletValuation = async (userId, walletId) => {
             priceBr,
             priceNative,
             totalCostNative: safeFloat(asset.totalCost),
-            taxLots: (asset.taxLots || []).map((l) => ({ date: l.date, quantity: l.quantity, price: l.price })),
+            // Custo em BRL com o câmbio de cada compra (Regra #8) — base do IR estimado.
+            totalCostBrl: positionCostBRL(asset, usdRate),
+            taxLots: (asset.taxLots || []).map((l) => ({ date: l.date, quantity: l.quantity, price: l.price, fxRate: l.fxRate })),
             multiplier,
         });
     }
@@ -293,28 +296,42 @@ export const estimateCapitalGainsTax = (asset, sellValueBr) => {
     const unitsToSell = sellValueBr / multiplier / asset.priceNative;
     if (unitsToSell <= 0) return 0;
 
+    // Ganho apurado em BRL: venda pelo câmbio de HOJE, custo pelo câmbio de CADA
+    // compra (Regra #8; é também a base da RFB para ativo no exterior). Converter
+    // o custo pelo dólar de hoje cancelava o câmbio e escondia o ganho cambial,
+    // subestimando o IR quando o dólar subiu. Lote sem câmbio carimbado usa o
+    // câmbio implícito do custo médio em BRL; sem nenhum dos dois, o de hoje.
+    const saleUnitBr = asset.priceNative * multiplier;
+    const costBrl = Number(asset.totalCostBrl);
+    const hasCostBrl = asset.totalCostBrl != null && Number.isFinite(costBrl);
+    // Ativo em BRL: câmbio é 1 por definição, qualquer que seja o resíduo do acumulado.
+    const avgFx = multiplier === 1 ? 1 : hasCostBrl && asset.totalCostNative > 0
+        ? costBrl / asset.totalCostNative
+        : multiplier;
+    const avgCostUnitBr = hasCostBrl
+        ? safeDiv(costBrl, asset.quantity)
+        : safeDiv(asset.totalCostNative, asset.quantity) * multiplier;
+
     const lots = [...(asset.taxLots || [])].sort((a, b) => new Date(a.date) - new Date(b.date));
-    let gainNative = 0;
+    let gainBr = 0;
     let remaining = unitsToSell;
 
     if (lots.length === 0) {
-        const avg = safeDiv(asset.totalCostNative, asset.quantity);
-        gainNative = (asset.priceNative - avg) * unitsToSell;
+        gainBr = (saleUnitBr - avgCostUnitBr) * unitsToSell;
     } else {
         for (const lot of lots) {
             if (remaining <= 0) break;
             const take = Math.min(remaining, lot.quantity);
-            gainNative += (asset.priceNative - lot.price) * take;
+            const lotFx = multiplier !== 1 && Number(lot.fxRate) > 0 ? Number(lot.fxRate) : avgFx;
+            gainBr += (saleUnitBr - lot.price * lotFx) * take;
             remaining -= take;
         }
         // Lotes não cobriram tudo (split/migração antiga): resto pelo custo médio.
         if (remaining > 0) {
-            const avg = safeDiv(asset.totalCostNative, asset.quantity);
-            gainNative += (asset.priceNative - avg) * remaining;
+            gainBr += (saleUnitBr - avgCostUnitBr) * remaining;
         }
     }
 
-    const gainBr = gainNative * multiplier;
     return Math.max(0, safeCurrency(gainBr * rate));
 };
 

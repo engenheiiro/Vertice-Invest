@@ -24,7 +24,7 @@ import { loadClosesForDay } from '../utils/dayCloses.js';
 import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
 import { createSettledReader } from '../utils/settledReader.js';
 import { recordError } from '../services/errorLogService.js';
-import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
+import { loadCdiCurveForAssets, loadCdiCurve, EMPTY_CDI_CURVE } from '../utils/cdiCurve.js';
 import { allocationBucket, resolveAllocationClass } from '../utils/assetAllocation.js';
 import { cashFlowTickerCondition } from '../utils/cashFlowFilter.js';
 import logger from '../config/logger.js';
@@ -39,13 +39,19 @@ import {
     downsampleTimeSeries,
 } from '../utils/timeSeriesDownsample.js';
 
-const getDailyFactorForDate = (date, currentConfigRate) => {
-    // Resolução da taxa por ano centralizada em financialConstants. Fallback 10.0
-    // preservado (legado desta curva de benchmark); o cálculo de risco usa outro.
-    const rate = cdiAnnualRateForYear(date.getFullYear(), {
-        currentRate: currentConfigRate || DEFAULT_SELIC_FALLBACK,
-        fallback: 10.0,
-    });
+export const getDailyFactorForDate = (date, currentConfigRate, cdiCurve = EMPTY_CDI_CURVE) => {
+    // Taxa VIGENTE no dia pela curva do CDI (série SELIC gravada) — a mesma fonte
+    // da renda fixa. Antes este benchmark só lia a média anual da tabela: o ano
+    // corrente inteiro rendia a taxa de HOJE, e um ano fechado fora da tabela
+    // (2025) caía no legado de 10%, encolhendo o CDI contra a carteira.
+    // Sem curva, a resolução por ano de financialConstants segue valendo.
+    const fromCurve = cdiCurve.annualRateFor(date.toISOString().slice(0, 10));
+    const rate = Number.isFinite(fromCurve) && fromCurve > 0
+        ? fromCurve
+        : cdiAnnualRateForYear(date.getUTCFullYear(), {
+            currentRate: currentConfigRate || DEFAULT_SELIC_FALLBACK,
+            fallback: 10.0,
+        });
     return Math.pow(1 + (rate / 100), 1/252);
 };
 
@@ -1127,6 +1133,7 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         let lastKnownIbov = baseIbov;
 
         const currentRate = config?.cdi || DEFAULT_SELIC_FALLBACK;
+        const benchmarkCdiCurve = await loadCdiCurve({ since: brazilDateOnly(history[0].date), currentRate });
         let accumulatedCDI = 1.0;
         let accumulatedIPCA = 1.0; // IPCA + 6%
         // (TZ) Ancora no DIA-CALENDÁRIO BR do snapshot, não em startOfDay(date). O
@@ -1155,7 +1162,7 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
 
             const daysDelta = countBusinessDays(previousDate, currentDate);
 
-            const periodFactorCDI = daysDelta > 0 ? Math.pow(getDailyFactorForDate(currentDate, currentRate), daysDelta) : 1;
+            const periodFactorCDI = daysDelta > 0 ? Math.pow(getDailyFactorForDate(currentDate, currentRate, benchmarkCdiCurve), daysDelta) : 1;
             const periodFactorIPCA = daysDelta > 0 ? Math.pow(Math.pow(1 + (totalIpcaRate / 100), 1/252), daysDelta) : 1;
             accumulatedCDI *= periodFactorCDI;
             accumulatedIPCA *= periodFactorIPCA;

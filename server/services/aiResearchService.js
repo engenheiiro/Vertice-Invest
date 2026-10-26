@@ -14,7 +14,7 @@ import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '..
 import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
 import { randomUUID } from 'crypto';
 import ResearchBatch from '../models/ResearchBatch.js';
-import { finalizeRanking, normalizeRankingTicker } from '../utils/rankingContract.js';
+import { compareRankingItems, finalizeRanking, normalizeRankingTicker } from '../utils/rankingContract.js';
 import { WEEKLY_HYSTERESIS, WEEKLY_STRATEGY, isWeeklyRetentionEnabled } from '../config/weeklyHysteresis.js';
 import { applyWeeklyRetention, applyBrasil10Retention } from '../utils/weeklyRetention.js';
 import {
@@ -298,7 +298,9 @@ export const getTop5Defensive = (processedAssets) => {
             tier: 'GOLD',
             thesis: `Brasil 10: Score Defensivo ${a.scores['DEFENSIVE']}`
         }))
-        .sort((a, b) => b.score - a.score);
+        // Desempate pelo composite estrutural (Regra #2): com vários ativos no
+        // teto (100), só o score deixava a ordem do Mongo escolher quem entra no top 5.
+        .sort(compareRankingItems);
     const eligible = ranked.filter(a => a.isDefensiveEligible !== false);
     const backfill = ranked.filter(a => a.isDefensiveEligible === false);
     return [...eligible, ...backfill].slice(0, 5);
@@ -649,7 +651,7 @@ export const aiResearchService = {
                     action: bestScore >= BUY_THRESHOLD ? 'BUY' : 'WAIT',
                     thesis: `Audit: Score ${bestScore} em ${bestProfile}`
                 };
-            }).sort((a, b) => b.score - a.score);
+            }).sort(compareRankingItems);
 
             // discardLogs em memória: o relatório TXT usa isto diretamente em vez de
             // reconsultar o banco por janela de tempo (que perdia/misturava runs).

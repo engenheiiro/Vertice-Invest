@@ -113,6 +113,16 @@ export const getAssetStatus = async (req, res, next) => {
     }
 };
 
+// Variação % entre o preço da publicação e o de agora, com sinal ("+3.2%"/"-1.4%").
+// Nulo quando falta um dos dois preços: melhor nada do que um número inventado.
+export const formatMeasuredReturn = (entryPrice, currentPrice) => {
+    const entry = Number(entryPrice);
+    const now = Number(currentPrice);
+    if (!(entry > 0) || !(now > 0)) return null;
+    const pct = ((now / entry) - 1) * 100;
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+};
+
 export const getLandingData = async (req, res, next) => {
     try {
         // 1. Dados Macro (CDI, SPX, IBOV)
@@ -134,27 +144,26 @@ export const getLandingData = async (req, res, next) => {
             .sort({ createdAt: -1 })
             .limit(1);
 
+        // Retorno MEDIDO: preço gravado no ranking publicado × cotação atual. Antes
+        // era Math.random() (e, sem ranking, um "fallback" com tese inventada) —
+        // número fabricado numa API pública de plataforma de investimento. Sem os
+        // dois preços o campo sai nulo; sem ranking publicado, a lista sai vazia.
         if (latestReport && latestReport.content.ranking.length > 0) {
-            bestPerformers = latestReport.content.ranking
+            const picks = latestReport.content.ranking
                 .filter(r => r.action === 'BUY' && r.score >= 80)
-                .slice(0, 3)
-                .map(r => ({
-                    ticker: r.ticker,
-                    type: 'LONG',
-                    returnVal: `+${((Math.random() * 5) + 5).toFixed(1)}%`,
-                    date: new Date(latestReport.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
-                    desc: r.thesis || "Alta convicção baseada em fundamentos e fluxo."
-                }));
-        }
-
-        // Fallback
-        if (bestPerformers.length === 0) {
-             bestPerformers = topAssets.slice(0, 3).map(a => ({
-                ticker: a.ticker,
+                .slice(0, 3);
+            const livePrices = new Map(
+                (await MarketAsset.find({ ticker: { $in: picks.map(r => r.ticker) } })
+                    .select('ticker lastPrice')
+                    .lean())
+                    .map(a => [a.ticker, a.lastPrice])
+            );
+            bestPerformers = picks.map(r => ({
+                ticker: r.ticker,
                 type: 'LONG',
-                returnVal: `+${(Math.random() * 5 + 3).toFixed(1)}%`,
-                date: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
-                desc: "Tendência de alta confirmada por volume."
+                returnVal: formatMeasuredReturn(r.currentPrice, livePrices.get(r.ticker)),
+                date: new Date(latestReport.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+                desc: r.thesis || "Alta convicção baseada em fundamentos e fluxo."
             }));
         }
 
