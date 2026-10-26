@@ -177,7 +177,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                                     </div>
                                                 </td>
                                                 <td className="p-4 text-center">
-                                                    <span className={`px-1.5 py-0.5 rounded font-black ${item.score > 70 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
+                                                    <span className={`px-1.5 py-0.5 rounded font-black ${item.score >= 70 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}>
                                                         {item.score}
                                                     </span>
                                                 </td>

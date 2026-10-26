@@ -137,7 +137,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <DetailRow label="Liquidez Est." value={formatMoneyShort(m.avgLiquidity)} status='neutral' />
                     <DetailRow label="SMA 200" value={m.sma200 ? formatCurrency(m.sma200, 'USD') : 'N/A'} status={m.sma200 && asset.currentPrice > m.sma200 ? 'good' : 'bad'} />
                     <DetailRow label="Volatilidade (a.a.)" value={m.volatility ? formatPercent(m.volatility) : 'N/A'} status={m.volatility && m.volatility > 100 ? 'bad' : 'neutral'} />
-                    <DetailRow label="Score Estrutural" value={asset.score.toString()} status={asset.score > 70 ? 'good' : 'warning'} />
+                    <DetailRow label="Score Estrutural" value={asset.score.toString()} status={asset.score >= 70 ? 'good' : 'warning'} />
                 </div>
             );
         } else {
