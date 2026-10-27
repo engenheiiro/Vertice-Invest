@@ -3,7 +3,7 @@
 **Data do diagnóstico:** 19/07/2026  
 **Escopo:** ranking `STOCK`, com aprofundamento em `ITUB4`, `BBSE3` e pares financeiros  
 **Status:** diagnóstico concluído; nenhuma regra, peso, threshold, dado ou ranking de produção foi alterado  
-**Referência:** complementa `PROMPT-MESTRE-AUDITORIA-RANKING-END-TO-END.md` e `planejamento/AUDITORIA-RANKING-END-TO-END-2026-07-19.md`
+**Referência:** complementa `docs/auditorias/PROMPT-MESTRE-AUDITORIA-RANKING-END-TO-END.md` e `planejamento/AUDITORIA-RANKING-END-TO-END-2026-07-19.md`
 
 ---
 

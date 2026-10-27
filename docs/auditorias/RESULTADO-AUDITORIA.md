@@ -7,7 +7,7 @@
 > **Este documento é a baseline da última auditoria.** Para uma nova rodada,
 > peça à IA para ler [`AUDITORIA-PROMPT.md`](AUDITORIA-PROMPT.md) e produzir um
 > relatório novo — o único débito herdado daqui são os nits **F11–F13** (ver
-> [`planejamento/BACKLOG.md`](planejamento/BACKLOG.md) §1). O corpo abaixo é
+> [`planejamento/BACKLOG.md`](../../planejamento/BACKLOG.md) §1). O corpo abaixo é
 > mantido como registro histórico dos achados.
 
 ---
@@ -29,7 +29,7 @@ Os achados priorizados **F1–F10 foram corrigidos, testados e commitados** — 
 | F9 | Expurgo do `dividendHealAt` (teto + limpeza de expirados) | `walletController.js` |
 | F10 | `.env.example` documenta `EXTERNAL_SCHEDULER`, `PLAN_CACHE_TTL_MS`, `RENDER_EXTERNAL_URL`, `ENABLE_API_DOCS` | `.env.example` |
 
-**Pendente (nits, ainda não implementados em 2026-07-11):** F11 (RSI Wilder), F12 (remover `confirmPayment` morto — a rota `POST /subscription/confirm` segue montada em `subscriptionRoutes.js:17`), F13 (política de merge de `taxLots`). Rastreados em [`planejamento/BACKLOG.md`](planejamento/BACKLOG.md) §1. **Ação operacional (F2) já executada** via `34828b5` (dedup de duplicatas de `Transaction.gatewayId` antes do build do índice único).
+**Pendente (nits, ainda não implementados em 2026-07-11):** F11 (RSI Wilder), F12 (remover `confirmPayment` morto — a rota `POST /subscription/confirm` segue montada em `subscriptionRoutes.js:17`), F13 (política de merge de `taxLots`). Rastreados em [`planejamento/BACKLOG.md`](../../planejamento/BACKLOG.md) §1. **Ação operacional (F2) já executada** via `34828b5` (dedup de duplicatas de `Transaction.gatewayId` antes do build do índice único).
 
 ---
 

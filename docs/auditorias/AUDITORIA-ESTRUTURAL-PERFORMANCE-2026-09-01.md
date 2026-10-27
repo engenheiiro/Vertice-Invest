@@ -12,7 +12,7 @@
 > Este documento é a fotografia técnica de 01/09/2026 e o plano de referência
 > para a execução futura. As estimativas de velocidade não substituem baseline
 > em produção. Toda alteração financeira deve preservar as regras de negócio do
-> [`AGENTS.md`](AGENTS.md), especialmente threshold global 70, ordenação soberana,
+> [`AGENTS.md`](../../AGENTS.md), especialmente threshold global 70, ordenação soberana,
 > perfis, matemática segura e transações da carteira.
 
 ---

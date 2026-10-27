@@ -54,7 +54,7 @@ cluster/banco Atlas — qualquer migração afeta dados reais na hora.**
 
 ## 1. Débito técnico da auditoria (nits F11–F13)
 
-Ver [`../RESULTADO-AUDITORIA.md`](../RESULTADO-AUDITORIA.md). F1–F10 já shiparam
+Ver [`../docs/auditorias/RESULTADO-AUDITORIA.md`](../docs/auditorias/RESULTADO-AUDITORIA.md). F1–F10 já shiparam
 (`c01dbc8`, `34828b5`). Restam:
 
 - [ ] **F11 — RSI de Wilder.** `signalEngine.calculateRSI` usa média simples

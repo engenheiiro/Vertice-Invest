@@ -96,5 +96,5 @@ O CI (GitHub Actions) roda lint → typecheck → testes (com cobertura) → bui
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — fluxo de desenvolvimento, convenções e padrões.
 - [`CLAUDE.md`](CLAUDE.md) — diretrizes detalhadas (mapa de onde mexer, regras de negócio).
 - [`planejamento/`](planejamento/) — backlog de pendências, cheat sheet de comandos e análises.
-- [`AUDITORIA-PROMPT.md`](AUDITORIA-PROMPT.md) + [`RESULTADO-AUDITORIA.md`](RESULTADO-AUDITORIA.md) — prompt e baseline de auditoria técnica.
+- [`AUDITORIA-PROMPT.md`](docs/auditorias/AUDITORIA-PROMPT.md) + [`RESULTADO-AUDITORIA.md`](docs/auditorias/RESULTADO-AUDITORIA.md) — prompt e baseline de auditoria técnica.
 - Swagger em `/api/docs` (runtime).

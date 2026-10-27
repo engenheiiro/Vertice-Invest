@@ -193,7 +193,6 @@ export default defineConfig({
         'src/**/*.test.*',
         'src/**/*.spec.*',
         'src/test/**',
-        'src/main.tsx',
         'src/prerender.tsx',
       ],
       // Linha de base recalibrada após a migração para Vitest 5, cujo
