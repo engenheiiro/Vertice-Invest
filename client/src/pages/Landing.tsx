@@ -451,15 +451,23 @@ export const Landing = () => {
             <div className="relative animate-fade-in w-full sm:w-[calc(100%-4rem)] max-w-[900px] xl:max-w-none xl:w-full mx-auto xl:[perspective:1600px] xl:-mr-16 2xl:-mr-24" style={{ animationDelay: '200ms' }}>
               {/* Moldura 3D com o print real do dashboard */}
               <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-[#05070d] [transform-origin:left_center] xl:[transform:rotateY(-8deg)_rotateX(2deg)] shadow-[0_24px_60px_rgba(0,0,0,0.38)]">
-                <img
-                  src="/assets/landing/hero-dashboard.png"
-                  alt="Dashboard Vértice: carteira consolidada, evolução do patrimônio e distribuição de ativos"
-                  width={1353}
-                  height={876}
-                  loading="eager"
-                  decoding="async"
-                  className="block w-full h-auto [image-rendering:-webkit-optimize-contrast]"
-                />
+                {/* WebP q90 (77 KB contra 222 KB do PNG) com o PNG de reserva. É a
+                    maior imagem acima da dobra, então pede prioridade alta. */}
+                <picture>
+                  <source srcSet="/assets/landing/hero-dashboard.webp" type="image/webp" />
+                  <img
+                    src="/assets/landing/hero-dashboard.png"
+                    alt="Dashboard Vértice: carteira consolidada, evolução do patrimônio e distribuição de ativos"
+                    width={1353}
+                    height={876}
+                    loading="eager"
+                    decoding="async"
+                    // React 18 não conhece `fetchPriority` (avisa e descarta);
+                    // em minúsculas ele passa direto para o atributo do HTML.
+                    {...{ fetchpriority: 'high' }}
+                    className="block w-full h-auto [image-rendering:-webkit-optimize-contrast]"
+                  />
+                </picture>
               </div>
 
               {/* Ações em destaque — mesmas cores e hierarquia visual do produto */}

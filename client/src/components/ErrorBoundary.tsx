@@ -1,6 +1,6 @@
 import React from 'react';
-import * as Sentry from '@sentry/react';
 import { AlertTriangle } from 'lucide-react';
+import { reportError } from '../utils/monitoring';
 
 interface Props {
   children: React.ReactNode;
@@ -22,11 +22,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    try {
-      Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
-    } catch {
-      // Sentry pode não estar inicializado — não deixar o reporte quebrar o fallback.
-    }
+    // reportError nunca lança: Sentry ausente ou ainda carregando não quebra o fallback.
+    reportError(error, { componentStack: info.componentStack });
     console.error('[ErrorBoundary] Erro de renderização capturado:', error, info);
   }
 

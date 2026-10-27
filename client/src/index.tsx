@@ -3,43 +3,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import * as Sentry from "@sentry/react";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initAnalyticsConsent } from './utils/analyticsConsent';
-
-const env = (import.meta as any).env;
+import { startMonitoring } from './utils/monitoring';
 
 // Antes de qualquer render: carrega o GA só se já houver "Aceitar" registrado.
 initAnalyticsConsent();
 
-if (env?.VITE_SENTRY_DSN) {
-  try {
-    Sentry.init({
-      dsn: env.VITE_SENTRY_DSN,
-      integrations: [
-        Sentry.browserTracingIntegration(),
-        Sentry.replayIntegration({
-          maskAllText: true,
-          blockAllMedia: true,
-        }),
-      ],
-      tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/],
-      tracesSampleRate: 1.0,
-      replaysSessionSampleRate: 0.1,
-      replaysOnErrorSampleRate: 1.0,
-      beforeSend(event) {
-        if (event.request?.cookies) delete event.request.cookies;
-        if (event.request?.headers?.['Authorization']) {
-          event.request.headers['Authorization'] = '[Filtered]';
-        }
-        return event;
-      },
-    });
-    console.log("✅ Sentry Frontend Inicializado");
-  } catch (e) {
-    console.error("⚠️ Falha ao inicializar Sentry:", e);
-  }
-}
+// Sentry chega por import dinâmico (fora do pacote inicial); ver utils/monitoring.ts.
+startMonitoring();
 
 // Configuração do React Query
 const queryClient = new QueryClient({
