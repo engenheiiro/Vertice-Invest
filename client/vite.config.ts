@@ -46,7 +46,7 @@ export default defineConfig({
     ViteImageOptimizer({
       // Screenshot do dashboard contém textos pequenos. Preservamos os bytes originais
       // para evitar artefatos de compressão no hero da landing.
-      exclude: /hero-dashboard\.png$/,
+      exclude: /hero-dashboard\.(png|webp)$/,
       png: { quality: 80 },
       jpeg: { quality: 80 },
       jpg: { quality: 80 },
