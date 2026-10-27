@@ -95,8 +95,9 @@ são **evoluções**, não correções.
   RSI. `[ALTA] [OPUS]`
 - [ ] **7.4 — Múltiplos timeframes nos sinais.** Hoje o período é fixo (RSI 14,
   janela 60 dias). Analisar diário/semanal. `[ALTA] [OPUS]`
-- [ ] **7.10 — Exportar Research em PDF.** O botão "Exportar PDF" existe no
-  ResearchViewer sem handler. `pdf-lib` já está no server (certificados da
+- [ ] **7.10 — Exportar Research em PDF.** O botão "Exportar PDF" do
+  ResearchViewer, que não tinha ação, foi retirado em 27/10/2026 — volta junto
+  com a rota. `pdf-lib` já está no server (certificados da
   Academy; o PDF do relatório de IR — `GET /wallet/tax-report/:year/pdf` — já
   usa). Falta a rota de geração do research + ligar o botão. `[MEDIA] [SONNET]`
 

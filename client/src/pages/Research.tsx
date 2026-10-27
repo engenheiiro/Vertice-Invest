@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Header } from '../components/dashboard/Header';
 import { researchService, ResearchReport, RankingItem } from '../services/research';
 import { ResearchViewer } from '../components/research/ResearchViewer';
@@ -12,6 +13,7 @@ import { SkeletonCard, SkeletonTableRows } from '../components/ui';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { ResearchAporteRequest } from '../utils/researchAporte';
+import { STALE_TIME } from '../config/queryConfig';
 
 // minPlan espelha o gate autoritativo do backend (RESEARCH_FEATURE_BY_CLASS em
 // researchController + LIMITS_CONFIG). A Carteira Brasil TOP 10 é a vitrine do
@@ -47,10 +49,10 @@ export const Research = () => {
     // TopPicksCard aqui em cima para que o modal de Aporte respeite a mesma seleção.
     const [etfOrigin, setEtfOrigin] = useState<'BR' | 'US'>(aporteLink?.etfOrigin || 'US');
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
-    const [report, setReport] = useState<ResearchReport | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    // Sequência de busca: só a resposta do último pedido pode escrever no estado.
-    const fetchSeq = useRef(0);
+    // Ticker do deep link (location.state.openTicker), consumido uma única vez.
+    const pendingOpenTicker = useRef<string | null>(
+        (location.state as { openTicker?: string } | null)?.openTicker ?? null
+    );
 
     // Estado para controle do modal de asset direto
     const [directAsset, setDirectAsset] = useState<RankingItem | null>(null);
@@ -79,60 +81,37 @@ export const Research = () => {
         return userLevel >= requiredLevel;
     };
 
-    const fetchReport = async () => {
-        // Toda entrada invalida buscas anteriores: trocar de aba (ou entrar na Renda
-        // Fixa) enquanto uma resposta está a caminho não pode deixá-la escrever depois.
-        const seq = ++fetchSeq.current;
-        const isCurrent = () => seq === fetchSeq.current;
+    const hasAccessToSelected = checkAccess(selectedAsset);
+    // Renda Fixa não tem relatório de ranking — o TreasuryPanel busca seus próprios dados.
+    const canFetchReport = !isFixedIncome && hasAccessToSelected;
+    const strategy = 'BUY_HOLD';
 
-        // Renda Fixa não tem relatório de ranking — o TreasuryPanel busca seus próprios dados.
-        if (isFixedIncome) {
-            setIsLoading(false);
-            setReport(null);
-            return;
-        }
-        if (!checkAccess(selectedAsset)) {
-            setIsLoading(false);
-            setReport(null);
-            return;
-        }
+    // Um cache por classe: voltar a uma aba já vista é instantâneo, e alternar
+    // Top 10 ↔ Semanal não busca de novo (é o mesmo relatório). A chave inclui o
+    // plano: no upgrade o gate libera a classe e a busca precisa sair — sem isso
+    // ficava "Análise não encontrada". Resposta atrasada de outra aba escreve só
+    // na chave dela, então não sobrescreve a aba atual.
+    const reportQuery = useQuery<ResearchReport | null>({
+        queryKey: ['researchReport', effectiveAsset, strategy, user?.plan],
+        queryFn: () => researchService.getLatest(effectiveAsset, strategy),
+        enabled: canFetchReport,
+        staleTime: STALE_TIME.HOURLY,
+    });
+    const report: ResearchReport | null = canFetchReport ? (reportQuery.data ?? null) : null;
+    const isLoading = canFetchReport && reportQuery.isLoading;
 
-        setIsLoading(true);
-        try {
-            const strategy = 'BUY_HOLD';
-            try {
-                const data = await researchService.getLatest(effectiveAsset, strategy);
-                if (!isCurrent()) return;
-                setReport(data);
-
-                // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
-                if (location.state && location.state.openTicker && data && data.content && data.content.ranking) {
-                    const targetTicker = location.state.openTicker;
-                    const found = data.content.ranking.find((item: RankingItem) => item.ticker === targetTicker);
-                    if (found) {
-                        setDirectAsset(found);
-                        window.history.replaceState({}, document.title);
-                    }
-                }
-            } catch (err: unknown) {
-                console.error("Erro ao buscar análise:", err);
-                if (isCurrent()) setReport(null);
-            }
-
-        } catch (err: unknown) {
-            console.error("Erro geral:", err);
-        } finally {
-            if (isCurrent()) setIsLoading(false);
-        }
-    };
-
+    // LÓGICA DE LINK DIRETO (DEEP LINKING VIA STATE)
     useEffect(() => {
-        fetchReport();
-        // Inclui o plano: ao fazer upgrade (refresh no foco da aba), o gate libera o
-        // ativo e o relatório precisa ser buscado — sem isso ficava "Análise não encontrada".
-        // exteriorView troca a fonte (STOCK_US ↔ REIT) dentro do Exterior.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedAsset, exteriorView, viewMode, user?.plan]);
+        const targetTicker = pendingOpenTicker.current;
+        const ranking = report?.content?.ranking;
+        if (!targetTicker || !ranking) return;
+        const found = ranking.find((item: RankingItem) => item.ticker === targetTicker);
+        if (found) {
+            pendingOpenTicker.current = null;
+            setDirectAsset(found);
+            window.history.replaceState({}, document.title);
+        }
+    }, [report]);
 
     // Ao sair do Exterior, volta o sub-toggle para Ações (evita herdar REIT noutra aba).
     useEffect(() => { if (!isExterior) setExteriorView('STOCK'); }, [isExterior]);
@@ -143,7 +122,6 @@ export const Research = () => {
         if (aporteLink) window.history.replaceState({}, document.title);
     }, [aporteLink]);
 
-    const hasAccessToSelected = checkAccess(selectedAsset);
     const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
 
     return (
@@ -210,13 +188,13 @@ export const Research = () => {
 
                         {!isFixedIncome && (
                             <button
-                                onClick={fetchReport}
-                                disabled={isLoading || !hasAccessToSelected}
+                                onClick={() => { void reportQuery.refetch(); }}
+                                disabled={reportQuery.isFetching || !hasAccessToSelected}
                                 className="bg-base border border-slate-800 p-2.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50 shrink-0"
                                 title="Atualizar Dados"
                                 aria-label="Atualizar dados"
                             >
-                                <RefreshCcw size={16} className={isLoading ? 'animate-spin' : ''} />
+                                <RefreshCcw size={16} className={reportQuery.isFetching ? 'animate-spin' : ''} />
                             </button>
                         )}
                     </div>

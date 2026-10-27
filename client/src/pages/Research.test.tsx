@@ -13,6 +13,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Research } from './Research';
 import { useAuth } from '../contexts/AuthContext';
 import { researchService } from '../services/research';
@@ -81,7 +82,15 @@ beforeEach(() => {
   vi.mocked(useAuth).mockReturnValue({ user: makeUser('PRO') } as any);
 });
 
-const renderResearch = () => render(<Research />);
+// Cliente novo por teste: o cache de uma classe não pode vazar para o próximo.
+const renderResearch = () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Research />
+    </QueryClientProvider>
+  );
+};
 
 // ─── Render e abas ────────────────────────────────────────────────────────────
 
@@ -394,3 +403,35 @@ describe('deep link do Aporte (carteira → research)', () => {
   });
 });
 
+
+// ─── Cache por classe ────────────────────────────────────────────────────────
+
+describe('cache por classe', () => {
+  it('voltar a uma aba já vista não busca de novo', async () => {
+    renderResearch();
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('BRASIL_10', 'BUY_HOLD')
+    );
+
+    fireEvent.click(screen.getByText('Ações BR'));
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledWith('STOCK', 'BUY_HOLD')
+    );
+
+    fireEvent.click(screen.getByText('Brasil 10 (Mix)'));
+    await waitFor(() => expect(screen.queryByTestId('skeleton-card')).not.toBeInTheDocument());
+    expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(2);
+  });
+
+  it('alternar Top 10 ↔ Semanal não refaz a busca (é o mesmo relatório)', async () => {
+    renderResearch();
+    await waitFor(() =>
+      expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1)
+    );
+
+    fireEvent.click(screen.getByText('Semanal'));
+    fireEvent.click(screen.getByText('Top 10'));
+    await waitFor(() => expect(screen.queryByTestId('skeleton-card')).not.toBeInTheDocument());
+    expect(vi.mocked(researchService.getLatest)).toHaveBeenCalledTimes(1);
+  });
+});

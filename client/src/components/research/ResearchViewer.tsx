@@ -3,7 +3,7 @@ import React from 'react';
 import { ResearchReport } from '../../services/research';
 import { TopPicksCard } from './TopPicksCard';
 import { ExitList } from './ExitList';
-import { ShieldCheck, Share2, Zap, AlignLeft } from 'lucide-react';
+import { ShieldCheck, Zap, AlignLeft } from 'lucide-react';
 
 interface ResearchViewerProps {
     report: ResearchReport;
@@ -132,9 +132,8 @@ export const ResearchViewer: React.FC<ResearchViewerProps> = ({ report, view, on
                         <ShieldCheck size={14} className="text-emerald-500" />
                         Verificado por Algoritmo Vértice Sênior
                     </div>
-                    <button className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white transition-all bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 hover:border-slate-600">
-                        <Share2 size={14} /> Exportar PDF
-                    </button>
+                    {/* "Exportar PDF" saiu até existir a rota que gera o arquivo
+                        (BACKLOG 7.10): um botão sem ação parecia defeito. */}
                 </div>
             </div>
         </div>
