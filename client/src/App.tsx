@@ -1,6 +1,6 @@
 
 import React, { Suspense, lazy, PropsWithChildren } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 
 import { AuthLayout } from './components/layout/AuthLayout';
@@ -73,15 +73,29 @@ const PublicOnlyRoute: React.FC<PropsWithChildren> = ({ children }) => {
   return <>{children}</>;
 };
 
+// Erro de uma página fica na página: o global (tela cheia) derrubava até a
+// navegação. Chave = rota, então sair pela navegação inferior já limpa o erro.
+const RouteErrorBoundary: React.FC<PropsWithChildren> = ({ children }) => {
+  const { pathname } = useLocation();
+  const { user } = useAuth();
+  return (
+    <ErrorBoundary scope="page" resetKey={pathname} homeHref={homeRouteFor(user)}>
+      {children}
+    </ErrorBoundary>
+  );
+};
+
 const ProtectedAppLayout = () => {
   return (
     <ProtectedRoute>
       <DemoProvider>
         <WalletProvider>
           <TutorialOverlay />
-          <Suspense fallback={<PageLoader />}>
-            <Outlet />
-          </Suspense>
+          <RouteErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              <Outlet />
+            </Suspense>
+          </RouteErrorBoundary>
           <BottomNav />
           {/* Porta de entrada do atendimento: sempre à mão, em qualquer tela
               logada. Some sozinho na rota /suporte, onde a central já está aberta. */}
