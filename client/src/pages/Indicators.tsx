@@ -1,5 +1,7 @@
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { STALE_TIME } from '../config/queryConfig';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
 import { SkeletonKpiGrid, SkeletonCard } from '../components/ui';
@@ -23,32 +25,22 @@ const POPULAR_CDB_LCI = [
 ];
 
 export const Indicators = () => {
-    const [data, setData] = useState<any>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    // Mesma chave do Dashboard (useDashboardData): vindo de lá, a tela abre com o
+    // dado em cache em vez de buscar tudo de novo. O refetchInterval do React
+    // Query pausa com a aba em segundo plano — o setInterval de antes, não.
+    const macroQuery = useQuery({
+        queryKey: ['macroData'],
+        queryFn: researchService.getMacroData,
+        staleTime: STALE_TIME.LONG,
+        refetchInterval: STALE_TIME.LONG,
+    });
+    const data: any = macroQuery.data ?? null;
+    const isLoading = macroQuery.isLoading;
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'type', direction: 'asc' });
     const [filterType, setFilterType] = useState<FilterType>('ALL');
     
     const [isTreasuryOpen, setIsTreasuryOpen] = useState(false);
     const [isPrivateFixedOpen, setIsPrivateFixedOpen] = useState(false);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    const loadData = async () => {
-        setIsLoading(true);
-        try {
-            const result = await researchService.getMacroData();
-            setData(result);
-        } catch (error) {
-            console.error("Erro ao carregar indicadores", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadData();
-        intervalRef.current = setInterval(loadData, 15 * 60 * 1000);
-        return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-    }, []);
 
     const handleSort = (key: SortKey) => {
         let direction: 'asc' | 'desc' = 'asc';
