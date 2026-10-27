@@ -1,8 +1,11 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { Header } from '../components/dashboard/Header';
 import { researchService } from '../services/research';
+import { useQuery } from '@tanstack/react-query';
+import { STALE_TIME } from '../config/queryConfig';
+import { ScanCountdown, FreshnessDot } from '../components/common/ScanStatus';
 import {
     Radar, ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown,
     Minus, Target, Layers, Filter, Info, Shield, Activity, Zap, Medal
@@ -67,43 +70,6 @@ const SECTOR_COLORS = [
     '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#6366F1', '#D4AF37', '#EF4444'
 ];
 
-// ---------- Componentes locais reutilizados ----------
-
-const ScanCountdown: React.FC<{ nextScanAt: string | null }> = ({ nextScanAt }) => {
-    const [display, setDisplay] = useState('--:--');
-    useEffect(() => {
-        if (!nextScanAt) { setDisplay('--:--'); return; }
-        const tick = () => {
-            const diff = new Date(nextScanAt).getTime() - Date.now();
-            if (diff <= 0) { setDisplay('atualizando...'); return; }
-            const mins = Math.floor(diff / 60000);
-            const secs = Math.floor((diff % 60000) / 1000);
-            setDisplay(`${mins}:${secs.toString().padStart(2, '0')}`);
-        };
-        tick();
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-    }, [nextScanAt]);
-    return <span className="font-mono tabular-nums text-purple-400 font-bold">{display}</span>;
-};
-
-const FreshnessDot: React.FC<{ lastScanAt: string | null }> = ({ lastScanAt }) => {
-    const [color, setColor] = useState('bg-slate-600');
-    useEffect(() => {
-        const update = () => {
-            if (!lastScanAt) { setColor('bg-slate-600'); return; }
-            const diffMs = Date.now() - new Date(lastScanAt).getTime();
-            if (diffMs < 2 * 60 * 1000) setColor('bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.7)]');
-            else if (diffMs < 10 * 60 * 1000) setColor('bg-yellow-400');
-            else setColor('bg-slate-600');
-        };
-        update();
-        const id = setInterval(update, 10000);
-        return () => clearInterval(id);
-    }, [lastScanAt]);
-    return <span className={`w-2.5 h-2.5 rounded-full ${color} shrink-0`} />;
-};
-
 const getUrgencyStyle = (level?: string) => {
     if (level === 'CRITICAL') return {
         border: 'border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.1)]',
@@ -160,37 +126,31 @@ const SignalValueTag: React.FC<{ type: string; value?: number }> = ({ type, valu
 // ---------- Página principal ----------
 
 export const RadarPage = () => {
-    const [signals, setSignals] = useState<QuantSignalHistory[]>([]);
-    const [meta, setMeta] = useState<RadarMeta | null>(null);
+    // Com cache: voltar ao Radar dentro da janela não refaz as duas buscas, e uma
+    // falhar não apaga a outra (antes era um Promise.all de tudo ou nada).
+    const historyQuery = useQuery({
+        queryKey: ['radarSignalsHistory'],
+        queryFn: researchService.getSignalsHistory,
+        staleTime: STALE_TIME.SHORT,
+    });
+    const statsQuery = useQuery({
+        queryKey: ['radarStats'],
+        queryFn: researchService.getRadarStats,
+        staleTime: STALE_TIME.SHORT,
+    });
+    const signals: QuantSignalHistory[] = useMemo(() => historyQuery.data?.signals || [], [historyQuery.data]);
+    const meta: RadarMeta | null = historyQuery.data?.meta || null;
+    const stats: RadarStats | null = statsQuery.data ?? null;
+    const isLoading = historyQuery.isLoading || statsQuery.isLoading;
     const { theme } = useTheme();
     const chartTooltipStyle = theme === 'light'
         ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#0f172a' }
         : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px', color: '#fff' };
-    const [stats, setStats] = useState<RadarStats | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
     const [sectorView, setSectorView] = useState<'OPEN' | 'CLOSED'>('OPEN');
     const [assetTypeFilter, setAssetTypeFilter] = useState<AssetTypeFilter>('ALL');
     const [accuracyFilter, setAccuracyFilter] = useState<AccuracyFilter>('ALL');
 
-    useEffect(() => {
-        const load = async () => {
-            try {
-                const [historyData, statsData] = await Promise.all([
-                    researchService.getSignalsHistory(),
-                    researchService.getRadarStats()
-                ]);
-                setSignals(historyData.signals || []);
-                setMeta(historyData.meta || null);
-                setStats(statsData);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        load();
-    }, []);
 
     const urgencyRank = (level?: string) => level === 'CRITICAL' ? 3 : level === 'HIGH' ? 2 : 1;
 
@@ -269,7 +229,7 @@ export const RadarPage = () => {
 
                     {/* Status de scan */}
                     <div className="bg-base border border-slate-800 rounded-xl px-4 py-3 flex items-center gap-3 shrink-0">
-                        <FreshnessDot lastScanAt={meta?.lastScanAt || null} />
+                        <FreshnessDot lastScanAt={meta?.lastScanAt || null} sizeClassName="w-2.5 h-2.5" />
                         <div className="text-right">
                             <p className="text-[10px] text-slate-500 uppercase font-bold">Última varredura</p>
                             <p className="text-xs text-white font-mono">{lastScanMinutesAgo ?? '—'}</p>
@@ -277,7 +237,7 @@ export const RadarPage = () => {
                         <div className="w-px h-8 bg-slate-800" />
                         <div className="text-right">
                             <p className="text-[10px] text-slate-500 uppercase font-bold">Próxima em</p>
-                            <ScanCountdown nextScanAt={meta?.nextScanAt || null} />
+                            <ScanCountdown nextScanAt={meta?.nextScanAt || null} className="font-mono tabular-nums text-purple-400 font-bold" />
                         </div>
                     </div>
                 </div>
@@ -441,7 +401,7 @@ export const RadarPage = () => {
                             <Radar size={40} className="text-slate-700 mx-auto mb-3" />
                             <p className="text-sm font-bold text-slate-500">Nenhuma anomalia detectada no momento.</p>
                             <p className="text-xs text-slate-600 mt-1.5 flex items-center justify-center gap-1">
-                                <Clock size={11} /> Próxima varredura em <ScanCountdown nextScanAt={meta?.nextScanAt || null} />
+                                <Clock size={11} /> Próxima varredura em <ScanCountdown nextScanAt={meta?.nextScanAt || null} className="font-mono tabular-nums text-purple-400 font-bold" />
                             </p>
                         </div>
                     ) : (
