@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { GraduationCap, ChevronRight, PlayCircle, ArrowLeft, Clock, Lock } from 'lucide-react';
 import { Header } from '../components/dashboard/Header';
 import { CourseCard } from '../components/Academy/CourseCard';
+import { AcademyImage } from '../components/Academy/AcademyImage';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth';
 
@@ -22,9 +23,11 @@ const LessonCard = ({ lesson, onClick, isLocked: _propIsLocked }: { lesson: any,
             onClick={() => !isLocked && onClick()}
         >
         <div className="absolute inset-0 w-full h-full">
-            <img 
+            <AcademyImage 
                 src={lesson.thumbnail || 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=1000&auto=format&fit=crop'} 
                 alt={lesson.title}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-700"
                 referrerPolicy="no-referrer"
             />
@@ -74,10 +77,9 @@ export const Courses = () => {
         const fetchCourses = async () => {
             try {
                 setLoading(true);
-                const token = authService.getAccessToken();
-                const res = await fetch('/api/academy/courses', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                // authService.api renova o token num 401; o fetch cru de antes
+                // mostrava "Erro ao carregar cursos" a quem só tinha a sessão vencida.
+                const res = await authService.api('/api/academy/courses');
                 if (res.ok) {
                     const data = await res.json();
                     setCourses(data);
@@ -98,10 +100,7 @@ export const Courses = () => {
         if (selectedCourseId) {
             const fetchCourseDetails = async () => {
                 try {
-                    const token = authService.getAccessToken();
-                    const res = await fetch(`/api/academy/courses/${selectedCourseId}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const res = await authService.api(`/api/academy/courses/${selectedCourseId}`);
                     if (res.ok) {
                         const data = await res.json();
                         setLessons(data.lessons);
@@ -134,7 +133,7 @@ export const Courses = () => {
             {/* Hero Banner */}
             <div className="relative w-full h-[60vh] md:h-[70vh] flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0">
-                    <img 
+                    <AcademyImage 
                         src={selectedCourse?.thumbnail || "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=1920&auto=format&fit=crop"} 
                         alt="Hero" 
                         className="w-full h-full object-cover opacity-40 transition-all duration-1000"

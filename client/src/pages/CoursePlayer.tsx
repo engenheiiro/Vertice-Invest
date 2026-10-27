@@ -34,27 +34,18 @@ export const CoursePlayer = () => {
     const [lastAttempt, setLastAttempt] = useState<any>(null);
 
     useEffect(() => {
-        console.log("CoursePlayer: Current Lesson updated", currentLesson);
-    }, [currentLesson]);
-
-    useEffect(() => {
         const fetchCourseData = async () => {
             try {
                 setLoading(true);
-                const token = authService.getAccessToken();
-                
-                // Buscar dados do curso e aulas do servidor
-                console.log(`Fetching data for course: ${courseId}`);
-                const courseRes = await fetch(`/api/academy/courses/${courseId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                // Buscar dados do curso e aulas do servidor. authService.api renova o
+                // token num 401 (o fetch cru de antes virava "Erro ao carregar curso").
+                const courseRes = await authService.api(`/api/academy/courses/${courseId}`);
                 
                 if (!courseRes.ok) {
                     const errData = await courseRes.json();
                     throw new Error(errData.message || 'Erro ao carregar curso');
                 } else {
                     const data = await courseRes.json();
-                    console.log('Course data received from server:', data);
                     setCourse(data.course);
                     setLessons(data.lessons);
                     
@@ -67,19 +58,14 @@ export const CoursePlayer = () => {
 
                 // Buscar progresso do usuário do servidor
                 if (courseId) {
-                    console.log(`Fetching progress for course: ${courseId}`);
-                    const progressRes = await fetch(`/api/academy/progress/${courseId}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const progressRes = await authService.api(`/api/academy/progress/${courseId}`);
                     
                     if (progressRes.ok) {
                         const data = await progressRes.json();
-                        console.log('Progress data received:', data);
                         const completedIds = data.progress
                             .filter((p: any) => p.completed)
                             .map((p: any) => p.lessonId);
-                        
-                        console.log('Completed lesson IDs:', completedIds);
+
                         setCompletedLessons(completedIds);
                         
                         if (data.quizAttempts && data.quizAttempts.length > 0) {
@@ -130,17 +116,9 @@ export const CoursePlayer = () => {
         
         // Mark as completed if watched 90%
         if (state.played > 0.9 && !completedLessons.includes(currentLesson._id)) {
-            console.log(`Marking lesson ${currentLesson._id} as completed (90% watched)`);
-            const token = authService.getAccessToken();
             try {
-                const res = await fetch('/api/academy/progress', {
+                const res = await authService.api('/api/academy/progress', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                        ...authService.csrfHeader() // (1.4) double-submit CSRF
-                    },
-                    credentials: 'include',
                     body: JSON.stringify({
                         lessonId: currentLesson._id,
                         watchTime: state.playedSeconds || 0,
@@ -170,10 +148,7 @@ export const CoursePlayer = () => {
         try {
             setQuizLoading(true);
             setQuizError('');
-            const token = authService.getAccessToken();
-            const res = await fetch(`/api/academy/quiz/${courseId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const res = await authService.api(`/api/academy/quiz/${courseId}`);
             if (res.ok) {
                 const data = await res.json();
                 setQuiz(data);
@@ -199,15 +174,8 @@ export const CoursePlayer = () => {
         setQuizSubmitting(true);
         setQuizError('');
         try {
-            const token = authService.getAccessToken();
-            const res = await fetch('/api/academy/quiz/submit', {
+            const res = await authService.api('/api/academy/quiz/submit', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    ...authService.csrfHeader() // (1.4) double-submit CSRF
-                },
-                credentials: 'include',
                 body: JSON.stringify({
                     courseId,
                     answers: quizAnswers
@@ -231,15 +199,9 @@ export const CoursePlayer = () => {
     };
 
     const handleDownloadCertificate = async () => {
-        console.log(`Attempting to download certificate. Lessons: ${lessons.length}, Completed: ${completedLessons.length}`);
         setDownloading(true);
         try {
-            const token = authService.getAccessToken();
-            const response = await fetch(`/api/academy/certificate/${courseId}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await authService.api(`/api/academy/certificate/${courseId}`);
 
             if (!response.ok) {
                 const errorData = await response.json();
@@ -324,8 +286,6 @@ export const CoursePlayer = () => {
                                             playing={false}
                                             onProgress={handleProgress}
                                             onEnded={handleVideoEnded}
-                                            onReady={() => console.log("ReactPlayer: Video is ready to play")}
-                                            onStart={() => console.log("ReactPlayer: Video started playing")}
                                             onError={(e: any) => {
                                                 console.error("ReactPlayer Error:", e);
                                                 setUseNativeIframe(true);
@@ -390,16 +350,9 @@ export const CoursePlayer = () => {
                                     {!completedLessons.includes(currentLesson?._id) && (
                                         <button 
                                             onClick={async () => {
-                                                const token = authService.getAccessToken();
                                                 try {
-                                                    await fetch('/api/academy/progress', {
+                                                    await authService.api('/api/academy/progress', {
                                                         method: 'POST',
-                                                        headers: {
-                                                            'Content-Type': 'application/json',
-                                                            'Authorization': `Bearer ${token}`,
-                                                            ...authService.csrfHeader() // (1.4) double-submit CSRF
-                                                        },
-                                                        credentials: 'include',
                                                         body: JSON.stringify({
                                                             lessonId: currentLesson._id,
                                                             watchTime: currentLesson.duration,
