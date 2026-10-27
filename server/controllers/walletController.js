@@ -151,11 +151,11 @@ const loadWalletState = async (userId, walletId) => {
 // Auto-Heal: sem ativos ativos mas com transações → reconstrói as posições.
 // Retorna os ativos curados (>0) ou null se nada foi reconstruído.
 const autoHealPositions = async (userId, walletId) => {
-    const txCount = await AssetTransaction.countDocuments({ user: userId, wallet: walletId });
-    if (txCount === 0) return null;
+    // distinct resolve no banco: antes eram um count e um find que trazia TODAS as
+    // transações para a memória só para extrair os tickers.
+    const distinctTickers = await AssetTransaction.distinct('ticker', { user: userId, wallet: walletId });
+    if (distinctTickers.length === 0) return null;
 
-    const allTxs = await AssetTransaction.find({ user: userId, wallet: walletId });
-    const distinctTickers = [...new Set(allTxs.map(t => t.ticker))];
     for (const ticker of distinctTickers) {
         await financialService.recalculatePosition(userId, ticker, null, null, null, walletId);
     }
