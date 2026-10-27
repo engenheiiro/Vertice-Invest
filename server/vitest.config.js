@@ -9,6 +9,11 @@ export default defineConfig({
     // sob 100+ specs em paralelo disputando CPU — o cold import estourava o
     // timeout e gerava flake raro. 15s dá folga sem mascarar travamentos reais.
     testTimeout: 15000,
+    // Mesmo motivo, nos hooks: specs que fazem `vi.resetModules()` + `await
+    // import()` no beforeEach pagam o import a frio ali, e o default de 10s
+    // estourava sob a suíte inteira (dividend_resilience, external_market_
+    // history_window) — os mesmos arquivos passam em ~6s rodando sozinhos.
+    hookTimeout: 30000,
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'html', 'lcov'],

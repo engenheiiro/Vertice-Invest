@@ -29,15 +29,15 @@ vi.mock('../services/holidayService.js', () => ({
 let server;
 let base;
 
-// Importar o app puxa rotas, controllers e models — é pesado, e o default de 5s
-// do vitest estoura quando a suíte inteira roda junto.
+// Importar o app puxa rotas, controllers e models — é pesado: ~1,7s sozinho,
+// e mais de 30s com a suíte inteira disputando CPU em paralelo.
 beforeAll(async () => {
     const { default: app } = await import('../app.js');
     await new Promise((resolve) => {
         server = app.listen(0, '127.0.0.1', resolve);
     });
     base = `http://127.0.0.1:${server.address().port}`;
-}, 30000);
+}, 60000);
 
 afterAll(async () => {
     if (server) await new Promise((resolve) => server.close(resolve));

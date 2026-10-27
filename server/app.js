@@ -10,7 +10,6 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import * as Sentry from "@sentry/node";
 import { fileURLToPath } from 'url';
-import swaggerUi from 'swagger-ui-express';
 import { sanitizeInput } from './middleware/sanitize.js'; // (S8) anti-injeção NoSQL
 import { correlationId } from './middleware/correlationId.js'; // (D12) correlation id
 import { accessLog } from './middleware/accessLog.js'; // (D12) log de request concluída
@@ -19,7 +18,6 @@ import { collectShellScriptHashes, isStaticAssetPath } from './utils/staticShell
 import { errorHandler } from './middleware/errorHandler.js'; // (6.1) erro estruturado
 import { productionErrorSanitizer } from './middleware/productionErrorSanitizer.js';
 import { mongoCircuitBreaker, getMongoBreakerState } from './middleware/mongoCircuitBreaker.js'; // (6.9) disjuntor do MongoDB
-import { swaggerSpec } from './config/swagger.js'; // (I7) OpenAPI/Swagger
 import logger from './config/logger.js';
 import AppError from './utils/AppError.js';
 import { buildAllowedOrigins, resolveCorsOrigin, sanitizeOriginForLog } from './utils/corsOrigins.js';
@@ -67,7 +65,14 @@ if (process.env.SENTRY_DSN) {
 // (F7) Fora de produção por padrão: expor toda a superfície da API a não
 // autenticados é divulgação desnecessária. ENABLE_API_DOCS=true reabilita se
 // preciso (ex.: ambiente de staging com acesso restrito).
+// Import dinâmico: com a doc desligada (produção), nem a UI nem o swagger-jsdoc
+// — que varre os comentários de todas as rotas ao carregar — entram no boot
+// (~210 ms de 1,7 s medidos no import do app).
 if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
+  const [{ default: swaggerUi }, { swaggerSpec }] = await Promise.all([
+    import('swagger-ui-express'),
+    import('./config/swagger.js'), // (I7) OpenAPI/Swagger
+  ]);
   app.get('/api/docs.json', (req, res) => res.json(swaggerSpec));
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, { customSiteTitle: 'Vértice Invest API' }));
 }
