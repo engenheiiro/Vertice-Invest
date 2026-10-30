@@ -52,6 +52,12 @@ jobs:
       - name: Typecheck (client + server)
         run: npm run typecheck
 
+      # ANTES dos testes do servidor: tests/app_shell_contract.spec.js sobe o
+      # app e confere a CSP e o shell da SPA, derivados de client/dist. Sem o
+      # build, a CSP sai vazia e o teste de contrato falha (5 casos).
+      - name: Build client
+        run: npm run build --prefix client
+
       - name: Test backend (com cobertura)
         run: npm run test:ci --prefix server
 
@@ -78,9 +84,6 @@ jobs:
 
       - name: Build server (validação de sintaxe)
         run: npm run build:server
-
-      - name: Build client
-        run: npm run build:client
 
   e2e:
     name: e2e (Playwright)
