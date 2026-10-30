@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { typeMessages } from './zodMessages.js';
 import {
     MAX_ATTACHMENTS_PER_MESSAGE,
     TICKET_CATEGORIES,
@@ -22,7 +23,7 @@ const attachmentList = z.array(z.string().max(2_000_000, 'Imagem muito grande.')
     .max(MAX_ATTACHMENTS_PER_MESSAGE, `Máximo de ${MAX_ATTACHMENTS_PER_MESSAGE} imagens por mensagem.`)
     .optional();
 
-const messageBody = z.string({ required_error: 'Escreva a mensagem.' })
+const messageBody = z.string(typeMessages({ required: 'Escreva a mensagem.' }))
     .trim()
     .min(10, 'Descreva com um pouco mais de detalhe (mínimo 10 caracteres).')
     .max(5000, 'Mensagem muito longa (máximo 5000 caracteres).');
@@ -45,8 +46,8 @@ const contextSchema = z.object({
 // POST /support/tickets
 export const createTicketSchema = z.object({
     body: z.object({
-        category: z.enum(TICKET_CATEGORIES, { errorMap: () => ({ message: 'Categoria inválida.' }) }),
-        subject: z.string({ required_error: 'Informe um assunto.' })
+        category: z.enum(TICKET_CATEGORIES, { error: 'Categoria inválida.' }),
+        subject: z.string(typeMessages({ required: 'Informe um assunto.' }))
             .trim()
             .min(3, 'Assunto muito curto.')
             .max(120, 'Assunto muito longo (máximo 120 caracteres).'),
@@ -72,7 +73,7 @@ export const adminReplySchema = z.object({
     body: z.object({
         // Nota interna pode ser curta ("é o bug do candle") — não faz sentido
         // exigir dez caracteres de quem escreve para si mesmo.
-        body: z.string({ required_error: 'Escreva a mensagem.' }).trim().min(1, 'Escreva a mensagem.').max(5000),
+        body: z.string(typeMessages({ required: 'Escreva a mensagem.' })).trim().min(1, 'Escreva a mensagem.').max(5000),
         attachments: attachmentList,
         isInternal: z.coerce.boolean().optional(),
         newStatus: z.enum(TICKET_STATUSES).optional(),

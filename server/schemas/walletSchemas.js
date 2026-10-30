@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { typeMessages } from './zodMessages.js';
 import { calendarDate } from './calendarDate.js';
 
 /**
@@ -16,14 +17,14 @@ const ASSET_TYPES = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'CRYPTO', 'FIXED_INCOME'
 // POST /wallet/add — registrar transação (BUY/SELL definido pelo sinal de quantity).
 export const addTransactionSchema = z.object({
   body: z.object({
-    ticker: z.string({ required_error: 'Ticker é obrigatório' })
+    ticker: z.string(typeMessages({ required: 'Ticker é obrigatório' }))
       .min(1, 'Ticker é obrigatório')
       .trim(),
-    type: z.enum(ASSET_TYPES, { errorMap: () => ({ message: 'Tipo de ativo inválido' }) }).optional(),
-    quantity: z.coerce.number({ required_error: 'Quantidade é obrigatória', invalid_type_error: 'Quantidade inválida' })
+    type: z.enum(ASSET_TYPES, { error: 'Tipo de ativo inválido' }).optional(),
+    quantity: z.coerce.number(typeMessages({ required: 'Quantidade é obrigatória', invalid: 'Quantidade inválida' }))
       .finite('Quantidade inválida')
       .refine((v) => v !== 0, 'Quantidade não pode ser zero'),
-    price: z.coerce.number({ required_error: 'Preço é obrigatório', invalid_type_error: 'Preço inválido' })
+    price: z.coerce.number(typeMessages({ required: 'Preço é obrigatório', invalid: 'Preço inválido' }))
       .finite('Preço inválido')
       .nonnegative('Preço não pode ser negativo'),
     date: calendarDate('Data inválida').optional(),
@@ -54,7 +55,7 @@ export const updateAssetSchema = z.object({
     tags: z.array(z.string().trim().max(40, 'Tag muito longa')).max(20, 'Máximo de 20 tags').optional(),
     name: z.string().trim().min(1, 'Nome não pode ser vazio').max(120, 'Nome muito longo').optional(),
     // Override manual do sub-tipo de Exterior (Stocks/ETF/REIT/Dólar/Ouro).
-    usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD'], { errorMap: () => ({ message: 'Sub-tipo inválido' }) }).optional(),
+    usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD'], { error: 'Sub-tipo inválido' }).optional(),
     // Reclassificação CASH → FIXED_INCOME (o controller só aceita essa direção).
     type: z.literal('FIXED_INCOME').optional(),
     fixedIncomeRate: z.coerce.number().finite('Taxa inválida').optional(),
@@ -126,7 +127,7 @@ export const updateTargetsSchema = z.object({
 // POST /wallet/fix-splits — ação corporativa manual.
 export const corporateActionSchema = z.object({
   body: z.object({
-    ticker: z.string({ required_error: 'Ticker é obrigatório' }).min(1, 'Ticker é obrigatório').trim(),
+    ticker: z.string(typeMessages({ required: 'Ticker é obrigatório' })).min(1, 'Ticker é obrigatório').trim(),
     type: z.string().trim().optional(),
   }),
 });

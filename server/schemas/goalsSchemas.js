@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { typeMessages } from './zodMessages.js';
 import { calendarDate } from './calendarDate.js';
 
 /**
@@ -14,17 +15,17 @@ const COLORS = ['emerald', 'blue', 'purple', 'yellow', 'red', 'cyan'];
 // POST /goals — criar meta.
 export const createGoalSchema = z.object({
   body: z.object({
-    name: z.string({ required_error: 'Nome é obrigatório' }).trim().min(1, 'Nome é obrigatório').max(60, 'Nome muito longo'),
+    name: z.string(typeMessages({ required: 'Nome é obrigatório' })).trim().min(1, 'Nome é obrigatório').max(60, 'Nome muito longo'),
     icon: z.enum(ICONS).optional(),
     color: z.enum(COLORS).optional(),
-    targetAmount: z.coerce.number({ required_error: 'Valor-alvo é obrigatório', invalid_type_error: 'Valor-alvo inválido' })
+    targetAmount: z.coerce.number(typeMessages({ required: 'Valor-alvo é obrigatório', invalid: 'Valor-alvo inválido' }))
       .finite('Valor-alvo inválido')
       .positive('Valor-alvo deve ser maior que zero'),
-    monthlyTarget: z.coerce.number({ invalid_type_error: 'Aporte mensal inválido' })
+    monthlyTarget: z.coerce.number(typeMessages({ invalid: 'Aporte mensal inválido' }))
       .finite('Aporte mensal inválido')
       .nonnegative('Aporte não pode ser negativo')
       .optional(),
-    expectedAnnualRate: z.coerce.number({ invalid_type_error: 'Taxa inválida' })
+    expectedAnnualRate: z.coerce.number(typeMessages({ invalid: 'Taxa inválida' }))
       .finite('Taxa inválida')
       .min(0, 'Taxa não pode ser negativa')
       .max(100, 'Taxa muito alta')
@@ -48,7 +49,7 @@ export const updateGoalSchema = z.object({
     monthlyTarget: z.coerce.number().finite('Aporte mensal inválido').nonnegative('Aporte não pode ser negativo').optional(),
     expectedAnnualRate: z.coerce.number().finite('Taxa inválida').min(0, 'Taxa não pode ser negativa').max(100, 'Taxa muito alta').optional(),
     targetDate: calendarDate('Data inválida').nullable().optional(),
-    startValue: z.coerce.number({ invalid_type_error: 'Patrimônio inicial inválido' })
+    startValue: z.coerce.number(typeMessages({ invalid: 'Patrimônio inicial inválido' }))
       .finite('Patrimônio inicial inválido')
       .nonnegative('Patrimônio inicial não pode ser negativo')
       .optional(),
@@ -63,7 +64,7 @@ export const updateGoalSchema = z.object({
 export const addContributionSchema = z.object({
   params: z.object({ id: objectId }),
   body: z.object({
-    amount: z.coerce.number({ required_error: 'Valor é obrigatório', invalid_type_error: 'Valor inválido' })
+    amount: z.coerce.number(typeMessages({ required: 'Valor é obrigatório', invalid: 'Valor inválido' }))
       .finite('Valor inválido')
       .refine((v) => v !== 0, 'Valor não pode ser zero'),
     date: calendarDate('Data inválida').optional(),
@@ -76,7 +77,7 @@ export const addContributionSchema = z.object({
 export const renameJourneySchema = z.object({
   params: z.object({ id: objectId }),
   body: z.object({
-    name: z.string({ required_error: 'Nome é obrigatório' })
+    name: z.string(typeMessages({ required: 'Nome é obrigatório' }))
       .trim()
       .min(1, 'Nome é obrigatório')
       .max(60, 'Nome muito longo'),

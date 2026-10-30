@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { typeMessages } from './zodMessages.js';
 
 /**
  * (Fase 2) Schemas Zod do CRUD de carteiras (`/api/wallets`, plural) —
@@ -9,7 +10,7 @@ import { z } from 'zod';
 // ObjectId do Mongo: 24 hex. Evita CastError feio em rotas /:walletId.
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, 'ID inválido');
 
-const walletName = z.string({ required_error: 'Nome é obrigatório' })
+const walletName = z.string(typeMessages({ required: 'Nome é obrigatório' }))
     .trim()
     .min(1, 'Nome é obrigatório')
     .max(40, 'Nome muito longo (máx. 40)');

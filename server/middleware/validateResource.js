@@ -1,3 +1,11 @@
+import { z } from 'zod';
+
+// Mensagens padrão da Zod em português do Brasil. Na Zod 3 o padrão era
+// "Required"; na 4 seria "Invalid input: expected string, received undefined" —
+// e é a primeira mensagem que chega ao usuário quando o schema não traz uma
+// própria. Configuração global da instância da Zod: vale para todo schema.
+z.config(z.locales.ptBR());
+
 const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 // Devolve à requisição o que o schema PRODUZIU (trim, toLowerCase, coerce de
@@ -22,9 +30,10 @@ const validate = (schema) => (req, res, next) => {
       params: req.params,
     });
   } catch (e) {
-    // Retorna o primeiro erro encontrado de forma amigável
-    const errorMessage = e.errors && e.errors.length > 0
-      ? e.errors[0].message
+    // Retorna o primeiro erro encontrado de forma amigável. Zod 4: a lista é
+    // `issues` (o alias `errors` da Zod 3 não existe mais).
+    const errorMessage = e.issues && e.issues.length > 0
+      ? e.issues[0].message
       : 'Dados inválidos';
 
     return res.status(400).json({ message: errorMessage });

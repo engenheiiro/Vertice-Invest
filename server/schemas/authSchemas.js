@@ -1,24 +1,25 @@
 import { z } from 'zod';
+import { typeMessages } from './zodMessages.js';
 import { getPasswordError } from '../utils/passwordPolicy.js';
 
 // Esquema de Registro
 export const registerSchema = z.object({
   body: z.object({
-    name: z.string({ required_error: "Nome é obrigatório" })
+    name: z.string(typeMessages({ required: "Nome é obrigatório" }))
       .min(2, "Nome deve ter no mínimo 2 caracteres")
       .trim(),
 
-    email: z.string({ required_error: "Email é obrigatório" })
+    email: z.string(typeMessages({ required: "Email é obrigatório" }))
       .email("Formato de email inválido")
       .toLowerCase() // Normalização automática
       .trim(),
 
     // (S6) Política forte e única (8+, maiúscula, minúscula, dígito, não-comum),
     // alinhada à validação de reset/troca de senha no authController.
-    password: z.string({ required_error: "Senha é obrigatória" })
+    password: z.string(typeMessages({ required: "Senha é obrigatória" }))
       .superRefine((val, ctx) => {
         const err = getPasswordError(val);
-        if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+        if (err) ctx.addIssue({ code: 'custom', message: err });
       }),
 
     // Consentimento LGPD (Art. 7, 8) — booleans enviados pelo frontend
@@ -73,33 +74,33 @@ export const avatarSchema = z.object({
 // Esquema de Login
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: "Email é obrigatório" })
+    email: z.string(typeMessages({ required: "Email é obrigatório" }))
       .email("Formato de email inválido")
       .toLowerCase() // Garante consistência na busca
       .trim(),
       
-    password: z.string({ required_error: "Senha é obrigatória" })
+    password: z.string(typeMessages({ required: "Senha é obrigatória" }))
       .min(1, "Senha é obrigatória")
   })
 });
 
-const currentPassword = z.string({ required_error: 'Senha atual é obrigatória.' })
+const currentPassword = z.string(typeMessages({ required: 'Senha atual é obrigatória.' }))
   .min(1, 'Senha atual é obrigatória.')
   .max(1024, 'Senha inválida.');
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string({ required_error: 'Email é obrigatório.' }).email('Formato de email inválido.').trim().toLowerCase(),
+    email: z.string(typeMessages({ required: 'Email é obrigatório.' })).email('Formato de email inválido.').trim().toLowerCase(),
   }).strict(),
 });
 
 export const resetPasswordSchema = z.object({
   body: z.object({
-    token: z.string({ required_error: 'Token é obrigatório.' }).min(32, 'Token inválido.').max(512, 'Token inválido.'),
-    newPassword: z.string({ required_error: 'Nova senha é obrigatória.' })
+    token: z.string(typeMessages({ required: 'Token é obrigatório.' })).min(32, 'Token inválido.').max(512, 'Token inválido.'),
+    newPassword: z.string(typeMessages({ required: 'Nova senha é obrigatória.' }))
       .superRefine((val, ctx) => {
         const err = getPasswordError(val);
-        if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+        if (err) ctx.addIssue({ code: 'custom', message: err });
       }),
   }).strict(),
 });

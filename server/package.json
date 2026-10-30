@@ -54,8 +54,8 @@
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.11.0",
-    "yahoo-finance2": "^3.15.3",
-    "zod": "^3.22.4"
+    "yahoo-finance2": "^4.0.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.0",

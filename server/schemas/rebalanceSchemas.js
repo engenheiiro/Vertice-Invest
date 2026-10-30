@@ -6,7 +6,7 @@ export const rebalanceSchema = z.object({
   body: z.object({
     riskProfile: z
       .enum(['DEFENSIVE', 'MODERATE', 'BOLD'], {
-        errorMap: () => ({ message: 'Perfil de risco inválido' }),
+        error: 'Perfil de risco inválido',
       })
       .optional()
       .default('MODERATE'),

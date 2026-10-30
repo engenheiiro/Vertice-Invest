@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { typeMessages } from './zodMessages.js';
 import { calendarDate } from './calendarDate.js';
 
 /**
@@ -30,20 +31,20 @@ const importRow = z.object({
   // "PETR4 - PETROLEO BRASILEIRO S.A. PETROBRAS", e recusar isso aqui derrubava
   // o import inteiro com "Ticker muito longo" antes de o `extractTicker` do
   // serviço ter a chance de reduzir o rótulo ao código de negociação.
-  ticker: z.string({ required_error: 'Ticker é obrigatório' })
+  ticker: z.string(typeMessages({ required: 'Ticker é obrigatório' }))
     .min(1, 'Ticker é obrigatório')
     .max(120, 'Ticker muito longo')
     .trim(),
-  type: z.enum(ASSET_TYPES, { errorMap: () => ({ message: 'Tipo de ativo inválido' }) }).optional(),
+  type: z.enum(ASSET_TYPES, { error: 'Tipo de ativo inválido' }).optional(),
   // Diferente do POST /wallet/add, que infere BUY/SELL pelo SINAL da quantidade:
   // aqui o lado vem explícito do parser, porque "Venda" no extrato da B3 é uma
   // coluna, não um sinal, e reconstruir o sinal só para desmontá-lo de novo
   // seria uma chance a mais de errar.
-  side: z.enum(['BUY', 'SELL'], { errorMap: () => ({ message: 'Operação deve ser compra ou venda' }) }),
-  quantity: z.coerce.number({ invalid_type_error: 'Quantidade inválida' })
+  side: z.enum(['BUY', 'SELL'], { error: 'Operação deve ser compra ou venda' }),
+  quantity: z.coerce.number(typeMessages({ invalid: 'Quantidade inválida' }))
     .finite('Quantidade inválida')
     .positive('Quantidade deve ser maior que zero'),
-  price: z.coerce.number({ invalid_type_error: 'Preço inválido' })
+  price: z.coerce.number(typeMessages({ invalid: 'Preço inválido' }))
     .finite('Preço inválido')
     .nonnegative('Preço não pode ser negativo'),
   date: calendarDate('Data inválida'),
@@ -63,7 +64,7 @@ const rowList = z.array(importRow)
 // `type` é opcional aqui: descobrir o tipo é justamente o trabalho do preview.
 export const importPreviewSchema = z.object({
   body: z.object({
-    source: z.enum(IMPORT_SOURCES, { errorMap: () => ({ message: 'Fonte de importação inválida' }) }),
+    source: z.enum(IMPORT_SOURCES, { error: 'Fonte de importação inválida' }),
     rows: rowList,
   }),
 });
@@ -73,9 +74,9 @@ export const importPreviewSchema = z.object({
 // (pelo resolvedor ou por ele). Sem isso, gravaríamos posição sem classe.
 export const importCommitSchema = z.object({
   body: z.object({
-    source: z.enum(IMPORT_SOURCES, { errorMap: () => ({ message: 'Fonte de importação inválida' }) }),
+    source: z.enum(IMPORT_SOURCES, { error: 'Fonte de importação inválida' }),
     rows: z.array(importRow.extend({
-      type: z.enum(ASSET_TYPES, { errorMap: () => ({ message: 'Defina o tipo de cada ativo antes de importar' }) }),
+      type: z.enum(ASSET_TYPES, { error: 'Defina o tipo de cada ativo antes de importar' }),
     }))
       .min(1, 'Nenhuma linha para importar')
       .max(MAX_IMPORT_ROWS, `Máximo de ${MAX_IMPORT_ROWS} lançamentos por importação`)
