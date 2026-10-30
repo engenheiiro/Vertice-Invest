@@ -525,8 +525,15 @@ export async function getAttachment(attachmentId, { userId, isAdmin }) {
     if (!attachment) throw new SupportError('Anexo não encontrado.', 404);
 
     if (!isAdmin) {
-        const owns = await SupportTicket.exists({ _id: attachment.ticket, user: userId });
-        if (!owns) throw new SupportError('Anexo não encontrado.', 404);
+        // Ser dono do ticket não basta: anexo de NOTA INTERNA também aponta para
+        // o ticket do usuário (regra 12 — nota interna nunca cruza a fronteira).
+        // Só passa o anexo citado por alguma mensagem visível ao titular.
+        const visible = await SupportTicket.exists({
+            _id: attachment.ticket,
+            user: userId,
+            messages: { $elemMatch: { attachments: attachment._id, isInternal: { $ne: true } } },
+        });
+        if (!visible) throw new SupportError('Anexo não encontrado.', 404);
     }
 
     return attachment;

@@ -1,6 +1,6 @@
 
 import mongoose from 'mongoose';
-import { runTransaction } from '../utils/dbTransaction.js';
+import { runTransaction, txError } from '../utils/dbTransaction.js';
 import AssetTransaction from '../models/AssetTransaction.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import UserAsset from '../models/UserAsset.js';
@@ -14,7 +14,7 @@ import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { DERIVED_EXPIRY_MS, DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
@@ -1278,7 +1278,7 @@ export const financialService = {
         for (const tx of transactions) {
             // Quantidade em 8 casas (cripto); valor monetário continua em 2/4 casas.
             const txQty = safeQuantity(tx.quantity);
-            const txPrice = safeFloat(tx.price);
+            const txPrice = safeUnitPrice(tx.price);
             const txTotal = safeCurrency(txQty * txPrice);
             const txFx = rateOf(tx);
             const txTotalBrl = safeCurrency(txTotal * txFx);
@@ -1297,7 +1297,7 @@ export const financialService = {
                 taxLots.push({ quantity: txQty, price: txPrice, date: tx.date, fxRate: txFx });
                 if (!firstBuyDate) firstBuyDate = tx.date;
             } else if (tx.type === 'SELL') {
-                const currentAvg = quantity > 0 ? safeFloat(totalCost / quantity) : 0;
+                const currentAvg = quantity > 0 ? safeUnitPrice(totalCost / quantity) : 0;
                 const costOfSoldShares = safeCurrency(txQty * currentAvg);
                 const profit = safeSub(txTotal, costOfSoldShares);
                 // Baixa proporcional do custo em BRL — preserva o câmbio médio das
@@ -1360,7 +1360,13 @@ export const financialService = {
             }, ...keptLots];
         }
 
-        if (quantity < -QUANTITY_EPSILON) throw new Error(`Saldo insuficiente para ${ticker}.`);
+        // Erro do USUÁRIO, não do servidor: a sequência de lançamentos vende mais
+        // do que havia (venda datada antes das compras, ou exclusão de uma compra
+        // da qual uma venda posterior depende). Sem status, virava 500 e chegava
+        // como "Erro interno no servidor" — e entrava no painel como falha nossa.
+        if (quantity < -QUANTITY_EPSILON) {
+            throw txError(400, `Saldo insuficiente para ${ticker}: uma venda ficaria maior que a quantidade comprada até a data dela.`);
+        }
         if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; totalCostBrl = 0; taxLots = []; }
 
         // Persistência do carimbo de câmbio: fora do laço, em uma escrita só, e

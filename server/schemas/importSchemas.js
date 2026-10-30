@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDate } from './calendarDate.js';
 
 /**
  * Schemas Zod da importação de carteira.
@@ -45,7 +46,7 @@ const importRow = z.object({
   price: z.coerce.number({ invalid_type_error: 'Preço inválido' })
     .finite('Preço inválido')
     .nonnegative('Preço não pode ser negativo'),
-  date: z.coerce.date({ invalid_type_error: 'Data inválida' }),
+  date: calendarDate('Data inválida'),
   currency: z.enum(['BRL', 'USD']).optional(),
   name: z.string().trim().max(120, 'Nome muito longo').optional(),
 });

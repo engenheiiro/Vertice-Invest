@@ -90,4 +90,21 @@ describe('login — gate de MFA (I14)', () => {
     await login({ body: { email: 'a@b.com', password: 'errada' }, headers: {}, socket: {} }, res, vi.fn());
     expect(res.statusCode).toBe(401);
   });
+
+  it('conta desativada: 403 sem emitir tokens', async () => {
+    mockFindOne(baseUser({ isActive: false }));
+    const res = mockRes();
+    await login({ body: { email: 'a@b.com', password: 'x' }, headers: {}, socket: {} }, res, vi.fn());
+    expect(res.statusCode).toBe(403);
+    expect(res.body.accessToken).toBeUndefined();
+    expect(res.cookie).not.toHaveBeenCalled();
+  });
+
+  it('conta desativada com senha ERRADA: 401 genérico (não revela o estado da conta)', async () => {
+    bcrypt.compare.mockResolvedValue(false);
+    mockFindOne(baseUser({ isActive: false }));
+    const res = mockRes();
+    await login({ body: { email: 'a@b.com', password: 'errada' }, headers: {}, socket: {} }, res, vi.fn());
+    expect(res.statusCode).toBe(401);
+  });
 });

@@ -27,7 +27,7 @@ export const setupMfa = async (req, res, next) => {
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
     if (user.mfaEnabled) return res.status(400).json({ message: 'MFA já está ativo.' });
     if (!await bcrypt.compare(password, user.password)) {
-      return res.status(401).json({ message: 'Senha atual inválida.' });
+      return res.status(403).json({ message: 'Senha atual inválida.' });
     }
 
     const secret = generateMfaSecret();

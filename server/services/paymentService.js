@@ -6,6 +6,8 @@ import { ANNUAL_INSTALLMENTS, PLANS } from '../config/subscription.js';
 // Inicializa o cliente MP
 const accessToken = process.env.MP_ACCESS_TOKEN;
 const client = accessToken ? new MercadoPagoConfig({ accessToken }) : null;
+// Mesmo teto que o SDK aplica às chamadas dele (default de 10s do mercadopago).
+const MP_FETCH_TIMEOUT_MS = 10_000;
 
 const getApiBaseUrl = () => {
     const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.API_URL || 'http://localhost:5000';
@@ -221,9 +223,14 @@ export const paymentService = {
     async getAuthorizedPayment(authorizedPaymentId) {
         if (!client || !authorizedPaymentId) return null;
         try {
+            // Fora do SDK (que já tem teto de 10s): sem relógio próprio este fetch
+            // podia pendurar o webhook indefinidamente.
             const response = await fetch(
-                `https://api.mercadopago.com/authorized_payments/${authorizedPaymentId}`,
-                { headers: { Authorization: `Bearer ${accessToken}` } }
+                `https://api.mercadopago.com/authorized_payments/${encodeURIComponent(authorizedPaymentId)}`,
+                {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    signal: AbortSignal.timeout(MP_FETCH_TIMEOUT_MS),
+                }
             );
             if (!response.ok) {
                 logger.error(`Erro authorized_payment ${authorizedPaymentId}: HTTP ${response.status}`);

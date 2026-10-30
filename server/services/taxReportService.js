@@ -4,7 +4,7 @@ import UserAsset from '../models/UserAsset.js';
 import DividendEvent from '../models/DividendEvent.js';
 import { financialService } from './financialService.js';
 import { resolvePaymentDate } from '../utils/dividendPaymentDate.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { isBusinessDay } from '../utils/dateUtils.js';
 
 /**
@@ -123,7 +123,7 @@ export const simulatePortfolio = (txs, metaOf, year) => {
         const meta = metaOf(ticker);
         const category = taxCategory(meta.type, meta.currency);
         const qty = safeFloat(tx.quantity);
-        const price = safeFloat(tx.price);
+        const price = safeUnitPrice(tx.price);
         const total = safeCurrency(qty * price);
 
         if (!portfolio[ticker]) portfolio[ticker] = { qty: 0, cost: 0 };

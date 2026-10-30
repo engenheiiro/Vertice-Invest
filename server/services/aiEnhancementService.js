@@ -2,9 +2,9 @@
 import { GoogleGenAI } from "@google/genai";
 import logger from '../config/logger.js';
 import { finalizeRanking } from '../utils/rankingContract.js';
-import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
+import { GEMINI_TEXT_MODEL, geminiClientOptions } from '../config/aiModels.js';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI(geminiClientOptions());
 
 // Helper para limpar markdown de JSON
 const cleanJsonString = (str) => {

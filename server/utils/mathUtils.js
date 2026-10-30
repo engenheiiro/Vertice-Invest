@@ -34,6 +34,19 @@ export const safeDiv = (a, b) => {
  */
 export const QUANTITY_EPSILON = 1e-9; // abaixo disto a posição é considerada zerada
 
+/**
+ * PREÇO UNITÁRIO não é dinheiro: abaixo de 1 a régua de 4 casas do safeFloat
+ * destrói o número. SHIB (~US$ 0,00001234) virava 0 — a posição inteira valia
+ * zero e o preço médio também. Acima de 1 mantém as 4 casas de sempre; abaixo
+ * guarda 8 algarismos SIGNIFICATIVOS, que é a precisão que a cotação tem.
+ */
+export const safeUnitPrice = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    if (Math.abs(numeric) >= 1) return Number(numeric.toFixed(4));
+    return Number(numeric.toPrecision(8));
+};
+
 export const safeQuantity = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 0;
@@ -49,7 +62,7 @@ export const subQty = (a, b) => safeQuantity(safeQuantity(a) - safeQuantity(b));
  */
 export const safeValue = (quantity, price) => {
     const q = safeQuantity(quantity);
-    const p = safeFloat(price);
+    const p = safeUnitPrice(price);
     if (!q || !p) return 0;
     return safeCurrency(q * p);
 };
@@ -61,7 +74,7 @@ export const safeValue = (quantity, price) => {
 export const safePrice = (totalCost, quantity) => {
     const q = safeQuantity(quantity);
     if (!q) return 0;
-    return safeFloat(safeFloat(totalCost) / q);
+    return safeUnitPrice(safeFloat(totalCost) / q);
 };
 
 export const calculatePercent = (current, initial) => {

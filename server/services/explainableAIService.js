@@ -7,7 +7,7 @@
  * prompt e regra de gravação por perfil.
  */
 
-import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
+import { GEMINI_TEXT_MODEL, geminiClientOptions } from '../config/aiModels.js';
 
 export const PROFILE_LABEL_PT = { DEFENSIVE: 'Defensivo', MODERATE: 'Moderado', BOLD: 'Arrojado' };
 
@@ -45,7 +45,7 @@ export const generateExplainableText = async (analysis, profile = null) => {
   if (!process.env.API_KEY) throw new ExplainableAIError('API_KEY não configurada.', 'API_KEY_MISSING');
 
   const { GoogleGenAI } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI(geminiClientOptions());
   const response = await ai.models.generateContent({ model: GEMINI_TEXT_MODEL, contents: prompt });
 
   const text = String(response?.text || '').trim();

@@ -58,8 +58,22 @@ describe('getAttachment', () => {
         const result = await getAttachment(ANEXO, { userId: DONO, isAdmin: false });
 
         expect(result.data).toBe('data:image/png;base64,AAAA');
-        // A pergunta feita ao banco é "este ticket é seu?", não "este arquivo é seu?".
-        expect(mocks.exists).toHaveBeenCalledWith({ _id: TICKET, user: DONO });
+        // A pergunta feita ao banco é "este ticket é seu, e o anexo está numa
+        // mensagem que você pode ver?", não "este arquivo é seu?".
+        expect(mocks.exists).toHaveBeenCalledWith({
+            _id: TICKET,
+            user: DONO,
+            messages: { $elemMatch: { attachments: ANEXO, isInternal: { $ne: true } } },
+        });
+    });
+
+    it('recusa ao dono do ticket o anexo que só aparece em NOTA INTERNA (regra 12)', async () => {
+        // O ticket é dele, mas nenhuma mensagem visível cita o anexo: o banco
+        // responde null para o filtro com isInternal ≠ true.
+        mocks.exists.mockResolvedValue(null);
+
+        await expect(getAttachment(ANEXO, { userId: DONO, isAdmin: false }))
+            .rejects.toMatchObject({ statusCode: 404 });
     });
 
     it('recusa quem não é dono do ticket', async () => {

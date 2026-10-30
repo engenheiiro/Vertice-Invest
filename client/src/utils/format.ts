@@ -35,7 +35,13 @@ export function formatCurrency(
   options: FormatOptions = {},
 ): string {
   if (options.privacy) return PRIVACY_MASK;
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(toSafeNumber(value));
+  const v = toSafeNumber(value);
+  // Abaixo de um centavo (preço unitário de cripto como SHIB, ~US$ 0,00001)
+  // as 2 casas fixas exibiam "US$ 0,00". Ali vale a precisão significativa.
+  if (v !== 0 && Math.abs(v) < 0.01) {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumSignificantDigits: 4 }).format(v);
+  }
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(v);
 }
 
 /**

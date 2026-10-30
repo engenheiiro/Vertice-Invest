@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, reconcileRoundedParts, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, reconcileRoundedParts, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { brazilDateKey, countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
@@ -493,8 +493,8 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
     } else {
         const cached = assetMap.get(asset.ticker);
         if (cached && cached.price > 0) {
-            currentPrice = safeFloat(Number(cached.price));
-            const anchorClose = safeFloat(Number(anchorCloses?.get(historyStorageKey(asset.ticker, asset.type)) || 0));
+            currentPrice = safeUnitPrice(Number(cached.price));
+            const anchorClose = safeUnitPrice(Number(anchorCloses?.get(historyStorageKey(asset.ticker, asset.type)) || 0));
             // Fechamento GRAVADO do dia-âncora: o mesmo número que virou patrimônio
             // no snapshot. Vale para todas as classes — ação, FII, ETF e cripto — e
             // é o que impede que um ajuste de referência do provedor (dia-ex) ou um
@@ -1310,7 +1310,7 @@ export const addAssetTransaction = async (req, res, next) => {
         if (date && transactionDayKey > brazilTodayKey) throw AppError.badRequest("Data futura não permitida.");
         await runTransaction(async (session) => {
             const transactionQuantity = safeQuantity(Math.abs(Number(quantity)));
-            const transactionPrice = safeFloat(Math.abs(Number(price)));
+            const transactionPrice = safeUnitPrice(Math.abs(Number(price)));
             const newTx = new AssetTransaction({
                 user: userId, wallet: walletId, ticker: ticker.toUpperCase(), type: transactionType,
                 quantity: transactionQuantity,

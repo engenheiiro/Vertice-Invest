@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDate } from './calendarDate.js';
 
 /**
  * Schemas Zod das rotas de Metas (planejador patrimonial). Validação estrutural
@@ -28,8 +29,8 @@ export const createGoalSchema = z.object({
       .min(0, 'Taxa não pode ser negativa')
       .max(100, 'Taxa muito alta')
       .optional(),
-    startDate: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
-    targetDate: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
+    startDate: calendarDate('Data inválida').optional(),
+    targetDate: calendarDate('Data inválida').optional(),
     mirrorWallet: z.coerce.boolean().optional(),
     manualBalance: z.coerce.number().finite('Saldo inválido').nonnegative().optional(),
     previousGoalId: objectId.nullable().optional(),
@@ -46,7 +47,7 @@ export const updateGoalSchema = z.object({
     targetAmount: z.coerce.number().finite('Valor-alvo inválido').positive('Valor-alvo deve ser maior que zero').optional(),
     monthlyTarget: z.coerce.number().finite('Aporte mensal inválido').nonnegative('Aporte não pode ser negativo').optional(),
     expectedAnnualRate: z.coerce.number().finite('Taxa inválida').min(0, 'Taxa não pode ser negativa').max(100, 'Taxa muito alta').optional(),
-    targetDate: z.coerce.date({ invalid_type_error: 'Data inválida' }).nullable().optional(),
+    targetDate: calendarDate('Data inválida').nullable().optional(),
     startValue: z.coerce.number({ invalid_type_error: 'Patrimônio inicial inválido' })
       .finite('Patrimônio inicial inválido')
       .nonnegative('Patrimônio inicial não pode ser negativo')
@@ -65,7 +66,7 @@ export const addContributionSchema = z.object({
     amount: z.coerce.number({ required_error: 'Valor é obrigatório', invalid_type_error: 'Valor inválido' })
       .finite('Valor inválido')
       .refine((v) => v !== 0, 'Valor não pode ser zero'),
-    date: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
+    date: calendarDate('Data inválida').optional(),
     note: z.string().trim().max(120, 'Nota muito longa').optional(),
   }),
 });

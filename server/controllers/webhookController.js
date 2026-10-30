@@ -172,9 +172,11 @@ const handlePreapprovalEvent = async (preapprovalId) => {
 
     switch (preapproval.status) {
         case 'authorized': {
-            await syncRecurringPeriod(user, preapproval);
-            // Só avisa na estreia — renovações têm o e-mail de recibo próprio.
-            if (!wasRecurring) {
+            const { synced } = await syncRecurringPeriod(user, preapproval);
+            // Só avisa na estreia — renovações têm o e-mail de recibo próprio. E
+            // só se a assinatura de fato passou a governar a conta (um período
+            // avulso pago em vigor pode ter prevalecido).
+            if (synced && !wasRecurring) {
                 await sendSubscriptionCreatedEmail(user.email, user.plan, user.nextBillingDate);
             }
             break;

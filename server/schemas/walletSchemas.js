@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { calendarDate } from './calendarDate.js';
 
 /**
  * (I9) Schemas Zod das rotas de escrita da carteira. Centraliza a validação
@@ -25,14 +26,14 @@ export const addTransactionSchema = z.object({
     price: z.coerce.number({ required_error: 'Preço é obrigatório', invalid_type_error: 'Preço inválido' })
       .finite('Preço inválido')
       .nonnegative('Preço não pode ser negativo'),
-    date: z.coerce.date({ invalid_type_error: 'Data inválida' }).optional(),
+    date: calendarDate('Data inválida').optional(),
     fixedIncomeRate: z.coerce.number().finite('Taxa inválida').optional(),
     // Pós-fixados/indexados: índice + spread a.a. sobre o índice (Tesouro Selic/IPCA).
     fixedIncomeIndex: z.enum(['SELIC', 'CDI', 'IPCA', 'PRE']).optional(),
     fixedIncomeSpread: z.coerce.number().finite('Spread inválido').optional(),
     // C2: vencimento do título (Renda Fixa). No vencimento o accrual congela e o
     // ativo é marcado VENCIDO. Aceita YYYY-MM-DD (input date) ou ISO.
-    maturityDate: z.coerce.date({ invalid_type_error: 'Data de vencimento inválida' }).optional(),
+    maturityDate: calendarDate('Data de vencimento inválida').optional(),
     name: z.string().trim().max(120, 'Nome muito longo').optional(),
     // Sub-tipo de Exterior escolhido manualmente no cadastro (Stocks/ETF/REIT/Dólar/Ouro).
     usSubType: z.enum(['STOCK', 'ETF', 'REIT', 'DOLLAR', 'GOLD']).optional(),
@@ -59,7 +60,7 @@ export const updateAssetSchema = z.object({
     fixedIncomeRate: z.coerce.number().finite('Taxa inválida').optional(),
     fixedIncomeIndex: z.enum(['SELIC', 'CDI', 'IPCA', 'PRE']).optional(),
     fixedIncomeSpread: z.coerce.number().finite('Spread inválido').optional(),
-    maturityDate: z.coerce.date({ invalid_type_error: 'Data de vencimento inválida' }).optional(),
+    maturityDate: calendarDate('Data de vencimento inválida').optional(),
     // Alterna "Reserva separada" (fora da base de alocação) de CASH/Renda Fixa.
     isReserve: z.coerce.boolean().optional(),
   }),

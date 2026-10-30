@@ -11,10 +11,10 @@ import {
     QUANTITY_EPSILON,
     safeAdd,
     safeCurrency,
-    safeFloat,
     safePrice,
     safeQuantity,
     safeSub,
+    safeUnitPrice,
     safeValue,
     subQty,
 } from '../utils/mathUtils.js';
@@ -322,7 +322,7 @@ export const applyImport = async ({ userId, walletId, rows, source }) => {
         const docs = normalized.map((row) => {
             const ticker = row.ticker;
             const quantity = safeQuantity(Math.abs(Number(row.quantity)));
-            const price = safeFloat(Math.abs(Number(row.price)));
+            const price = safeUnitPrice(Math.abs(Number(row.price)));
             return {
                 user: userId,
                 wallet: walletId,

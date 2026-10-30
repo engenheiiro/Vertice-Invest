@@ -29,6 +29,10 @@ export const resolvePlanKey = (planKey) => basePlanOf(planKey) || planKey || 'ES
 
 const MS_PER_DAY = 86_400_000;
 
+// Status do PreApproval no MP → status da assinatura na conta. Ausente (pending,
+// authorized) = ACTIVE.
+const PREAPPROVAL_STATUS_TO_SUBSCRIPTION = { cancelled: 'CANCELED', paused: 'PAUSED' };
+
 /**
  * Data em que o acesso realmente cai, incluindo a carência de assinaturas
  * recorrentes. Assinatura cancelada não ganha carência: o usuário já sabe que a
@@ -114,6 +118,17 @@ export const grantOneTimePeriod = async (user, planKey, { gatewayId, amount, met
         throw e;
     }
 
+    // Valor abaixo do preço do plano: credita mesmo assim (o preço pode ter mudado
+    // entre o checkout e a liquidação, e negar acesso a quem pagou é pior), mas
+    // deixa rastro em nível de erro — é o sinal de uma cobrança forjada ou de um
+    // preço desalinhado entre a Preference e config/subscription.js.
+    const expectedPrice = PLANS[planKey]?.price ?? PLANS[plan]?.price;
+    if (Number.isFinite(expectedPrice) && Number.isFinite(Number(amount)) && Number(amount) + 0.01 < expectedPrice) {
+        logger.error('🔥 Pagamento avulso abaixo do preço do plano', {
+            userId: user._id.toString(), gatewayId: gatewayId?.toString(), planKey, amount, expectedPrice,
+        });
+    }
+
     // Só depois da barreira de idempotência: uma reentrega do mesmo pagamento
     // volta acima e não tenta cancelar duas vezes.
     await stopRecurringAfterOneTime(user);
@@ -161,19 +176,54 @@ export const syncRecurringPeriod = async (user, preapproval) => {
     const { planKey } = parseExternalReference(preapproval.external_reference);
     const plan = resolvePlanKey(planKey);
     const nextPayment = preapproval.next_payment_date ? new Date(preapproval.next_payment_date) : null;
+    const hasNextPayment = nextPayment && !Number.isNaN(nextPayment.getTime());
+
+    // Período AVULSO já pago que vai além da próxima cobrança deste preapproval
+    // governa a conta. Cenário real: o cliente troca o mensal pelo anual, o
+    // cancelamento do mensal falha (só vira log em stopRecurringAfterOneTime) e o
+    // evento seguinte do mensal rebaixaria plano e `validUntil` de 12 meses para 1.
+    // Pago é pago: não se encurta. Só o vínculo é registrado, para os eventos de
+    // cancelamento desse preapproval continuarem reconhecidos.
+    const paidUntil = user.validUntil ? new Date(user.validUntil) : null;
+    if (
+        user.subscriptionType === 'ONE_TIME'
+        && paidUntil && paidUntil > new Date()
+        && hasNextPayment && nextPayment < paidUntil
+    ) {
+        user.mpPreapprovalId = preapproval.id?.toString();
+        await user.save();
+        invalidateUser(user._id);
+        logger.error('🔥 Preapproval ativo sobre período avulso pago — período avulso mantido; risco de cobrança dupla', {
+            userId: user._id.toString(),
+            preapprovalId: user.mpPreapprovalId,
+            preapprovalStatus: preapproval.status,
+            paidUntil: paidUntil.toISOString(),
+            nextPayment: nextPayment.toISOString(),
+        });
+        return { synced: false, reason: 'ONE_TIME_PERIOD_IN_FORCE', plan: user.plan, validUntil: user.validUntil };
+    }
+
+    // O status vem do MP, não é presumido. Esta função também roda depois de uma
+    // cobrança liquidada (tópicos `payment` e `subscription_authorized_payment`):
+    // se o cliente cancelou logo após a cobrança, marcar ACTIVE aqui ressuscitava
+    // a assinatura — e a reentrega do evento de cancelamento podia nunca vir.
+    const status = PREAPPROVAL_STATUS_TO_SUBSCRIPTION[preapproval.status] || 'ACTIVE';
+    const stillBilling = status === 'ACTIVE';
 
     user.plan = plan;
     user.subscriptionType = 'RECURRING';
     // A recorrência do MP (PreApproval) só existe no ciclo mensal — o anual é
     // sempre compra avulsa parcelada.
     user.billingCycle = 'MONTHLY';
-    user.subscriptionStatus = 'ACTIVE';
+    user.subscriptionStatus = status;
     user.mpPreapprovalId = preapproval.id?.toString();
     if (preapproval.payment_method_id) user.cardBrand = preapproval.payment_method_id;
     user.lastPaymentFailedAt = undefined;
 
-    if (nextPayment && !Number.isNaN(nextPayment.getTime())) {
-        user.nextBillingDate = nextPayment;
+    if (hasNextPayment) {
+        // Cancelado/pausado: o período pago vale até a data, mas não há próxima
+        // cobrança para a UI prometer.
+        user.nextBillingDate = stillBilling ? nextPayment : undefined;
         user.validUntil = nextPayment;
     } else if (!user.validUntil) {
         // Autorização sem data de próxima cobrança (raro): garante um período

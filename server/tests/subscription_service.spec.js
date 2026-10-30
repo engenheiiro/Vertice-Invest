@@ -195,6 +195,47 @@ describe('syncRecurringPeriod — absoluto, nunca aditivo', () => {
     expect(user.validUntil).toBeInstanceOf(Date);
     expect(user.validUntil.getTime()).toBeGreaterThan(Date.now());
   });
+  it('preapproval CANCELADO após a cobrança: registra o período pago sem ressuscitar a assinatura', async () => {
+    const next = new Date(Date.now() + 30 * DAY);
+    const user = makeUser({ subscriptionType: 'RECURRING', subscriptionStatus: 'CANCELED' });
+
+    await syncRecurringPeriod(user, { ...preapproval(next.toISOString()), status: 'cancelled' });
+
+    expect(user.subscriptionStatus).toBe('CANCELED');
+    expect(user.validUntil.toISOString()).toBe(next.toISOString());
+    expect(user.nextBillingDate).toBeUndefined();
+  });
+
+  it('preapproval PAUSADO vira PAUSED, não ACTIVE', async () => {
+    const user = makeUser();
+    await syncRecurringPeriod(user, { ...preapproval(new Date(Date.now() + 30 * DAY).toISOString()), status: 'paused' });
+    expect(user.subscriptionStatus).toBe('PAUSED');
+  });
+
+  it('não encurta um período AVULSO pago em vigor (anual) por causa de um mensal que não foi cancelado', async () => {
+    const paidUntil = new Date(Date.now() + 300 * DAY);
+    const user = makeUser({ plan: 'ELITE', subscriptionType: 'ONE_TIME', validUntil: paidUntil });
+
+    const result = await syncRecurringPeriod(user, preapproval(new Date(Date.now() + 30 * DAY).toISOString()));
+
+    expect(result.synced).toBe(false);
+    expect(user.plan).toBe('ELITE');
+    expect(user.subscriptionType).toBe('ONE_TIME');
+    expect(user.validUntil.toISOString()).toBe(paidUntil.toISOString());
+    // O vínculo fica registrado para o cancelamento desse preapproval ser reconhecido.
+    expect(user.mpPreapprovalId).toBe('preapp-1');
+  });
+
+  it('avulso perto do fim não bloqueia a assinatura nova que vai além dele', async () => {
+    const next = new Date(Date.now() + 30 * DAY);
+    const user = makeUser({ subscriptionType: 'ONE_TIME', validUntil: new Date(Date.now() + 5 * DAY) });
+
+    const result = await syncRecurringPeriod(user, preapproval(next.toISOString()));
+
+    expect(result.synced).toBe(true);
+    expect(user.subscriptionType).toBe('RECURRING');
+    expect(user.validUntil.toISOString()).toBe(next.toISOString());
+  });
 });
 
 describe('markSubscriptionCanceled — cancelar não é estornar', () => {

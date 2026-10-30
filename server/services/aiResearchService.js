@@ -11,7 +11,7 @@ import DiscardLog from '../models/DiscardLog.js';
 import { rankingTxtExportService } from './rankingTxtExportService.js';
 // (M9) Threshold global e fallback de Selic centralizados em financialConstants.
 import { BUY_THRESHOLD, DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financialConstants.js';
-import { GEMINI_TEXT_MODEL } from '../config/aiModels.js';
+import { GEMINI_TEXT_MODEL, geminiClientOptions } from '../config/aiModels.js';
 import { randomUUID } from 'crypto';
 import ResearchBatch from '../models/ResearchBatch.js';
 import { compareRankingItems, finalizeRanking, normalizeRankingTicker } from '../utils/rankingContract.js';
@@ -835,7 +835,7 @@ export const aiResearchService = {
         const contextItems = highlights.map(a => `- ${a.ticker} (${a.riskProfile}): R$ ${a.currentPrice} (Score ${a.score}). ${a.thesis}`).join('\n');
         const prompt = `Aja como Head Research. Morning Call curto sobre ${assetClass}.\nDestaques:\n${contextItems}`;
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI(geminiClientOptions());
             const response = await ai.models.generateContent({ model: GEMINI_TEXT_MODEL, contents: prompt });
             return response.text;
         } catch { return "Análise IA indisponível."; }

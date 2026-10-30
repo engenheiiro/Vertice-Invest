@@ -17,6 +17,9 @@ import QuizAttempt from '../models/QuizAttempt.js';
 import UserProgress from '../models/UserProgress.js';
 import Transaction from '../models/Transaction.js';
 import Notification from '../models/Notification.js';
+import GoalJourney from '../models/GoalJourney.js';
+import ImportBatch from '../models/ImportBatch.js';
+import SupportTicket from '../models/SupportTicket.js';
 import { paymentService } from '../services/paymentService.js';
 import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
@@ -28,6 +31,7 @@ import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4)
 import { validateCpf } from '../utils/cpfUtils.js';
 import { sanitizeAcquisition } from '../utils/acquisition.js'; // origem da conta (funil)
 import { anonymizeUserTickets } from '../services/supportService.js'; // LGPD: atendimento sem titular
+import { serializeTicketForUser } from '../utils/supportRules.js'; // regra 12: nota interna não sai na exportação
 
 // Mascara e-mail para logs de auditoria — ex: j***@gmail.com
 const maskEmail = (email) => {
@@ -253,6 +257,15 @@ export const login = async (req, res, next) => {
         return res.status(401).json({ message: invalidMsg });
     }
 
+    // Conta desativada pelo titular não abre sessão. Antes o login emitia tokens
+    // e toda chamada seguinte voltava 401 "Conta desativada" — o app entrava e
+    // nada funcionava. Checado DEPOIS da senha para não revelar o estado da conta
+    // a quem não a conhece.
+    if (user.isActive === false) {
+        logAudit(req, 'LOGIN_FAILED', 'Conta desativada', user._id, maskEmail(email));
+        return res.status(403).json({ message: "Esta conta está desativada. Fale com o suporte para reativá-la." });
+    }
+
     // --- (I14) Segundo fator (opt-in) ---
     // Só afeta usuários com MFA ativo; demais seguem o fluxo normal.
     if (user.mfaEnabled) {
@@ -359,7 +372,7 @@ export const refreshToken = async (req, res, next) => {
       const grace = consumeGraceRotation(requestHash);
       if (grace) {
         const user = await User.findById(grace.userId);
-        if (user) {
+        if (user && user.isActive !== false) {
           const newAccessToken = emitSession(req, res, user, grace.newTokenString);
           return res.status(200).json({ accessToken: newAccessToken });
         }
@@ -384,6 +397,11 @@ export const refreshToken = async (req, res, next) => {
 
     const user = await User.findById(tokenInDb.user);
     if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
+    // Mesmo critério do login: conta desativada não renova sessão.
+    if (user.isActive === false) {
+      await RefreshToken.findByIdAndDelete(tokenInDb._id);
+      return res.status(401).json({ message: "Conta desativada." });
+    }
 
     // ROTAÇÃO (uso único): invalida o token apresentado e emite um novo. Limita a
     // janela de utilidade de um refresh token vazado a uma única renovação.
@@ -646,8 +664,11 @@ export const changePassword = async (req, res, next) => {
         const { oldPassword, newPassword } = req.body;
 
         const user = await User.findById(userId);
+        // Senha errada numa sessão VÁLIDA é 403, nunca 401: o cliente trata 401
+        // como token vencido, renova a sessão e reenvia — cada erro contava duas
+        // vezes no rate limiter. Vale para todas as confirmações de senha/2FA abaixo.
         const isMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!isMatch) return res.status(401).json({ message: "Senha atual incorreta." });
+        if (!isMatch) return res.status(403).json({ message: "Senha atual incorreta." });
 
         const pwError = getPasswordError(newPassword);
         if (pwError) {
@@ -688,7 +709,7 @@ export const deactivateAccount = async (req, res, next) => {
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: "Senha incorreta." });
+        if (!isMatch) return res.status(403).json({ message: "Senha incorreta." });
 
         user.isActive = false;
         user.deactivatedAt = new Date();
@@ -733,6 +754,11 @@ export const exportData = async (req, res, next) => {
             quizAttempts,
             userProgress,
             usageLogs,
+            goalJourneys,
+            importBatches,
+            payments,
+            notifications,
+            supportTickets,
         ] = await Promise.all([
             Wallet.find({ user: userId }).lean(),
             UserAsset.find({ user: userId }).lean(),
@@ -744,6 +770,12 @@ export const exportData = async (req, res, next) => {
             QuizAttempt.find({ userId: userId }).lean(),
             UserProgress.find({ userId: userId }).lean(),
             UsageLog.find({ user: userId }).lean(),
+            GoalJourney.find({ user: userId }).lean(),
+            ImportBatch.find({ user: userId }).lean(),
+            // Histórico de pagamentos (Transaction = cobrança do plano).
+            Transaction.find({ user: userId }).lean(),
+            Notification.find({ user: userId }).lean(),
+            SupportTicket.find({ user: userId }).lean(),
         ]);
 
         logAudit(req, 'DATA_EXPORT', 'Exportação de dados pessoais solicitada', userId, user.email);
@@ -762,6 +794,13 @@ export const exportData = async (req, res, next) => {
             quizAttempts,
             userProgress,
             usageLogs,
+            goalJourneys,
+            importBatches,
+            payments,
+            notifications,
+            // Mesmo corte da tela: nota interna, contexto técnico e etiquetas de
+            // triagem ficam no servidor (regra 12).
+            supportTickets: supportTickets.map(serializeTicketForUser),
         });
     } catch (error) {
         next(error);
@@ -786,13 +825,13 @@ export const deleteAccount = async (req, res, next) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             logAudit(req, 'ACCOUNT_DELETE_FAILED', 'Senha incorreta na exclusão de conta', user._id, maskEmail(user.email));
-            return res.status(401).json({ message: "Senha incorreta." });
+            return res.status(403).json({ message: "Senha incorreta." });
         }
 
         // Segundo fator obrigatório quando a conta tem MFA ativo.
         if (user.mfaEnabled) {
             if (!mfaToken) {
-                return res.status(401).json({ message: "Código de autenticação (2FA) obrigatório.", mfaRequired: true });
+                return res.status(403).json({ message: "Código de autenticação (2FA) obrigatório.", mfaRequired: true });
             }
             let mfaOk = verifyTotp(mfaToken, decrypt(user.mfaSecret));
             if (!mfaOk) {
@@ -801,7 +840,7 @@ export const deleteAccount = async (req, res, next) => {
             }
             if (!mfaOk) {
                 logAudit(req, 'ACCOUNT_DELETE_FAILED', 'Segundo fator inválido na exclusão', user._id, maskEmail(user.email));
-                return res.status(401).json({ message: "Código de autenticação inválido." });
+                return res.status(403).json({ message: "Código de autenticação inválido." });
             }
         }
 
@@ -823,6 +862,8 @@ export const deleteAccount = async (req, res, next) => {
             await WalletSnapshot.deleteMany({ user: userId }, { session });
             await InvestmentGoal.deleteMany({ user: userId }, { session });
             await GoalContribution.deleteMany({ user: userId }, { session });
+            await GoalJourney.deleteMany({ user: userId }, { session });
+            await ImportBatch.deleteMany({ user: userId }, { session });
             // Fase 2 — múltiplas carteiras: remove os documentos Wallet do titular.
             await Wallet.deleteMany({ user: userId }, { session });
             await UsageLog.deleteMany({ user: userId }, { session });

@@ -35,17 +35,24 @@ describe('processWalletAsset — precisão de renda fixa/caixa', () => {
     });
 
     it('não sofre o erro do preço unitário arredondado a 4 casas', () => {
-        const asset = makeReserve(15000);
-        const accrued = accrueFixedIncomeValue(asset, { ...macroRates, calcDate: brazilToday() });
-
-        // Abordagem antiga (bugada): reconstruir por preço unitário arredondado a 4 casas.
-        const roundedUnitPrice = parseFloat((accrued / 15000).toFixed(4));
-        const buggyTotal = safeCurrency(15000 * roundedUnitPrice);
-        const correctTotal = safeCurrency(accrued);
+        // O acumulado depende de HOJE (brazilToday), e em alguns dias o fator cai
+        // exatamente numa 4ª casa — aí uma quantidade fixa não diverge e o teste
+        // ficava vermelho por calendário, não por código. Procura a primeira
+        // quantidade em que a abordagem antiga de fato perde centavos.
+        let scenario = null;
+        for (let quantity = 15000; quantity < 15100 && !scenario; quantity++) {
+            const asset = makeReserve(quantity);
+            const accrued = accrueFixedIncomeValue(asset, { ...macroRates, calcDate: brazilToday() });
+            // Abordagem antiga (bugada): reconstruir por preço unitário arredondado a 4 casas.
+            const roundedUnitPrice = parseFloat((accrued / quantity).toFixed(4));
+            const buggyTotal = safeCurrency(quantity * roundedUnitPrice);
+            const correctTotal = safeCurrency(accrued);
+            if (correctTotal !== buggyTotal) scenario = { asset, correctTotal };
+        }
 
         // O cenário realmente diverge (perde ≥ 1 centavo) e o código entrega o correto.
-        expect(correctTotal).not.toBe(buggyTotal);
-        expect(processWalletAsset(asset, ctx).processed.totalValue).toBe(correctTotal);
+        expect(scenario).not.toBeNull();
+        expect(processWalletAsset(scenario.asset, ctx).processed.totalValue).toBe(scenario.correctTotal);
     });
 
     it('variação do dia também deriva do total (sem perda no fator ~1,0005)', () => {

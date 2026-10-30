@@ -17,7 +17,7 @@ import MarketAnalysis from '../models/MarketAnalysis.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from './marketDataService.js';
 import { countBusinessDays } from '../utils/dateUtils.js';
-import { safeFloat, safeCurrency, safeDiv, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeFloat, safeUnitPrice, safeCurrency, safeDiv, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import {
     STOCK_SUB_KEYS, FI_SUB_KEYS, US_SUB_KEYS, SUB_LABELS,
     fixedIncomeSubKey, usSubKeyOf, stockSubKeyOf, hasSubMetas,
@@ -121,7 +121,7 @@ export const computeWalletValuation = async (userId, walletId) => {
             priceNative = unitPrice;
         } else {
             const mData = marketMap.get(asset.ticker);
-            priceNative = safeFloat(mData?.price || 0);
+            priceNative = safeUnitPrice(mData?.price || 0);
             valueNative = safeValue(asset.quantity, priceNative);
         }
 
