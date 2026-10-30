@@ -29,7 +29,7 @@ vi.mock('../models/JobRun.js', () => ({
 vi.mock('mongoose', () => ({
     default: { get connection() { return { readyState: mocks.readyState.value }; } },
 }));
-vi.mock('../services/errorLogService.js', () => ({ recordJobError: vi.fn() }));
+vi.mock('../services/errorLogService.js', () => ({ recordJobError: vi.fn(), resolveJobErrors: vi.fn() }));
 vi.mock('../config/logger.js', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));

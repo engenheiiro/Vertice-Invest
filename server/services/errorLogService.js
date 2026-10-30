@@ -78,6 +78,40 @@ export const recordError = async ({
     }
 };
 
+/**
+ * Baixa sozinho o erro que a própria origem já provou superado.
+ *
+ * Sem isso, falha consertada só saía do painel pelo clique do admin ou pelo TTL
+ * de 14 dias — e quem abria a aba depois de uns dias via o Fundamentus "caído" e
+ * o Tesouro "com layout novo" muito depois de os dois voltarem, sem como saber.
+ *
+ * `before` é o início da execução bem-sucedida: só o que foi visto ANTES dela é
+ * dado como superado. Erro registrado durante a mesma execução (uma fonte que
+ * falhou no meio de um job que terminou bem) continua aberto, e reincidência
+ * reabre pelo `recordError` como sempre. Mesma regra de `recordError`: nunca lança.
+ */
+export const resolveErrors = async ({ origin, source, before = new Date() } = {}) => {
+    if (!origin || !source) return 0;
+    if (mongoose.connection?.readyState !== 1) return 0;
+
+    try {
+        const { modifiedCount = 0 } = await ErrorLog.updateMany(
+            { origin, source, resolvedAt: null, lastSeenAt: { $lt: before } },
+            { $set: { resolvedAt: new Date() } },
+        );
+        return modifiedCount;
+    } catch (err) {
+        logger.debug(`[ErrorLog] Falha ao baixar erros de ${origin}/${source}: ${err.message}`);
+        return 0;
+    }
+};
+
+/** Execução do job terminou em SUCCESS: as falhas anteriores dele estão superadas. */
+export const resolveJobErrors = (jobId, before) => resolveErrors({ origin: 'JOB', source: jobId, before });
+
+/** A fonte respondeu com dado válido: as falhas anteriores dela estão superadas. */
+export const resolveIngestionErrors = (sourceName, before) => resolveErrors({ origin: 'INGESTION', source: sourceName, before });
+
 /** Atalho para falhas de job/cron. */
 export const recordJobError = (jobId, error) => recordError({
     origin: 'JOB',

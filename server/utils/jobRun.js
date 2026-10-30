@@ -17,7 +17,7 @@ import mongoose from 'mongoose';
 import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
 import { getJobLabel, getJobMaxRuntimeMs } from '../config/jobCatalog.js';
-import { recordJobError } from '../services/errorLogService.js';
+import { recordJobError, resolveJobErrors } from '../services/errorLogService.js';
 
 const canPersist = () => mongoose.connection?.readyState === 1;
 
@@ -143,6 +143,10 @@ export const trackJob = async (jobId, fn) => {
         // O resultado segue intacto para o chamador — só o registro muda.
         if (reportedFailure) {
             await recordJobError(jobId, { message: result.error || 'falha sem detalhe', code: 'JOB_REPORTED_FAILURE' });
+        } else if (!reportedSkip) {
+            // SKIPPED não prova nada (lease de outra instância, nada a fazer);
+            // só uma execução que rodou e terminou bem dá a falha antiga por superada.
+            await resolveJobErrors(jobId, startedAt);
         }
         return result;
     } catch (error) {

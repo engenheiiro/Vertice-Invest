@@ -8,7 +8,7 @@ import {
     FUNDAMENTUS_FIIS_LAYOUT,
     validateFundamentusLayout,
 } from '../config/scraperSchemas.js';
-import { recordIngestionError } from './errorLogService.js';
+import { recordIngestionError, resolveIngestionErrors } from './errorLogService.js';
 import { trackSource } from '../utils/sourceHealth.js';
 
 // Separa as duas falhas que chegam pelo mesmo catch, porque exigem conserto
@@ -47,6 +47,7 @@ export const parseBrFloat = (str) => {
 
 export const fundamentusService = {
     async getStocksMap() {
+        const startedAt = new Date();
         try {
             logger.info("🔎 Iniciando Scraping Detalhado Fundamentus (Ações)...");
             
@@ -183,6 +184,8 @@ export const fundamentusService = {
             logger.info(`✅ Fundamentus: ${dataMap.size} ações processadas com dados completos.`, {
                 source: 'fundamentus', kind: 'STOCK', count: dataMap.size, schemaVersion: layout.version,
             });
+            // Fonte de volta: a falha antiga (TLS, 403, layout) sai do painel sozinha.
+            resolveIngestionErrors('fundamentus/STOCK', startedAt);
             return dataMap;
 
         } catch (error) {
@@ -201,6 +204,7 @@ export const fundamentusService = {
     },
 
     async getFIIsMap() {
+        const startedAt = new Date();
         try {
             logger.info("🔎 Iniciando Scraping Detalhado Fundamentus (FIIs)...");
 
@@ -274,6 +278,7 @@ export const fundamentusService = {
             logger.info(`✅ Fundamentus: ${dataMap.size} FIIs processados com dados completos.`, {
                 source: 'fundamentus', kind: 'FII', count: dataMap.size, schemaVersion: layout.version,
             });
+            resolveIngestionErrors('fundamentus/FII', startedAt);
             return dataMap;
 
         } catch (error) {
