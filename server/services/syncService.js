@@ -105,8 +105,113 @@ const KNOWN_TYPOS = {
     'MALLL11': 'MALL11', // Malls Brasil
     'QAGRR11': 'QAGR11', // Quasar Agro
     'JPSA3': 'IGTI3',    // Jereissati -> Iguatemi (Rebranding antigo não atualizado na fonte)
-    'RBHG11': 'RBRL11',  // Frequente confusão na fonte
-    'BLMO11': 'BLMG11'   // BlueMacaw Log
+};
+// Fora do mapa desde 30/10/2026: 'RBHG11' → 'RBRL11' e 'BLMO11' → 'BLMG11'. Os
+// dois "typos" são FIIs de verdade, negociando, com preço próprio (RBHG11 a
+// ~R$ 55, BLMO11 a ~R$ 95). Como o Fundamentus lista RBHG11 ANTES de RBRL11, a
+// "correção" gravava DY, P/VP, VP por cota, setor e preço do RBHG11 no RBRL11, e
+// o RBRL11 verdadeiro caía no filtro de duplicidade. Era essa a origem do
+// "RBRL11 valendo 58,45 (o preço do RBHG11)" de 07/09/2026, que pôs assinatura no
+// `lastPrice` mas não achou o escritor. No outro par o alvo vinha antes, e o
+// BLMO11 sumia em silêncio.
+
+/**
+ * Corrige o ticker da fonte pelo mapa de typos — a não ser que a fonte liste o
+ * ALVO também. Typo de verdade não convive com o nome certo na mesma listagem;
+ * se os dois estão lá, são dois papéis, e "corrigir" funde um no outro. PURA.
+ */
+export const correctSourceTicker = (rawTicker, listed = null) => {
+    const target = KNOWN_TYPOS[rawTicker];
+    if (!target) return rawTicker;
+    if (listed?.has(target)) return rawTicker;
+    return target;
+};
+
+/**
+ * Gravação de UMA linha do Fundamentus no MarketAsset (PURA, sem banco).
+ *
+ * Sem `isActive: true` / `failCount: 0` no `$set`. Estar na listagem do
+ * Fundamentus NÃO prova que o papel negocia: ela traz FII parado há semanas, e a
+ * liquidez que passa no filtro de 5k é média de 2 meses. O reset desfazia, a cada
+ * sync, o envelhecimento que a cotação faz (sessão velha e sessão sem negócio
+ * contam falha, e 10 falhas desativam): JASC11, REME11, KISU11 & cia. repetiam o
+ * mesmo aviso todo run e nunca chegavam à baixa. Reativar é com quem prova o
+ * pregão — `tryReactivateAssets`, que exige sessão datada. Papel NOVO nasce ativo
+ * pelo `$setOnInsert`.
+ */
+export const buildFundamentusAssetUpdate = ({ ticker, type, data, liquidity, timestamp }) => {
+    // Resolução resiliente: override exato → override por base (ações)
+    // → setor do scraping (FIIs) → default por tipo.
+    const finalSector = resolveSector({ ticker, type, scrapedSector: data.sector });
+
+    const updateFields = {
+        lastPrice: Number(data.price) || 0,
+        // Assinatura do preço. Este caminho grava `lastPrice` e NÃO grava
+        // `priceDate` — o scraping não diz de que sessão é o número —,
+        // então depois de uma passada aqui o par (preço, data) pode ter
+        // dois donos diferentes. É exatamente isso que o juiz de
+        // magnitude precisa saber antes de acusar o preço novo de
+        // destoar do guardado (ver utils/quoteSanity.js).
+        priceSource: 'FUNDAMENTUS',
+        dy: Number(data.dy) || 0,
+        p_vp: Number(data.pvp) || 0,
+        liquidity,
+
+        pl: Number(data.pl) || 0,
+        roe: Number(data.roe) || 0,
+        roic: Number(data.roic) || 0,
+        netMargin: Number(data.netMargin) || 0,
+        evEbitda: Number(data.evEbitda) || 0,
+        revenueGrowth: Number(data.cresRec5a) || 0,
+        debtToEquity: Number(data.debtToEquity ?? data.divBrutaPatrim) || 0,
+
+        vacancy: Number(data.vacancy) || 0,
+        capRate: Number(data.capRate) || 0,
+        qtdImoveis: Number(data.qtdImoveis) || 0,
+        // FFO do FII. O scraper já entregava estes três campos; sem esta linha
+        // eles morriam aqui (o schema também não os tinha) e o P/FFO — múltiplo
+        // padrão do setor — ficava indisponível para todo o universo de FIIs.
+        // Ação não devolve FFO: cai em 0, mesma convenção de vacancy/capRate.
+        ffoYield: Number(data.ffoYield) || 0,
+        vpCota: Number(data.vpCota) || 0,
+        ffoCota: Number(data.ffoCota) || 0,
+
+        sector: finalSector,
+        fiiSubType: type === 'FII' ? deriveFiiSubType(finalSector) : null,
+        lastFundamentalsDate: timestamp,
+        lastAnalysisDate: timestamp,
+        updatedAt: timestamp,
+    };
+
+    // Financials LTM derivados (engenharia reversa): 0 = não foi possível
+    // calcular. Carry-forward — só sobrescreve quando o novo valor é
+    // significativo, evitando que um scrape parcial zere dados bons
+    // (corrige lacunas intermitentes no modal "Financials (LTM)").
+    const ltmFields = {
+        marketCap: Number(data.marketCap) || 0,
+        netDebt: Number(data.netDebt) || 0,
+        netRevenue: Number(data.netRevenue) || 0,
+        netIncome: Number(data.netIncome) || 0,
+        totalAssets: Number(data.totalAssets) || 0,
+        patrimLiq: Number(data.patrimLiq) || 0,
+        payout: Number(data.payout) || 0,
+    };
+    for (const [k, v] of Object.entries(ltmFields)) {
+        if (v !== 0) updateFields[k] = v;
+    }
+
+    return {
+        $set: updateFields,
+        $setOnInsert: {
+            name: ticker, // Usa o ticker como nome se não tiver outro
+            type,
+            currency: 'BRL',
+            isIgnored: false,
+            isBlacklisted: false,
+            isActive: true,
+            failCount: 0,
+        },
+    };
 };
 
 export const syncService = {
@@ -187,11 +292,8 @@ export const syncService = {
             const pushOp = (rawTicker, data, type) => {
                 const classStats = ingestionStats[type];
                 // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
-                let ticker = rawTicker;
-                if (KNOWN_TYPOS[rawTicker]) {
-                    ticker = KNOWN_TYPOS[rawTicker];
-                    typosFixedCount++;
-                }
+                const ticker = correctSourceTicker(rawTicker, type === 'FII' ? fiiMap : stocksMap);
+                if (ticker !== rawTicker) typosFixedCount++;
 
                 // 2. FILTRO DE DUPLICIDADE PÓS-CORREÇÃO
                 if (processedTickers.has(ticker)) {
@@ -215,83 +317,13 @@ export const syncService = {
                 }
                 classStats.accepted++;
 
-                // Resolução resiliente: override exato → override por base (ações)
-                // → setor do scraping (FIIs) → default por tipo.
-                const finalSector = resolveSector({ ticker, type, scrapedSector: data.sector });
-
-                const updateFields = {
-                    lastPrice: Number(data.price) || 0,
-                    // Assinatura do preço. Este caminho grava `lastPrice` e NÃO grava
-                    // `priceDate` — o scraping não diz de que sessão é o número —,
-                    // então depois de uma passada aqui o par (preço, data) pode ter
-                    // dois donos diferentes. É exatamente isso que o juiz de
-                    // magnitude precisa saber antes de acusar o preço novo de
-                    // destoar do guardado (ver utils/quoteSanity.js).
-                    priceSource: 'FUNDAMENTUS',
-                    dy: Number(data.dy) || 0,
-                    p_vp: Number(data.pvp) || 0,
-                    liquidity: liquidity,
-
-                    pl: Number(data.pl) || 0,
-                    roe: Number(data.roe) || 0,
-                    roic: Number(data.roic) || 0,
-                    netMargin: Number(data.netMargin) || 0,
-                    evEbitda: Number(data.evEbitda) || 0,
-                    revenueGrowth: Number(data.cresRec5a) || 0,
-                    debtToEquity: Number(data.debtToEquity ?? data.divBrutaPatrim) || 0,
-
-                    vacancy: Number(data.vacancy) || 0,
-                    capRate: Number(data.capRate) || 0,
-                    qtdImoveis: Number(data.qtdImoveis) || 0,
-                    // FFO do FII. O scraper já entregava estes três campos; sem esta linha
-                    // eles morriam aqui (o schema também não os tinha) e o P/FFO — múltiplo
-                    // padrão do setor — ficava indisponível para todo o universo de FIIs.
-                    // Ação não devolve FFO: cai em 0, mesma convenção de vacancy/capRate.
-                    ffoYield: Number(data.ffoYield) || 0,
-                    vpCota: Number(data.vpCota) || 0,
-                    ffoCota: Number(data.ffoCota) || 0,
-
-                    sector: finalSector,
-                    fiiSubType: type === 'FII' ? deriveFiiSubType(finalSector) : null,
-                    lastFundamentalsDate: timestamp,
-                    lastAnalysisDate: timestamp,
-                    updatedAt: timestamp,
-
-                    // Se o Fundamentus tem dados, o ativo está vivo. Reseta falhas.
-                    isActive: true,
-                    failCount: 0
-                };
-
-                // Financials LTM derivados (engenharia reversa): 0 = não foi possível
-                // calcular. Carry-forward — só sobrescreve quando o novo valor é
-                // significativo, evitando que um scrape parcial zere dados bons
-                // (corrige lacunas intermitentes no modal "Financials (LTM)").
-                const ltmFields = {
-                    marketCap: Number(data.marketCap) || 0,
-                    netDebt: Number(data.netDebt) || 0,
-                    netRevenue: Number(data.netRevenue) || 0,
-                    netIncome: Number(data.netIncome) || 0,
-                    totalAssets: Number(data.totalAssets) || 0,
-                    patrimLiq: Number(data.patrimLiq) || 0,
-                    payout: Number(data.payout) || 0,
-                };
-                for (const [k, v] of Object.entries(ltmFields)) {
-                    if (v !== 0) updateFields[k] = v;
-                }
+                const update = buildFundamentusAssetUpdate({ ticker, type, data, liquidity, timestamp });
+                const updateFields = update.$set;
 
                 operations.push({
                     updateOne: {
                         filter: { ticker: ticker },
-                        update: {
-                            $set: updateFields,
-                            $setOnInsert: {
-                                name: ticker, // Usa o ticker como nome se não tiver outro
-                                type,
-                                currency: 'BRL',
-                                isIgnored: false,
-                                isBlacklisted: false
-                            }
-                        },
+                        update,
                         upsert: true
                     }
                 });

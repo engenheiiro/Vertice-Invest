@@ -50,7 +50,10 @@ vi.mock('../config/logger.js', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { timeSeriesWorker, orderByStaleness, sessaoJaFechou, METRICS_FLUSH_SIZE } =
+const {
+    timeSeriesWorker, orderByStaleness, sessaoJaFechou, METRICS_FLUSH_SIZE,
+    TIME_SERIES_BATCH_SIZE: LOTE, TIME_SERIES_ASSET_CONCURRENCY, formatPhaseTimes,
+} =
     await import('../services/workers/timeSeriesWorker.js');
 const logger = (await import('../config/logger.js')).default;
 
@@ -178,7 +181,7 @@ describe('timeSeriesWorker.run — cobertura e durabilidade', () => {
     });
 
     it('REGRESSÃO: run interrompido preserva as métricas já calculadas', async () => {
-        const assets = Array.from({ length: 40 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 8 * LOTE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         let lote = 0;
         mocks.historyFind.mockImplementation(() => {
@@ -192,11 +195,11 @@ describe('timeSeriesWorker.run — cobertura e durabilidade', () => {
         // O bulkWrite único no fim nunca teria acontecido; o flush do caminho de erro sim.
         const gravadas = mocks.marketAssetBulkWrite.mock.calls
             .reduce((sum, [ops]) => sum + ops.length, 0);
-        expect(gravadas).toBe(20); // 4 lotes de 5 concluídos antes do corte
+        expect(gravadas).toBe(4 * LOTE); // 4 lotes concluídos antes do corte
     });
 
     it('cobertura incompleta é denunciada no log e gravada no SystemConfig', async () => {
-        const assets = Array.from({ length: 20 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 4 * LOTE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         let lote = 0;
         mocks.historyFind.mockImplementation(() => {
@@ -209,8 +212,8 @@ describe('timeSeriesWorker.run — cobertura e durabilidade', () => {
         expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Cobertura INCOMPLETA'));
         const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
         expect(stats.complete).toBe(false);
-        expect(stats.visited).toBe(10);
-        expect(stats.total).toBe(20);
+        expect(stats.visited).toBe(2 * LOTE);
+        expect(stats.total).toBe(4 * LOTE);
     });
 
     it('run completo registra 100% de cobertura', async () => {
@@ -253,4 +256,73 @@ describe('sessaoJaFechou', () => {
     // 18:30 BRT (21:30Z), o horário do cron oficial.
     expect(sessaoJaFechou('2026-09-03', asDate('2026-09-03T21:30:00.000Z'))).toBe(true);
   });
+});
+
+// 30/10/2026: o lote passou de 5 para 20 para pagar menos idas e voltas ao banco
+// por ativo. O que não pode mudar com isso é a pressão na fonte.
+describe('timeSeriesWorker.run — lote grande, fonte com a mesma pressão', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.useFakeTimers();
+        mocks.getBenchmarkHistory.mockResolvedValue([]);
+        mocks.historyUpdateOne.mockResolvedValue({});
+        mocks.historyUpdateMany.mockResolvedValue({});
+        mocks.marketAssetBulkWrite.mockResolvedValue({});
+        mocks.systemConfigUpdate.mockResolvedValue({});
+        mocks.historyFind.mockReturnValue({ lean: async () => [] });
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const runWorker = async () => {
+        const promise = timeSeriesWorker.run();
+        await vi.runAllTimersAsync();
+        await promise;
+    };
+
+    it('o Yahoo nunca vê mais que TIME_SERIES_ASSET_CONCURRENCY pedidos simultâneos', async () => {
+        const assets = Array.from({ length: 2 * LOTE + 3 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
+        let emVoo = 0;
+        let pico = 0;
+        mocks.getFullHistory.mockImplementation(async () => {
+            emVoo += 1;
+            pico = Math.max(pico, emVoo);
+            await new Promise((r) => setTimeout(r, 50));
+            emVoo -= 1;
+            return candles(40);
+        });
+
+        await runWorker();
+
+        expect(mocks.getFullHistory).toHaveBeenCalledTimes(assets.length);
+        expect(pico).toBe(TIME_SERIES_ASSET_CONCURRENCY);
+        // Uma leitura de histórico por LOTE (mais a varredura de staleness), não por ativo.
+        expect(mocks.historyFind).toHaveBeenCalledTimes(1 + Math.ceil(assets.length / LOTE));
+    });
+
+    it('o run termina dizendo onde o tempo foi', async () => {
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([{ ticker: 'AT0', type: 'STOCK' }]));
+        mocks.getFullHistory.mockResolvedValue(candles(40));
+
+        await runWorker();
+
+        // A pausa de cortesia de 1s ao Yahoo entra no relógio (timers falsos avançam).
+        expect(logger.info).toHaveBeenCalledWith(
+            expect.stringMatching(/Tempo por fase: .*pausas 1s/), expect.objectContaining({ phaseMs: expect.any(Object) }));
+    });
+});
+
+describe('formatPhaseTimes', () => {
+    it('marca com Σ as fases paralelas e formata minutos', () => {
+        expect(formatPhaseTimes({ leitura: 125_000, yahoo: 61_000, 'gravação': 3_000, pausas: 9_400 }))
+            .toBe('leitura 2m05s · yahoo Σ 1m01s · gravação Σ 3s · pausas 9s');
+    });
+
+    it('esconde fase abaixo de 1s e não inventa fase que não rodou', () => {
+        expect(formatPhaseTimes({ leitura: 400, visitas: 2_000 })).toBe('visitas 2s');
+        expect(formatPhaseTimes({})).toBe('');
+    });
 });

@@ -53,11 +53,11 @@ vi.mock('../config/logger.js', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const { timeSeriesWorker, MAX_CONSECUTIVE_BATCH_FAILURES } =
+const { timeSeriesWorker, MAX_CONSECUTIVE_BATCH_FAILURES, TIME_SERIES_BATCH_SIZE } =
     await import('../services/workers/timeSeriesWorker.js');
 const logger = (await import('../config/logger.js')).default;
 
-const BATCH_SIZE = 5; // espelha o worker
+const BATCH_SIZE = TIME_SERIES_BATCH_SIZE;
 
 const candles = (n, lastDate = '2026-08-21') => {
     const end = new Date(`${lastDate}T00:00:00Z`).getTime();
@@ -130,23 +130,23 @@ describe('timeSeriesWorker — tolerância a queda de conexão', () => {
     };
 
     it('flap no meio do laço NÃO zera as métricas já coletadas nem aborta o run', async () => {
-        // 40 ativos = 8 lotes de 5. A conexão pisca no 4º lote (índice 3).
-        const assets = Array.from({ length: 40 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        // 8 lotes. A conexão pisca no 4º lote (índice 3).
+        const assets = Array.from({ length: 8 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         derrubaConexaoPara(loteDe(3));
 
         await runWorker();
 
-        // Antes deste fix o run morria no 4º lote com 15 ativos gravados. Agora só
-        // o lote do flap se perde: 35 dos 40 chegam ao banco.
-        expect(metricsWritten()).toBe(35);
-        expect(tickersWritten()).not.toContain('AT15'); // 1º do lote pulado
-        expect(tickersWritten()).toContain('AT20');     // lote seguinte seguiu normal
+        // Antes deste fix o run morria no 4º lote com 3 lotes gravados. Agora só
+        // o lote do flap se perde: 7 dos 8 chegam ao banco.
+        expect(metricsWritten()).toBe(7 * BATCH_SIZE);
+        expect(tickersWritten()).not.toContain(`AT${3 * BATCH_SIZE}`); // 1º do lote pulado
+        expect(tickersWritten()).toContain(`AT${4 * BATCH_SIZE}`);     // lote seguinte seguiu normal
         expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('o lote pulado não renova lastCheckedAt — volta à cabeça da fila no próximo run', async () => {
-        const assets = Array.from({ length: 15 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 3 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         // O caminho normal renovaria lastCheckedAt do lote inteiro no updateMany.
         derrubaConexaoPara(loteDe(1));
@@ -154,46 +154,48 @@ describe('timeSeriesWorker — tolerância a queda de conexão', () => {
         await runWorker();
 
         const tocados = mocks.historyUpdateMany.mock.calls.flatMap(([f]) => f.ticker.$in);
-        for (const perdido of ['AT5', 'AT6', 'AT7', 'AT8', 'AT9']) {
+        for (const perdido of loteDe(1)) {
             expect(tocados).not.toContain(perdido);
         }
     });
 
     it('a cobertura incompleta declara quantos ativos a queda custou', async () => {
-        const assets = Array.from({ length: 20 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 4 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         derrubaConexaoPara(loteDe(2));
 
         await runWorker();
 
         expect(logger.warn).toHaveBeenCalledWith(
-            expect.stringContaining('5 pulados em 1 lote(s) com queda de conexão'));
+            expect.stringContaining(`${BATCH_SIZE} pulados em 1 lote(s) com queda de conexão`));
         const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
-        expect(stats).toMatchObject({ complete: false, visited: 15, total: 20, batchesFailed: 1, skipped: 5 });
+        expect(stats).toMatchObject({
+            complete: false, visited: 3 * BATCH_SIZE, total: 4 * BATCH_SIZE, batchesFailed: 1, skipped: BATCH_SIZE,
+        });
     });
 
     it('quedas ESPAÇADAS não somam: o contador zera a cada lote que passa', async () => {
         // 3 quedas isoladas > MAX-1, mas nunca consecutivas → o run vai até o fim.
-        const assets = Array.from({ length: 50 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 10 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         derrubaConexaoPara([...loteDe(1), ...loteDe(4), ...loteDe(7)]);
 
         await runWorker();
 
-        expect(metricsWritten()).toBe(50 - 3 * BATCH_SIZE);
+        expect(metricsWritten()).toBe(7 * BATCH_SIZE);
         expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('banco realmente fora encerra o run — mas só após N lotes seguidos, com flush', async () => {
-        const assets = Array.from({ length: 100 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 20 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
-        // Cai a partir do 3º lote e não volta mais (AT10 em diante).
-        derrubaConexaoPara(assets.slice(10).map((a) => a.ticker));
+        // Cai a partir do 3º lote e não volta mais.
+        derrubaConexaoPara(assets.slice(2 * BATCH_SIZE).map((a) => a.ticker));
 
         await runWorker();
 
         // Os 2 lotes bons antes da queda foram gravados (flush do caminho de erro).
-        expect(metricsWritten()).toBe(10);
+        expect(metricsWritten()).toBe(2 * BATCH_SIZE);
         expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Erro após'));
         const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
         expect(stats.batchesFailed).toBe(MAX_CONSECUTIVE_BATCH_FAILURES);
@@ -201,20 +203,20 @@ describe('timeSeriesWorker — tolerância a queda de conexão', () => {
     });
 
     it('a operação do lote se recupera sozinha de um blip — sem perder o lote', async () => {
-        const assets = Array.from({ length: 10 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 2 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         // O 2º lote cai UMA vez; o withMongoRetry re-tenta e passa.
         derrubaConexaoPara(loteDe(1), { times: 1 });
 
         await runWorker();
 
-        expect(metricsWritten()).toBe(10); // nenhum ativo perdido
+        expect(metricsWritten()).toBe(2 * BATCH_SIZE); // nenhum ativo perdido
         const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
         expect(stats).toMatchObject({ complete: true, batchesFailed: 0, skipped: 0 });
     });
 
     it('queda ao GRAVAR candles não é confundida com falha da fonte', async () => {
-        const assets = Array.from({ length: 10 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 2 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         mocks.historyFind.mockReturnValue({ lean: async () => [] });
         // A fonte responde; quem cai é a gravação dos candles do 1º lote.
@@ -230,13 +232,13 @@ describe('timeSeriesWorker — tolerância a queda de conexão', () => {
         // Antes: o catch da fonte engolia a queda e os 5 viravam "sem dado na
         // fonte" (failed), escondendo o problema de banco. Agora é lote perdido.
         expect(stats.failed).toBe(0);
-        expect(stats).toMatchObject({ batchesFailed: 1, skipped: 5 });
+        expect(stats).toMatchObject({ batchesFailed: 1, skipped: BATCH_SIZE });
         expect(logger.warn).not.toHaveBeenCalledWith(
             expect.stringContaining('Falha ao buscar histórico para AT0'));
     });
 
     it('erro que NÃO é de conexão continua fatal na hora — sem re-tentar o defeito', async () => {
-        const assets = Array.from({ length: 40 }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
+        const assets = Array.from({ length: 8 * BATCH_SIZE }, (_, i) => ({ ticker: `AT${i}`, type: 'STOCK' }));
         mocks.marketAssetFind.mockReturnValue(marketAssetQuery(assets));
         let call = -1;
         mocks.historyFind.mockImplementation(() => {
@@ -252,7 +254,7 @@ describe('timeSeriesWorker — tolerância a queda de conexão', () => {
         expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Erro após'));
         const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
         expect(stats.batchesFailed).toBe(0); // não contou como queda de conexão
-        expect(stats.visited).toBe(10);      // abortou no 3º lote, como antes
+        expect(stats.visited).toBe(2 * BATCH_SIZE); // abortou no 3º lote, como antes
     });
 
     it('queda no flush não descarta as métricas — elas vão no flush seguinte', async () => {

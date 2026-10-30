@@ -13,6 +13,8 @@
 // é por isso que a contagem da lista não bate com 500. Os três serviam preço de
 // agosto como se fosse de hoje; o `meta.regularMarketTime` do Yahoo é que datou a
 // morte (14/08, 17/08 e 04/08) enquanto `quotes` já vinha vazio.
+// Baixa de 30/10/2026: WBD (Warner Bros. Discovery) — último negócio nos EUA em
+// 05/10; a busca por nome só acha as R-shares alemãs e a TLX (mesmo caso do EA).
 export const SP500_STOCKS = [
   // Technology
   { ticker: 'AAPL', name: 'Apple Inc.', sector: 'Technology', subsector: 'Technology Hardware' },
@@ -68,7 +70,6 @@ export const SP500_STOCKS = [
   { ticker: 'TMUS', name: 'T-Mobile US', sector: 'Communication Services', subsector: 'Wireless Telecom' },
   { ticker: 'CHTR', name: 'Charter Communications', sector: 'Communication Services', subsector: 'Cable & Satellite' },
   { ticker: 'FOXA', name: 'Fox Corp. Class A', sector: 'Communication Services', subsector: 'Entertainment' },
-  { ticker: 'WBD', name: 'Warner Bros. Discovery', sector: 'Communication Services', subsector: 'Entertainment' },
   { ticker: 'OMC', name: 'Omnicom Group', sector: 'Communication Services', subsector: 'Media' },
   { ticker: 'IPG', name: 'Interpublic Group', sector: 'Communication Services', subsector: 'Media' },
   { ticker: 'TTWO', name: 'Take-Two Interactive', sector: 'Communication Services', subsector: 'Entertainment' },

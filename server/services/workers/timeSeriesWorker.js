@@ -12,6 +12,7 @@ import { brazilDayKey } from '../../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
 import { repairCryptoCandleGaps } from '../cryptoCandleRepairService.js';
+import { mapWithConcurrency } from '../../utils/concurrency.js';
 
 // Funções matemáticas auxiliares
 const calculateSMA = (prices, period) => {
@@ -120,6 +121,39 @@ export const orderByStaleness = (assets = [], lastCheckedByKey = new Map()) => a
 // e silenciosa. Com flush parcial, um run interrompido perde no máximo o último lote.
 // Exportada para teste.
 export const METRICS_FLUSH_SIZE = 200;
+
+// (DESEMPENHO) Tamanho do lote × quantos ativos do lote andam ao mesmo tempo.
+//
+// Cada lote paga um custo FIXO de ida e volta ao banco — a leitura do histórico do
+// lote, a renovação de `lastCheckedAt` e a pausa de cortesia ao Yahoo —, e o run
+// visita ~1.270 ativos em lotes sequenciais. Com 5 por lote eram ~255 lotes; da
+// máquina do desenvolvedor até o Atlas (~140 ms de ida e volta, com picos de
+// segundos) isso custava mais que o trabalho em si: em 30/10/2026 a etapa levou
+// 35 min a 8 s por lote, contra 7,5 min a 1,8 s por lote em 16/10 com o MESMO
+// código — e as outras etapas do run ficaram de 3× a 17× mais lentas no mesmo dia.
+// Com 20 por lote o custo fixo cai a um quarto.
+//
+// O Yahoo continua vendo no máximo 5 pedidos simultâneos, como antes: o lote
+// maior não pode virar rajada maior na fonte (ver o disjuntor do crumb no
+// externalMarketService). Exportados para teste.
+export const TIME_SERIES_BATCH_SIZE = 20;
+export const TIME_SERIES_ASSET_CONCURRENCY = 5;
+
+// As fases que correm em paralelo dentro do lote levam "Σ": a soma delas passa
+// do relógio, e ler "yahoo 9min" num run de 6min sem esse aviso confunde. Fase
+// abaixo de 1s fica de fora — ruído. Exportada para teste.
+const PARALLEL_PHASES = new Set(['yahoo', 'gravação', 'b3']);
+const PHASE_ORDER = ['leitura', 'yahoo', 'gravação', 'b3', 'visitas', 'métricas', 'pausas'];
+export const formatPhaseTimes = (phaseMs = {}) => {
+    const fmt = (ms) => {
+        const s = Math.round(ms / 1000);
+        return s >= 60 ? `${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s` : `${s}s`;
+    };
+    return PHASE_ORDER
+        .filter((fase) => (phaseMs[fase] || 0) >= 1000)
+        .map((fase) => `${fase} ${PARALLEL_PHASES.has(fase) ? 'Σ ' : ''}${fmt(phaseMs[fase])}`)
+        .join(' · ');
+};
 
 // (RESILIÊNCIA) Quantos lotes seguidos podem falhar por queda de conexão antes de
 // desistir do run.
@@ -493,6 +527,19 @@ export const timeSeriesWorker = {
             b3: 0,
             // Lotes perdidos por queda de conexão (ver MAX_CONSECUTIVE_BATCH_FAILURES).
             batchesFailed: 0, skipped: 0,
+            // Milissegundos por fase. Leitura, visitas, métricas e pausas são
+            // sequenciais (somam no relógio do run); Yahoo, gravação e B3 correm
+            // em paralelo dentro do lote, então a soma delas passa do relógio.
+            // Serve para dizer, sem adivinhar, se o run lento é rede, fonte ou banco.
+            phaseMs: {},
+        };
+        const timed = async (fase, fn) => {
+            const inicio = Date.now();
+            try {
+                return await fn();
+            } finally {
+                stats.phaseMs[fase] = (stats.phaseMs[fase] || 0) + (Date.now() - inicio);
+            }
         };
         const operations = [];
 
@@ -550,7 +597,7 @@ export const timeSeriesWorker = {
             // sexta. Ancorado no dia-calendário BR, não no instante UTC, que na
             // virada da meia-noite aponta para o dia errado.
             const throughDay = lastBusinessDayUpTo(brazilDayKey(new Date()));
-            const BATCH_SIZE = 5;
+            const BATCH_SIZE = TIME_SERIES_BATCH_SIZE;
             let consecutiveFailures = 0;
 
             for (let i = 0; i < stats.total; i += BATCH_SIZE) {
@@ -564,15 +611,15 @@ export const timeSeriesWorker = {
                     // hidratar o array grande de candles quando só vamos ler (e renovar
                     // lastUpdated em massa via updateMany), reduzindo overhead no caminho quente.
                     const batchTickers = batch.map(a => historyStorageKey(a.ticker, a.type));
-                    const histDocs = await withMongoRetry(
+                    const histDocs = await timed('leitura', () => withMongoRetry(
                         () => AssetHistory.find({ ticker: { $in: batchTickers } }).lean(),
-                        { label: 'histórico do lote' });
+                        { label: 'histórico do lote' }));
                     const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
 
                     let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
                     const visitedTickers = [];  // frescos + falhos: renova lastCheckedAt em massa, sem .save() por doc
 
-                    await Promise.all(batch.map(async (asset) => {
+                    await mapWithConcurrency(batch, TIME_SERIES_ASSET_CONCURRENCY, async (asset) => {
                         const storageKey = historyStorageKey(asset.ticker, asset.type);
                         let historyEntry = histByTicker.get(storageKey) || null;
 
@@ -599,7 +646,7 @@ export const timeSeriesWorker = {
                             // banco é do run inteiro e sobe para o tratamento de lote.
                             let externalHistory = null;
                             try {
-                                externalHistory = await externalMarketService.getFullHistory(asset.ticker, asset.type);
+                                externalHistory = await timed('yahoo', () => externalMarketService.getFullHistory(asset.ticker, asset.type));
                             } catch {
                                 logger.warn(`[TimeSeriesWorker] Falha ao buscar histórico para ${asset.ticker}`);
                             }
@@ -631,11 +678,11 @@ export const timeSeriesWorker = {
                                         now,
                                     },
                                 );
-                                await withMongoRetry(() => AssetHistory.updateOne(
+                                await timed('gravação', () => withMongoRetry(() => AssetHistory.updateOne(
                                     { ticker: storageKey },
                                     { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
                                     { upsert: true }
-                                ), { label: `candles de ${asset.ticker}` });
+                                ), { label: `candles de ${asset.ticker}` }));
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
                                 historyEntry = { ticker: storageKey, history: historyToStore, lastUpdated: now };
                                 fetched = true;
@@ -667,7 +714,7 @@ export const timeSeriesWorker = {
                         // o último pregão custa uma comparação de string por ativo, e
                         // o arquivo do dia desce uma vez só para o run inteiro.
                         try {
-                            const reforcado = await reinforceWithB3({ asset, storageKey, historyEntry, throughDay, now, yahooConsultado });
+                            const reforcado = await timed('b3', () => reinforceWithB3({ asset, storageKey, historyEntry, throughDay, now, yahooConsultado }));
                             if (reforcado) {
                                 historyEntry = reforcado;
                                 stats.b3 += 1;
@@ -772,15 +819,15 @@ export const timeSeriesWorker = {
                                 update: { $set: setFields }
                             }
                         });
-                    }));
+                    });
 
                     // Renova lastCheckedAt dos ativos visitados em uma única operação por lote.
                     // (lastUpdated fica intocado — só muda quando candles são realmente re-buscados.)
                     if (visitedTickers.length > 0) {
-                        await withMongoRetry(() => AssetHistory.updateMany(
+                        await timed('visitas', () => withMongoRetry(() => AssetHistory.updateMany(
                             { ticker: { $in: visitedTickers } },
                             { $set: { lastCheckedAt: now } }
-                        ), { label: 'visitas do lote' });
+                        ), { label: 'visitas do lote' }));
                     }
 
                     stats.visited += batch.length;
@@ -788,12 +835,12 @@ export const timeSeriesWorker = {
 
                     // Grava as métricas acumuladas antes que o buffer cresça demais: o run
                     // pode ser interrompido a qualquer lote (ver METRICS_FLUSH_SIZE).
-                    if (operations.length >= METRICS_FLUSH_SIZE) await flushMetrics();
+                    if (operations.length >= METRICS_FLUSH_SIZE) await timed('métricas', flushMetrics);
 
                     // Rate limit protection — só pausa entre lotes que dispararam busca externa no Yahoo.
                     // Em runs "quentes" (tudo fresco) não há throttle a aplicar, eliminando o piso ocioso.
                     if (batchDidFetch) {
-                        await new Promise(r => setTimeout(r, 1000));
+                        await timed('pausas', () => new Promise(r => setTimeout(r, 1000)));
                     }
                 } catch (error) {
                     // Erro que não é de transporte (bug de cálculo, schema) segue fatal:
@@ -862,6 +909,9 @@ export const timeSeriesWorker = {
             + `${stats.metrics} métricas gravadas${perdidos}.`;
         if (complete) logger.info(`✅ [TimeSeriesWorker] ${linha}`);
         else logger.warn(`⚠️ [TimeSeriesWorker] Cobertura INCOMPLETA — ${linha}`);
+
+        const fases = formatPhaseTimes(stats.phaseMs);
+        if (fases) logger.info(`⏱️ [TimeSeriesWorker] Tempo por fase: ${fases}.`, { phaseMs: stats.phaseMs });
 
         try {
             await SystemConfig.findOneAndUpdate(
