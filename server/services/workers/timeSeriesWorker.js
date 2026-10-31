@@ -3,7 +3,7 @@ import MarketAsset from '../../models/MarketAsset.js';
 import AssetHistory from '../../models/AssetHistory.js';
 import SystemConfig from '../../models/SystemConfig.js';
 import { marketDataService } from '../marketDataService.js';
-import { historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
+import { buildTipAppend, historyStorageKey, mergeCandleSeries } from '../../utils/assetHistory.js';
 import { externalMarketService } from '../externalMarketService.js';
 import { B3_TIP_OUTCOME, collectB3CandlesDetailed, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
 import { getEscalation, recordEscalation } from '../../utils/sourceHealth.js';
@@ -61,6 +61,11 @@ const calculateVolatility = (prices) => {
 // "anteontem" ~2,8d (stale) → cada série re-busca a cada ~2 dias, defasagem máxima
 // de ~1 pregão para SMA/volatilidade/RSI. Exportada para teste.
 export const HISTORY_MAX_CANDLE_AGE_DAYS = 2;
+export const isCandleDateStale = (latest, now = new Date()) => {
+    if (!latest) return true;
+    const ageMs = now.getTime() - new Date(`${latest}T00:00:00Z`).getTime();
+    return ageMs > HISTORY_MAX_CANDLE_AGE_DAYS * 24 * 60 * 60 * 1000;
+};
 export const isHistoryStale = (historyEntry, now = new Date()) => {
     if (!historyEntry?.history?.length) return true;
     // Não assume ordenação: acha a maior data (strings YYYY-MM-DD comparam lexicograficamente).
@@ -68,9 +73,124 @@ export const isHistoryStale = (historyEntry, now = new Date()) => {
     for (const h of historyEntry.history) {
         if (h?.date && h.date > latest) latest = h.date;
     }
-    if (!latest) return true;
-    const ageMs = now.getTime() - new Date(`${latest}T00:00:00Z`).getTime();
-    return ageMs > HISTORY_MAX_CANDLE_AGE_DAYS * 24 * 60 * 60 * 1000;
+    return isCandleDateStale(latest || null, now);
+};
+
+// (DESEMPENHO) O lote lê primeiro só o CABEÇALHO da série — último candle e
+// tamanho, calculados no banco —, e baixa os candles apenas de quem vai usá-los.
+//
+// Em 30/10/2026, da máquina do desenvolvedor, ler o histórico de 20 ativos levava
+// 20–43 s (~50 KB/s até o Atlas), e o run baixava a série inteira de ~1.270
+// ativos para recalcular beta/SMA/EMA/volatilidade — inclusive dos 1.105 cuja
+// série não tinha mudado desde o run anterior. Numa noite com o daily-evening de
+// produção já tendo rodado às 18:30, o sync:prod refazia tudo para chegar aos
+// mesmos números. Exportada para teste.
+export const HISTORY_HEADER_PROJECTION = {
+    ticker: 1,
+    historyLength: { $size: { $ifNull: ['$history', []] } },
+    lastCandleDate: { $max: '$history.date' },
+};
+
+// Só o que `computeSeriesMetrics` lê de cada candle. O `_id` de subdocumento e o
+// `adjClose` eram ~38% do que descia (medido em 30/10/2026: 670 → 415 KB por lote
+// de 20, mesmos candles). Exportada para teste.
+export const METRICS_HISTORY_PROJECTION = {
+    ticker: 1,
+    history: {
+        $map: {
+            input: { $ifNull: ['$history', []] },
+            as: 'c',
+            in: { date: '$$c.date', close: '$$c.close', volume: '$$c.volume' },
+        },
+    },
+};
+
+/**
+ * Último candle e tamanho de um documento de série. Aceita o cabeçalho
+ * projetado (produção) e o documento inteiro (testes, chaves legadas). PURA.
+ */
+export const readHistoryHeader = (doc) => {
+    if (!doc) return { length: 0, lastDate: null };
+    const length = Number.isFinite(doc.historyLength) ? doc.historyLength : (doc.history?.length || 0);
+    const lastDate = doc.lastCandleDate ?? latestCandleDate(doc.history || []);
+    return { length, lastDate: lastDate || null };
+};
+
+// Versão do CÁLCULO dentro da assinatura. Mudou a fórmula de beta, SMA, EMA,
+// volatilidade ou liquidez de ETF? Suba este número: sem isso a série igual faz
+// o worker pular o recálculo, e o número velho sobrevive até entrar candle novo.
+export const METRICS_VERSION = 1;
+
+/** Assinatura da série que alimentou as métricas: muda quando entra candle. PURA. */
+export const seriesSignature = (lastDate, length) => `v${METRICS_VERSION}:${lastDate || '-'}|${length || 0}`;
+
+/**
+ * Volatilidade, SMA200, EMA50, beta (só BR) e liquidez média (só ETF) de UMA
+ * série. PURA — recebe a série e os retornos do IBOV por data.
+ */
+export const computeSeriesMetrics = (asset, history, ibovReturnsByDate) => {
+    // Ordena do mais recente para o mais antigo (cópia: quem chamou segue com a ordem dele)
+    const sortedHistory = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const prices = sortedHistory.map(h => h.close);
+
+    const sma200 = calculateSMA(prices, 200);
+    const ema50 = calculateEMA(prices.slice(0, 50), 50); // Passa os últimos 50 dias
+
+    // Volatilidade baseada nos últimos 252 dias úteis (1 ano)
+    const volatilityPrices = prices.slice(0, 252);
+    const volatility = calculateVolatility(volatilityPrices);
+
+    // Liquidez média (R$/dia) via candles — SÓ ETF nacional (.SA). As fontes
+    // devolvem averageVolume=0 p/ tickers .SA, então o sync cai num snapshot de
+    // volume de 1 dia (Brapi): ruidoso e que SUBCONTA (ex.: SMAL11 ~52M no
+    // snapshot vs ~250M na média real). O worker roda SEMPRE após o sync e antes
+    // do ranking (sync:prod e cron das 09h) → este valor supera o snapshot.
+    const etfAvgLiquidity = asset.type === 'ETF' ? computeEtfAvgLiquidity(sortedHistory) : null;
+
+    // Beta só é recalculado aqui para STOCK/FII (benchmark IBOV). Para os
+    // demais tipos (STOCK_US/ETF/CRYPTO) o beta vem do Yahoo no sync de
+    // fundamentos — gravá-lo aqui sobrescrevia esse valor com 1.0 a cada run,
+    // neutralizando os gates de beta do scoring. Só entra no $set quando é BR.
+    const isBrBetaType = asset.type === 'STOCK' || asset.type === 'FII';
+    let beta = 1;
+    if (isBrBetaType && ibovReturnsByDate.size > 0) {
+        // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
+        // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
+        // não a do IBOV, corrompendo a covariância e zerando o beta.
+        // sortedHistory já está newest→oldest; filtrar e inverter evita um
+        // segundo sort O(n log n) sobre a mesma série (reverse opera sobre
+        // o array novo do filter, sem mutar a série original).
+        const sortedForBeta = sortedHistory
+            .filter(h => h.close > 0 && isFinite(h.close))
+            .reverse(); // → oldest→newest
+
+        const alignedAssetReturns = [];
+        const alignedIbovReturns = [];
+
+        for (let j = 1; j < sortedForBeta.length; j++) {
+            const dateKey = new Date(sortedForBeta[j].date).toISOString().slice(0, 10);
+            if (!ibovReturnsByDate.has(dateKey)) continue;
+
+            const assetReturn = (sortedForBeta[j].close - sortedForBeta[j - 1].close) / sortedForBeta[j - 1].close;
+            if (!isFinite(assetReturn) || isNaN(assetReturn) || Math.abs(assetReturn) >= 0.50) continue;
+
+            alignedAssetReturns.push(assetReturn);
+            alignedIbovReturns.push(ibovReturnsByDate.get(dateKey));
+        }
+
+        if (alignedAssetReturns.length >= 20) beta = calculateBeta(alignedAssetReturns, alignedIbovReturns);
+    }
+
+    const setFields = {
+        volatility: isNaN(volatility) ? 0 : volatility,
+        sma200: isNaN(sma200) ? 0 : sma200,
+        ema50: isNaN(ema50) ? 0 : ema50
+    };
+    if (isBrBetaType) setFields.beta = isNaN(beta) ? 1 : beta;
+    // ETF nacional: liquidez média dos candles é a autoridade (supera o
+    // snapshot Brapi gravado no sync). Só grava quando há janela suficiente.
+    if (etfAvgLiquidity !== null) setFields.liquidity = etfAvgLiquidity;
+    return setFields;
 };
 
 // Liquidez média (R$/dia) de um ETF a partir dos candles: turnover diário médio
@@ -237,13 +357,14 @@ export const latestCandleDate = (history = []) => {
  */
 export const sessaoJaFechou = (throughDay, now) => throughDay < brazilDayKey(now) || brNow(now).hour >= 18;
 
-const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, now, yahooConsultado = true }) => {
+const reinforceWithB3 = async ({ asset, storageKey, lastDate, length, throughDay, now, yahooConsultado = true }) => {
     if (!throughDay || !isB3Coverable(asset.ticker, asset.type)) return null;
 
-    const guardada = historyEntry?.history || [];
-    if (guardada.length === 0) return null;
+    // Só a PONTA importa aqui: o último dia guardado e o tamanho da série. A
+    // série em si não desce do banco (ver buildTipAppend).
+    if (!(length > 0)) return null;
 
-    const ultimo = latestCandleDate(guardada);
+    const ultimo = lastDate;
     if (!ultimo || ultimo >= throughDay) return null;
 
     // Daqui para baixo é ESCALADA: o Yahoo não trouxe o fechamento deste pregão e
@@ -299,19 +420,22 @@ const reinforceWithB3 = async ({ asset, storageKey, historyEntry, throughDay, no
     // nomeia: quem só recuperou dia velho segue sem o fechamento de hoje.
     registrar(desfecho === B3_TIP_OUTCOME.COBERTO ? 'b3' : null, desfecho);
 
-    // Mesma mescla do caminho do Yahoo: o cap de pontos e a recusa de candle em dia
-    // sem pregão valem igual, venha o fechamento de onde vier.
-    const historyToStore = mergeCandleSeries(guardada, novos, {
+    // Mesmas regras da mescla do caminho do Yahoo — o cap de pontos e a recusa de
+    // candle em dia sem pregão valem igual, venha o fechamento de onde vier —,
+    // mas gravando só os dias novos em vez de reenviar a série.
+    const ponta = buildTipAppend(novos, {
+        existingLength: length,
+        lastDate: ultimo,
         maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS,
         type: asset.type,
         now,
     });
+    if (!ponta) return null;
     await withMongoRetry(() => AssetHistory.updateOne(
         { ticker: storageKey },
-        { $set: { history: historyToStore, lastUpdated: now, lastCheckedAt: now } },
-        { upsert: true },
+        { ...ponta.update, $set: { lastUpdated: now, lastCheckedAt: now } },
     ), { label: `candles da B3 de ${asset.ticker}` });
-    return { ticker: storageKey, history: historyToStore, lastUpdated: now };
+    return { candles: novos, length: ponta.newLength, lastDate: ponta.lastDate };
 };
 
 /**
@@ -523,6 +647,8 @@ export const timeSeriesWorker = {
         // em 19/08/2026 o run parou em 234/1300 sem uma linha de log dizendo isso.
         const stats = {
             total: 0, visited: 0, fetched: 0, fresh: 0, failed: 0, metrics: 0,
+            // Séries iguais às do último cálculo: métricas mantidas, candles nem descem.
+            unchanged: 0,
             // Séries que só avançaram porque a B3 cobriu o que o Yahoo não deu.
             b3: 0,
             // Lotes perdidos por queda de conexão (ver MAX_CONSECUTIVE_BATCH_FAILURES).
@@ -562,7 +688,7 @@ export const timeSeriesWorker = {
 
         try {
             const assets = await withMongoRetry(
-                () => MarketAsset.find({ isActive: true }).select('ticker type').lean(),
+                () => MarketAsset.find({ isActive: true }).select('ticker type metricsSignature').lean(),
                 { label: 'universo de ativos' });
             if (assets.length === 0) return;
 
@@ -607,32 +733,83 @@ export const timeSeriesWorker = {
                 // Um lote que cai por queda de conexão é PULADO, não fatal
                 // (ver MAX_CONSECUTIVE_BATCH_FAILURES).
                 try {
-                    // Carrega o histórico de todo o lote em uma única query. O .lean() evita
-                    // hidratar o array grande de candles quando só vamos ler (e renovar
-                    // lastUpdated em massa via updateMany), reduzindo overhead no caminho quente.
+                    // Cabeçalho do lote: último candle e tamanho de cada série, sem os
+                    // candles (ver HISTORY_HEADER_PROJECTION).
                     const batchTickers = batch.map(a => historyStorageKey(a.ticker, a.type));
-                    const histDocs = await timed('leitura', () => withMongoRetry(
-                        () => AssetHistory.find({ ticker: { $in: batchTickers } }).lean(),
-                        { label: 'histórico do lote' }));
-                    const histByTicker = new Map(histDocs.map(d => [d.ticker, d]));
+                    const headerDocs = await timed('leitura', () => withMongoRetry(
+                        () => AssetHistory.find({ ticker: { $in: batchTickers } }, HISTORY_HEADER_PROJECTION).lean(),
+                        { label: 'cabeçalho do lote' }));
+                    const headerByTicker = new Map(headerDocs.map(d => [d.ticker, d]));
 
                     let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
                     const visitedTickers = [];  // frescos + falhos: renova lastCheckedAt em massa, sem .save() por doc
+                    const pendingMetrics = [];  // série mudou e os candles não estão em memória: lê depois, de uma vez
+
+                    // Série curta demais para medir, série nova e série inalterada
+                    // terminam aqui; as demais vão para a leitura dos candles.
+                    const queueMetrics = (asset, storageKey, history, length, lastDate) => {
+                        const signature = seriesSignature(lastDate, length);
+                        if (asset.metricsSignature === signature) {
+                            // Mesma série do último cálculo: os números seriam os mesmos.
+                            stats.unchanged += 1;
+                            return;
+                        }
+
+                        // SÉRIE CURTA DEMAIS PARA MEDIR: apaga a medida velha, não a preserva.
+                        //
+                        // Sair calado aqui parece inofensivo — "sem dado novo, fica o que
+                        // havia" — e é o contrário: o que havia foi calculado sobre a série
+                        // ANTERIOR, que pode não ser mais a série deste ativo. Medido em
+                        // 06/09/2026 no TON: a correção do símbolo de cripto apagou a série
+                        // do impostor (`repairCryptoSymbols`), o símbolo certo
+                        // (`TON11419-USD`) só publica 2 candles diários, e a SMA200 do
+                        // impostor (0,0060) ficou colada num preço de 1,42 — o scoring lia
+                        // "236x acima da tendência" e penalizava o ativo por isso.
+                        //
+                        // Zero é o que o resto do sistema já entende por ausente (todo
+                        // consumidor guarda `m.sma200 > 0`), então limpar é a mesma decisão
+                        // de "métrica inaplicável = ausente" que vale no scoring. Beta fica
+                        // de fora de propósito: para STOCK_US/ETF/CRYPTO ele vem do sync de
+                        // fundamentos, não daqui, e zerá-lo apagaria dado bom de outra fonte.
+                        if (length < 20) {
+                            operations.push({
+                                updateOne: {
+                                    filter: { ticker: asset.ticker },
+                                    update: { $set: { sma200: 0, ema50: 0, volatility: 0, metricsSignature: signature } },
+                                },
+                            });
+                            return;
+                        }
+
+                        if (history) {
+                            operations.push({
+                                updateOne: {
+                                    filter: { ticker: asset.ticker },
+                                    update: { $set: { ...computeSeriesMetrics(asset, history, ibovReturnsByDate), metricsSignature: signature } },
+                                },
+                            });
+                            return;
+                        }
+                        pendingMetrics.push({ asset, storageKey, signature });
+                    };
 
                     await mapWithConcurrency(batch, TIME_SERIES_ASSET_CONCURRENCY, async (asset) => {
                         const storageKey = historyStorageKey(asset.ticker, asset.type);
-                        let historyEntry = histByTicker.get(storageKey) || null;
+                        const header = headerByTicker.get(storageKey) || null;
+                        let { length, lastDate } = readHistoryHeader(header);
+                        // Candles em memória: só existem quando o documento já veio
+                        // inteiro (testes, chave legada) ou quando o Yahoo os trouxe.
+                        let history = header?.history || null;
 
                         // Staleness pela data do último candle (ver isHistoryStale) — nunca por
                         // lastUpdated, que o touch renovava sem dados novos.
-                        const isStale = isHistoryStale(historyEntry, now);
+                        const isStale = isCandleDateStale(lastDate, now);
 
                         // A MESMA CONDIÇÃO que abre o ramo abaixo, nomeada — é ela
                         // que decide se o Yahoo chega a ser chamado por este ativo,
                         // e o ledger precisa dessa verdade para não riscar na tela
                         // uma fonte que ninguém perguntou (ver `registrar`).
-                        const yahooConsultado = !historyEntry || isStale
-                            || !historyEntry.history || historyEntry.history.length < 20;
+                        const yahooConsultado = !header || isStale || length < 20;
 
                         if (yahooConsultado) {
                             batchDidFetch = true;
@@ -652,6 +829,14 @@ export const timeSeriesWorker = {
                             }
 
                             if (externalHistory && externalHistory.length > 0) {
+                                // A mescla precisa da série guardada INTEIRA (ver abaixo):
+                                // é o único caminho que ainda a baixa, e só para este ativo.
+                                if (!history && length > 0) {
+                                    const doc = await timed('leitura', () => withMongoRetry(
+                                        () => AssetHistory.findOne({ ticker: storageKey }, { history: 1 }).lean(),
+                                        { label: `série de ${asset.ticker}` }));
+                                    history = doc?.history || [];
+                                }
                                 // MESCLA com o que já está guardado — nunca substitui.
                                 //
                                 // Substituir transformava qualquer degradação da fonte em perda
@@ -666,7 +851,7 @@ export const timeSeriesWorker = {
                                 // deixa de autorizar encurtar série profunda (ver mergeCandleSeries).
                                 // Câmbio/benchmarks seguem isentos — precisam de série longa.
                                 const historyToStore = mergeCandleSeries(
-                                    historyEntry?.history || [],
+                                    history || [],
                                     externalHistory,
                                     {
                                         maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS,
@@ -684,7 +869,9 @@ export const timeSeriesWorker = {
                                     { upsert: true }
                                 ), { label: `candles de ${asset.ticker}` }));
                                 // Reaproveita o array recém-buscado para o cálculo, sem reler do banco.
-                                historyEntry = { ticker: storageKey, history: historyToStore, lastUpdated: now };
+                                history = historyToStore;
+                                length = historyToStore.length;
+                                lastDate = latestCandleDate(historyToStore);
                                 fetched = true;
                             }
                             if (fetched) {
@@ -714,9 +901,17 @@ export const timeSeriesWorker = {
                         // o último pregão custa uma comparação de string por ativo, e
                         // o arquivo do dia desce uma vez só para o run inteiro.
                         try {
-                            const reforcado = await timed('b3', () => reinforceWithB3({ asset, storageKey, historyEntry, throughDay, now, yahooConsultado }));
+                            const reforcado = await timed('b3', () => reinforceWithB3({ asset, storageKey, lastDate, length, throughDay, now, yahooConsultado }));
                             if (reforcado) {
-                                historyEntry = reforcado;
+                                if (history) {
+                                    history = mergeCandleSeries(history, reforcado.candles, {
+                                        maxPoints: HISTORY_CAP_EXEMPT_TICKERS.has(asset.ticker) ? Infinity : ASSET_HISTORY_MAX_POINTS,
+                                        type: asset.type,
+                                        now,
+                                    });
+                                }
+                                length = reforcado.length;
+                                lastDate = reforcado.lastDate;
                                 stats.b3 += 1;
                             }
                         } catch (e) {
@@ -725,101 +920,31 @@ export const timeSeriesWorker = {
                             logger.warn(`[TimeSeriesWorker] Reforço da B3 falhou para ${asset.ticker}: ${e.message}`);
                         }
 
-                        // SÉRIE CURTA DEMAIS PARA MEDIR: apaga a medida velha, não a preserva.
-                        //
-                        // Sair calado aqui parece inofensivo — "sem dado novo, fica o que
-                        // havia" — e é o contrário: o que havia foi calculado sobre a série
-                        // ANTERIOR, que pode não ser mais a série deste ativo. Medido em
-                        // 06/09/2026 no TON: a correção do símbolo de cripto apagou a série
-                        // do impostor (`repairCryptoSymbols`), o símbolo certo
-                        // (`TON11419-USD`) só publica 2 candles diários, e a SMA200 do
-                        // impostor (0,0060) ficou colada num preço de 1,42 — o scoring lia
-                        // "236x acima da tendência" e penalizava o ativo por isso.
-                        //
-                        // Zero é o que o resto do sistema já entende por ausente (todo
-                        // consumidor guarda `m.sma200 > 0`), então limpar é a mesma decisão
-                        // de "métrica inaplicável = ausente" que vale no scoring. Beta fica
-                        // de fora de propósito: para STOCK_US/ETF/CRYPTO ele vem do sync de
-                        // fundamentos, não daqui, e zerá-lo apagaria dado bom de outra fonte.
-                        if (!historyEntry || !historyEntry.history || historyEntry.history.length < 20) {
+                        queueMetrics(asset, storageKey, history, length, lastDate);
+                    });
+
+                    // Candles só de quem mudou e não os tem em memória — numa leitura só.
+                    if (pendingMetrics.length > 0) {
+                        const docs = await timed('leitura', () => withMongoRetry(
+                            () => AssetHistory.find(
+                                { ticker: { $in: pendingMetrics.map((p) => p.storageKey) } },
+                                METRICS_HISTORY_PROJECTION,
+                            ).lean(),
+                            { label: 'séries que mudaram' }));
+                        const historyByKey = new Map(docs.map((d) => [d.ticker, d.history || []]));
+                        for (const { asset, storageKey, signature } of pendingMetrics) {
+                            const history = historyByKey.get(storageKey) || [];
+                            const setFields = history.length >= 20
+                                ? computeSeriesMetrics(asset, history, ibovReturnsByDate)
+                                : { sma200: 0, ema50: 0, volatility: 0 };
                             operations.push({
                                 updateOne: {
                                     filter: { ticker: asset.ticker },
-                                    update: { $set: { sma200: 0, ema50: 0, volatility: 0 } },
+                                    update: { $set: { ...setFields, metricsSignature: signature } },
                                 },
                             });
-                            return;
                         }
-
-                        // Ordena do mais recente para o mais antigo
-                        const sortedHistory = historyEntry.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                        const prices = sortedHistory.map(h => h.close);
-
-                        const sma200 = calculateSMA(prices, 200);
-                        const ema50 = calculateEMA(prices.slice(0, 50), 50); // Passa os últimos 50 dias
-
-                        // Volatilidade baseada nos últimos 252 dias úteis (1 ano)
-                        const volatilityPrices = prices.slice(0, 252);
-                        const volatility = calculateVolatility(volatilityPrices);
-
-                        // Liquidez média (R$/dia) via candles — SÓ ETF nacional (.SA). As fontes
-                        // devolvem averageVolume=0 p/ tickers .SA, então o sync cai num snapshot de
-                        // volume de 1 dia (Brapi): ruidoso e que SUBCONTA (ex.: SMAL11 ~52M no
-                        // snapshot vs ~250M na média real). O worker roda SEMPRE após o sync e antes
-                        // do ranking (sync:prod e cron das 09h) → este valor supera o snapshot.
-                        const etfAvgLiquidity = asset.type === 'ETF' ? computeEtfAvgLiquidity(sortedHistory) : null;
-
-                        // Beta só é recalculado aqui para STOCK/FII (benchmark IBOV). Para os
-                        // demais tipos (STOCK_US/ETF/CRYPTO) o beta vem do Yahoo no sync de
-                        // fundamentos — gravá-lo aqui sobrescrevia esse valor com 1.0 a cada run,
-                        // neutralizando os gates de beta do scoring. Só entra no $set quando é BR.
-                        const isBrBetaType = asset.type === 'STOCK' || asset.type === 'FII';
-                        let beta = 1;
-                        if (isBrBetaType && ibovReturnsByDate.size > 0) {
-                            // Alinha retornos do ativo com IBOV por data, evitando desalinhamento
-                            // causado por dias com preço=0 (gaps) que encurtam a série do ativo mas
-                            // não a do IBOV, corrompendo a covariância e zerando o beta.
-                            // sortedHistory já está newest→oldest; filtrar e inverter evita um
-                            // segundo sort O(n log n) sobre a mesma série (reverse opera sobre
-                            // o array novo do filter, sem mutar a série original).
-                            const sortedForBeta = sortedHistory
-                                .filter(h => h.close > 0 && isFinite(h.close))
-                                .reverse(); // → oldest→newest
-
-                            const alignedAssetReturns = [];
-                            const alignedIbovReturns = [];
-
-                            for (let j = 1; j < sortedForBeta.length; j++) {
-                                const dateKey = new Date(sortedForBeta[j].date).toISOString().slice(0, 10);
-                                if (!ibovReturnsByDate.has(dateKey)) continue;
-
-                                const assetReturn = (sortedForBeta[j].close - sortedForBeta[j - 1].close) / sortedForBeta[j - 1].close;
-                                if (!isFinite(assetReturn) || isNaN(assetReturn) || Math.abs(assetReturn) >= 0.50) continue;
-
-                                alignedAssetReturns.push(assetReturn);
-                                alignedIbovReturns.push(ibovReturnsByDate.get(dateKey));
-                            }
-
-                            if (alignedAssetReturns.length >= 20) beta = calculateBeta(alignedAssetReturns, alignedIbovReturns);
-                        }
-
-                        const setFields = {
-                            volatility: isNaN(volatility) ? 0 : volatility,
-                            sma200: isNaN(sma200) ? 0 : sma200,
-                            ema50: isNaN(ema50) ? 0 : ema50
-                        };
-                        if (isBrBetaType) setFields.beta = isNaN(beta) ? 1 : beta;
-                        // ETF nacional: liquidez média dos candles é a autoridade (supera o
-                        // snapshot Brapi gravado no sync). Só grava quando há janela suficiente.
-                        if (etfAvgLiquidity !== null) setFields.liquidity = etfAvgLiquidity;
-
-                        operations.push({
-                            updateOne: {
-                                filter: { ticker: asset.ticker },
-                                update: { $set: setFields }
-                            }
-                        });
-                    });
+                    }
 
                     // Renova lastCheckedAt dos ativos visitados em uma única operação por lote.
                     // (lastUpdated fica intocado — só muda quando candles são realmente re-buscados.)
@@ -906,7 +1031,9 @@ export const timeSeriesWorker = {
         const viaB3 = stats.b3 ? ` · ${stats.b3} completados pelo fechamento oficial da B3` : '';
         const linha = `${stats.visited}/${stats.total} visitados · ${stats.fetched} re-buscados · `
             + `${stats.fresh} já frescos · ${stats.failed} sem dado no Yahoo${viaB3} · `
-            + `${stats.metrics} métricas gravadas${perdidos}.`;
+            + `${stats.metrics} métricas gravadas`
+            + (stats.unchanged ? ` · ${stats.unchanged} séries sem mudança (métricas mantidas)` : '')
+            + `${perdidos}.`;
         if (complete) logger.info(`✅ [TimeSeriesWorker] ${linha}`);
         else logger.warn(`⚠️ [TimeSeriesWorker] Cobertura INCOMPLETA — ${linha}`);
 
@@ -920,6 +1047,7 @@ export const timeSeriesWorker = {
                     $set: {
                         lastTimeSeriesStats: {
                             assetsProcessed: stats.metrics,
+                            unchanged: stats.unchanged || 0,
                             visited: stats.visited,
                             total: stats.total,
                             fetched: stats.fetched,

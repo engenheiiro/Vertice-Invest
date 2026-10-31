@@ -109,6 +109,43 @@ export const dropUntradableCandles = (series = [], type, now = new Date()) =>
  * @param {Array} fetched série vinda da fonte
  * @param {{maxPoints?: number, type?: string, now?: Date}} [options] teto de pontos (Infinity para isentos), classe do ativo e instante de referência
  */
+/**
+ * Acrescenta candles NOVOS na ponta sem reenviar a série (PURA).
+ *
+ * Para estender a ponta com o fechamento da B3, o worker baixava a série inteira
+ * (400 candles, ~45 KB) e a regravava inteira para acrescentar UM dia. Num run
+ * com ~1.100 ativos completados pela B3, eram ~50 MB subindo pela conexão do
+ * desenvolvedor até o Atlas — em 30/10/2026, a ~50 KB/s. Aqui sai um `$push` com
+ * os dias que faltavam.
+ *
+ * Mesmo resultado de `mergeCandleSeries` para o caso de ponta: candle em dia sem
+ * pregão fica de fora, o formato é o mesmo, e o `$slice` aplica o mesmo teto
+ * (`max(cap, tamanho atual)` — série profunda não encolhe). Só serve para dias
+ * DEPOIS do último guardado; o chamador garante isso (a B3 só devolve os dias
+ * que faltam).
+ *
+ * @returns {{ update: object, appended: number, newLength: number, lastDate: string } | null}
+ *          null quando não sobra candle gravável.
+ */
+export const buildTipAppend = (candles = [], { existingLength = 0, lastDate = null, maxPoints, type, now } = {}) => {
+    const novos = (candles || [])
+        .filter((c) => c?.date && c.close > 0 && isStorableCandleDate(c.date, type, now))
+        .filter((c) => !lastDate || c.date > lastDate)
+        .map(normalizeCandle)
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    if (novos.length === 0) return null;
+
+    const cap = Number.isFinite(maxPoints) ? maxPoints : Infinity;
+    const limit = Math.max(cap, existingLength);
+    const push = Number.isFinite(limit) ? { $each: novos, $slice: -limit } : { $each: novos };
+    return {
+        update: { $push: { history: push } },
+        appended: novos.length,
+        newLength: Math.min(existingLength + novos.length, limit),
+        lastDate: novos[novos.length - 1].date,
+    };
+};
+
 export const mergeCandleSeries = (existing = [], fetched = [], { maxPoints, type, now } = {}) => {
     const byDate = new Map();
     let kept = 0;

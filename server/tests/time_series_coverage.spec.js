@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     marketAssetFind: vi.fn(),
     marketAssetBulkWrite: vi.fn(),
     historyFind: vi.fn(),
+    historyFindOne: vi.fn(),
     historyUpdateOne: vi.fn(),
     historyUpdateMany: vi.fn(),
     systemConfigUpdate: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('../models/MarketAsset.js', () => ({
 vi.mock('../models/AssetHistory.js', () => ({
     default: {
         find: mocks.historyFind,
+        findOne: mocks.historyFindOne,
         updateOne: mocks.historyUpdateOne,
         updateMany: mocks.historyUpdateMany,
     },
@@ -52,7 +54,7 @@ vi.mock('../config/logger.js', () => ({
 
 const {
     timeSeriesWorker, orderByStaleness, sessaoJaFechou, METRICS_FLUSH_SIZE,
-    TIME_SERIES_BATCH_SIZE: LOTE, TIME_SERIES_ASSET_CONCURRENCY, formatPhaseTimes,
+    TIME_SERIES_BATCH_SIZE: LOTE, TIME_SERIES_ASSET_CONCURRENCY, formatPhaseTimes, METRICS_VERSION,
 } =
     await import('../services/workers/timeSeriesWorker.js');
 const logger = (await import('../config/logger.js')).default;
@@ -324,5 +326,113 @@ describe('formatPhaseTimes', () => {
     it('esconde fase abaixo de 1s e não inventa fase que não rodou', () => {
         expect(formatPhaseTimes({ leitura: 400, visitas: 2_000 })).toBe('visitas 2s');
         expect(formatPhaseTimes({})).toBe('');
+    });
+});
+
+// 30/10/2026: o lote lê primeiro o CABEÇALHO (último candle + tamanho, calculados
+// no banco) e só baixa candles de quem vai usá-los. A ~50 KB/s até o Atlas, baixar
+// a série inteira de 1.270 ativos para recalcular os mesmos números era o run.
+describe('timeSeriesWorker.run — cabeçalho primeiro, candles só de quem mudou', () => {
+    // Quinta, 19:00 em Brasília: o pregão do dia já fechou e é o alvo.
+    const AGORA = new Date('2026-08-20T22:00:00.000Z');
+    const PREGAO = '2026-08-20';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.useFakeTimers();
+        vi.setSystemTime(AGORA);
+        mocks.getBenchmarkHistory.mockResolvedValue([]);
+        mocks.historyUpdateOne.mockResolvedValue({});
+        mocks.historyUpdateMany.mockResolvedValue({});
+        mocks.marketAssetBulkWrite.mockResolvedValue({});
+        mocks.systemConfigUpdate.mockResolvedValue({});
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    const runWorker = async () => {
+        const promise = timeSeriesWorker.run();
+        await vi.runAllTimersAsync();
+        await promise;
+    };
+
+    /** Responde como o Mongo: varredura, cabeçalho projetado ou candles, conforme a projeção. */
+    const banco = ({ header, history }) => {
+        mocks.historyFind.mockImplementation((_filter, projection) => {
+            if (projection?.historyLength) return { lean: async () => [header] };
+            if (projection?.history) return { lean: async () => [{ ticker: header.ticker, history }] };
+            return { lean: async () => [{ ticker: header.ticker, lastCheckedAt: null }] };
+        });
+    };
+    const opsDe = (ticker) => mocks.marketAssetBulkWrite.mock.calls
+        .flatMap(([ops]) => ops)
+        .filter((op) => op.updateOne.filter.ticker === ticker);
+
+    it('série igual à do último cálculo: os candles não descem e nada é recalculado', async () => {
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([
+            { ticker: 'AT0', type: 'STOCK', metricsSignature: `v${METRICS_VERSION}:${PREGAO}|400` },
+        ]));
+        banco({ header: { ticker: 'AT0', historyLength: 400, lastCandleDate: PREGAO }, history: candles(400, PREGAO) });
+
+        await runWorker();
+
+        const projecoes = mocks.historyFind.mock.calls.map(([, proj]) => proj);
+        expect(projecoes.some((p) => p?.history)).toBe(false);
+        expect(mocks.getFullHistory).not.toHaveBeenCalled();
+        expect(opsDe('AT0')).toEqual([]);
+        const stats = mocks.systemConfigUpdate.mock.calls.at(-1)[1].$set.lastTimeSeriesStats;
+        expect(stats).toMatchObject({ unchanged: 1, complete: true });
+    });
+
+    it('série que mudou desce numa leitura só e grava a assinatura nova', async () => {
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([
+            { ticker: 'AT0', type: 'STOCK', metricsSignature: `v${METRICS_VERSION}:2026-08-19|399` },
+        ]));
+        banco({ header: { ticker: 'AT0', historyLength: 400, lastCandleDate: PREGAO }, history: candles(400, PREGAO) });
+
+        await runWorker();
+
+        expect(mocks.historyFind.mock.calls.filter(([, proj]) => proj?.history)).toHaveLength(1);
+        const [op] = opsDe('AT0');
+        expect(op.updateOne.update.$set).toMatchObject({ metricsSignature: `v${METRICS_VERSION}:${PREGAO}|400` });
+        expect(op.updateOne.update.$set.sma200).toBeGreaterThan(0);
+    });
+
+    it('assinatura de versão antiga do cálculo força o recálculo, mesmo com a série igual', async () => {
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([
+            { ticker: 'AT0', type: 'STOCK', metricsSignature: `v${METRICS_VERSION - 1}:${PREGAO}|400` },
+        ]));
+        banco({ header: { ticker: 'AT0', historyLength: 400, lastCandleDate: PREGAO }, history: candles(400, PREGAO) });
+
+        await runWorker();
+
+        expect(opsDe('AT0')).toHaveLength(1);
+    });
+
+    it('ativo sem assinatura (nunca medido por este worker) é medido', async () => {
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([{ ticker: 'AT0', type: 'STOCK' }]));
+        banco({ header: { ticker: 'AT0', historyLength: 400, lastCandleDate: PREGAO }, history: candles(400, PREGAO) });
+
+        await runWorker();
+
+        expect(opsDe('AT0')).toHaveLength(1);
+    });
+
+    it('série velha: baixa a guardada INTEIRA antes de mesclar com o Yahoo (nunca encurta)', async () => {
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([{ ticker: 'AT0', type: 'STOCK' }]));
+        banco({ header: { ticker: 'AT0', historyLength: 600, lastCandleDate: '2026-08-14' }, history: [] });
+        mocks.historyFindOne.mockReturnValue({ lean: async () => ({ history: candles(600, '2026-08-14') }) });
+        mocks.getFullHistory.mockResolvedValue(candles(5, PREGAO));
+
+        await runWorker();
+
+        expect(mocks.historyFindOne).toHaveBeenCalledWith({ ticker: 'AT0' }, { history: 1 });
+        // Acima do cap de 400: a série profunda guardada entrou na mescla. Lendo só
+        // o cabeçalho, a "mescla" teria sido com nada e gravaria 5 candles.
+        const gravada = mocks.historyUpdateOne.mock.calls[0][1].$set.history;
+        expect(gravada.length).toBeGreaterThan(400);
+        expect(gravada.at(-1).date).toBe(PREGAO);
     });
 });

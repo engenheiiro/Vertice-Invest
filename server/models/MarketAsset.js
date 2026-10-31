@@ -186,6 +186,11 @@ const MarketAssetSchema = new mongoose.Schema({
   beta: { type: Number, default: 0 },
   sma200: { type: Number, default: 0 },
   ema50: { type: Number, default: 0 },
+  // Assinatura da série sobre a qual as quatro métricas acima foram calculadas
+  // (`último candle|nº de candles`). O timeSeriesWorker pula o recálculo quando
+  // a série não mudou — sem isso, cada run baixava a série inteira de ~1.270
+  // ativos para chegar aos mesmos números (ver services/workers/timeSeriesWorker.js).
+  metricsSignature: { type: String, default: null },
   
   // --- Controle de Saúde do Ativo ---
   isActive: { type: Boolean, default: true },

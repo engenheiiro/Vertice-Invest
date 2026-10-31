@@ -110,7 +110,7 @@ describe('timeSeriesWorker — série curta demais para medir', () => {
 
         await runWorker();
 
-        expect(metricasDe('TON')).toEqual([{ sma200: 0, ema50: 0, volatility: 0 }]);
+        expect(metricasDe('TON')).toEqual([{ sma200: 0, ema50: 0, volatility: 0, metricsSignature: 'v1:2026-09-05|2' }]);
     });
 
     it('não toca no beta — para cripto/US ele vem do sync de fundamentos, não daqui', async () => {

@@ -77,8 +77,12 @@ const prepara = (docs) => {
         .mockReturnValue(historyQuery(docs));
 };
 
-/** Candles gravados no AssetHistory por chamada de updateOne. */
-const gravados = () => mocks.historyUpdateOne.mock.calls.map((c) => c[1].$set.history);
+/**
+ * Candles gravados no AssetHistory por chamada de updateOne: a série inteira
+ * (`$set`, caminho do Yahoo) ou só a ponta (`$push`, caminho da B3).
+ */
+const gravados = () => mocks.historyUpdateOne.mock.calls
+    .map((c) => c[1].$set?.history ?? c[1].$push?.history?.$each);
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -113,6 +117,21 @@ describe('timeSeriesWorker — reforço da B3', () => {
         expect(mocks.fetchB3DailyCloses).toHaveBeenCalledWith(PREGAO);
         const ultima = gravados().at(-1);
         expect(ultima.some((c) => c.date === PREGAO && c.close === 12.84)).toBe(true);
+    });
+
+    // 30/10/2026: regravar 400 candles para acrescentar UM era ~45 KB subindo por
+    // ativo — ~50 MB por run com a B3 completando o dia de ~1.100 séries.
+    it('grava só a ponta: $push do dia, sem reenviar a série', async () => {
+        prepara(serieParada());
+        mocks.getFullHistory.mockResolvedValue(null);
+
+        await runWorker();
+
+        const [, update] = mocks.historyUpdateOne.mock.calls.at(-1);
+        expect(update.$set).not.toHaveProperty('history');
+        expect(update.$push.history.$each).toEqual([
+            expect.objectContaining({ date: PREGAO, close: 12.84 }),
+        ]);
     });
 
     it('estende a série quando o Yahoo não devolve nada', async () => {
