@@ -20,7 +20,7 @@ import {
 } from '../utils/dataHealthRules.js';
 // A sentinela entra aqui só pelo formatador PURO do fato — é o que fecha o elo
 // entre quem produz e quem julga (nenhum IO acontece na importação).
-import { summarizeWalletPayloadFailures } from '../services/dataHealthService.js';
+import { summarizeFailingChecks, summarizeWalletPayloadFailures } from '../services/dataHealthService.js';
 
 const NOW = new Date('2026-08-16T12:00:00Z');
 const hoursAgo = (h) => new Date(NOW.getTime() - h * 3600000);
@@ -1180,5 +1180,32 @@ describe('check de envio de e-mail', () => {
     it('vive na categoria de ENTREGA, separada da coleta', () => {
         const check = doCheck(comEmail({ ok: true, error: null, host: 'x' }));
         expect(check.category).toBe(CATEGORY.DELIVERY);
+    });
+});
+
+// A linha de log da sentinela dizia só "1 crítico(s)"; saber QUAL exigia abrir o
+// painel. O resumo vai no meta, críticos primeiro.
+describe('summarizeFailingChecks', () => {
+    it('lista só o que está fora do OK, críticos antes dos alertas', () => {
+        const out = summarizeFailingChecks([
+            { id: 'quotes.freshness', status: 'OK', detail: 'ok' },
+            { id: 'sources.brapi', status: 'WARN', detail: 'lenta' },
+            { id: 'jobs.daily-evening', status: 'CRITICAL', detail: 'falhou: Execução órfã' },
+        ]);
+        expect(out).toEqual([
+            'CRITICAL jobs.daily-evening — falhou: Execução órfã',
+            'WARN sources.brapi — lenta',
+        ]);
+    });
+
+    it('tudo OK devolve lista vazia; sem detalhe cai no rótulo', () => {
+        expect(summarizeFailingChecks([{ id: 'a', status: 'OK' }])).toEqual([]);
+        expect(summarizeFailingChecks([{ id: 'b', status: 'WARN', label: 'Rótulo' }])).toEqual(['WARN b — Rótulo']);
+        expect(summarizeFailingChecks()).toEqual([]);
+    });
+
+    it('limita a 10 nomes', () => {
+        const muitos = Array.from({ length: 15 }, (_, i) => ({ id: `c${i}`, status: 'WARN', detail: 'x' }));
+        expect(summarizeFailingChecks(muitos)).toHaveLength(10);
     });
 });

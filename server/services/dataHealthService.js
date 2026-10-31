@@ -602,6 +602,23 @@ const collectFacts = async (now) => {
     };
 };
 
+/** Teto de checks nomeados na linha de log — o painel continua tendo a lista inteira. */
+const MAX_FAILING_IN_LOG = 10;
+
+/**
+ * Checks fora do OK, críticos primeiro, no formato `STATUS id — detalhe`.
+ * Vai no meta da linha de log para quem lê o log (ou o TXT do sync) saber o QUE
+ * está fora sem abrir o painel.
+ */
+export const summarizeFailingChecks = (checks = []) => {
+    const rank = { [HEALTH_STATUS.CRITICAL]: 0, [HEALTH_STATUS.WARN]: 1 };
+    return checks
+        .filter((c) => c && c.status !== HEALTH_STATUS.OK && rank[c.status] !== undefined)
+        .sort((a, b) => rank[a.status] - rank[b.status])
+        .slice(0, MAX_FAILING_IN_LOG)
+        .map((c) => `${c.status} ${c.id} — ${c.detail || c.label || 'sem detalhe'}`);
+};
+
 /**
  * Coleta, avalia e persiste um relatório de saúde.
  * `trigger`: 'CRON' | 'SYNC' | 'MANUAL'.
@@ -633,9 +650,15 @@ export const runDataHealthCheck = async ({ trigger = 'CRON', persist = true } = 
 
         const line = `[DataHealth] ${report.status} — ${report.summary.critical} crítico(s), `
             + `${report.summary.warn} alerta(s), ${report.summary.ok} ok (${durationMs}ms)`;
-        if (report.status === HEALTH_STATUS.CRITICAL) logger.error(line, { trigger });
-        else if (report.status === HEALTH_STATUS.WARN) logger.warn(line, { trigger });
-        else logger.info(line, { trigger });
+        // A linha só com contagens obrigava a abrir o painel (ou rodar a sentinela
+        // à mão) para saber QUAL check falhou — em 30/10/2026 o sync:prod disse
+        // "1 crítico" e a resposta era a rotina das 18:30 órfã de um deploy.
+        // `healthStatus` é também a marca estrutural que o syncReporter usa para
+        // separar o estado do sistema do resultado das etapas.
+        const meta = { trigger, healthStatus: report.status, failing: summarizeFailingChecks(report.checks) };
+        if (report.status === HEALTH_STATUS.CRITICAL) logger.error(line, meta);
+        else if (report.status === HEALTH_STATUS.WARN) logger.warn(line, meta);
+        else logger.info(line, meta);
 
         return { ...report, durationMs, trigger };
     } catch (error) {

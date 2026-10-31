@@ -121,3 +121,81 @@ describe('syncReporter — níveis de veredito', () => {
         expect(readReport()).toContain('com alertas de performance');
     });
 });
+
+// 30/10/2026: a rotina das 18:30 ficou órfã de um deploy, a sentinela rodou no
+// fim da coleta e o seu ERROR deixou "Cotações & mercado" INCOMPLETA — uma etapa
+// que tinha coletado tudo. Estado do host ≠ resultado da etapa.
+describe('syncReporter — saúde do sistema fora do veredito das etapas', () => {
+    beforeEach(() => {
+        reportFile = path.join(
+            fs.mkdtempSync(path.join(os.tmpdir(), 'vertice-sync-')), 'sync-report.txt');
+        writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    });
+
+    afterEach(() => {
+        writeSpy.mockRestore();
+    });
+
+    const terminal = () => writeSpy.mock.calls.map(([s]) => String(s)).join('');
+    const criticoOrfao = () => logger.error(
+        '[DataHealth] CRITICAL — 1 crítico(s), 0 alerta(s), 71 ok (2551ms)',
+        {
+            trigger: 'SYNC',
+            healthStatus: 'CRITICAL',
+            failing: ['CRITICAL jobs.daily-evening — Última execução há 4.7h — falhou: Execução órfã'],
+        },
+    );
+
+    it('CRITICAL da sentinela não deixa a etapa incompleta nem muda o código de saída', async () => {
+        const reporter = novoReporter();
+        await reporter.runStage('Cotações & mercado', async () => { criticoOrfao(); });
+        const verdict = reporter.finish({ success: true });
+
+        expect(verdict.exitCode).toBe(0);
+        expect(verdict.incomplete).toEqual([]);
+        const txt = readReport();
+        expect(txt).not.toMatch(/Cotações & mercado .*INCOMPLETA/);
+        expect(txt).toContain('Saúde do sistema  CRITICAL');
+        expect(txt).toContain('[SAÚDE DO SISTEMA] (CRITICAL)');
+    });
+
+    it('nomeia o check que está fora, no terminal e no TXT', async () => {
+        const reporter = novoReporter();
+        await reporter.runStage('Cotações & mercado', async () => { criticoOrfao(); });
+        reporter.finish({ success: true });
+
+        expect(terminal()).toContain('Saúde do sistema: CRITICAL');
+        expect(terminal()).toContain('jobs.daily-evening');
+        expect(readReport()).toContain('• CRITICAL jobs.daily-evening — Última execução há 4.7h');
+    });
+
+    it('falha ao AVALIAR a saúde continua sendo erro de etapa', async () => {
+        const reporter = novoReporter();
+        await reporter.runStage('Cotações & mercado', async () => {
+            logger.error('❌ [DataHealth] Falha ao avaliar saúde dos dados: Cannot read properties of undefined');
+        });
+        const verdict = reporter.finish({ success: true });
+
+        expect(verdict.exitCode).toBe(2);
+        expect(verdict.incomplete).toEqual(['Cotações & mercado']);
+    });
+
+    it('a data do cabeçalho é a do mesmo fuso do relógio', async () => {
+        vi.useFakeTimers();
+        // 22:18 em Brasília = 01:18 UTC do dia seguinte.
+        vi.setSystemTime(new Date('2026-10-31T01:18:04.000Z'));
+        try {
+            const reporter = novoReporter();
+            await reporter.runStage('Etapa boa', async () => {});
+            reporter.finish({ success: true });
+        } finally {
+            vi.useRealTimers();
+        }
+        const agora = new Date('2026-10-31T01:18:04.000Z');
+        const p = (n) => String(n).padStart(2, '0');
+        const esperado = `${agora.getFullYear()}-${p(agora.getMonth() + 1)}-${p(agora.getDate())} `
+            + `${p(agora.getHours())}:${p(agora.getMinutes())}`;
+        expect(terminal()).toContain(esperado);
+        expect(readReport()).toContain(`Gerado em ....... ${esperado}`);
+    });
+});

@@ -37,6 +37,13 @@ function clockOf(date) {
     return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
 }
 
+// Data no MESMO fuso de `clockOf`. O cabeçalho usava `toISOString()` (UTC) para a
+// data e a hora local para o relógio: um run às 22:18 de 30/10 em Brasília saía
+// como "2026-10-31 22:18:04" — dia seguinte, hora de hoje.
+function dateOf(date) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
 function fmtDuration(ms) {
     const totalSec = Math.round(ms / 1000);
     if (totalSec < 60) return `${totalSec}s`;
@@ -99,6 +106,15 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
     const PERF_ALERT_RE = /\[Backtest\]\s*ALERTA|\bcaiu\s+-?\d/i;
     const isPerfAlert = (e) => e.level === 'warn' && PERF_ALERT_RE.test(e.message);
 
+    // Veredito da sentinela de saúde (dataHealthService marca com `healthStatus`).
+    // Ele descreve o ESTADO do sistema — rotinas do host, frescor do banco —, não
+    // o que esta etapa entregou. Em 30/10/2026 a rotina das 18:30 órfã de um deploy
+    // deixou a sentinela em CRITICAL, e o ERROR caiu dentro de "Cotações & mercado",
+    // que tinha coletado tudo: a etapa saiu INCOMPLETA por um defeito que não era
+    // dela. Fica num bloco próprio, em destaque, fora do veredito das etapas.
+    // A falha de AVALIAR (sem `healthStatus`) continua erro comum: aquilo é bug.
+    const isHealthVerdict = (e) => e.meta?.healthStatus != null;
+
     let consoleTransport = null;
     let prevLevel = null;
     let fatal = null;
@@ -152,7 +168,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
     // então uma etapa truncada pela metade ficava com o mesmo ícone de uma etapa
     // que só usou o fallback do Google para 3 tickers.
     function stageStatus(idx) {
-        const own = collector.entries.filter((e) => e.stageIdx === idx);
+        const own = collector.entries.filter((e) => e.stageIdx === idx && !isHealthVerdict(e));
         if (own.some((e) => e.level === 'error')) return 'error';
         // Alertas de performance não marcam a etapa como ⚠ (a etapa concluiu ok;
         // o alerta é uma saída informativa, não uma falha operacional).
@@ -173,7 +189,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         patchConsole(); // captura console.* de libs (yahoo-finance2 etc.)
 
         out(`\n  ${title} · Vértice\n`);
-        out(`  ${startedAt.toISOString().slice(0, 10)} ${clockOf(startedAt)}\n`);
+        out(`  ${dateOf(startedAt)} ${clockOf(startedAt)}\n`);
         out(`  ${RULE}\n\n`);
     }
 
@@ -244,8 +260,9 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         if (prevLevel) logger.level = prevLevel;
 
         const totalDur = fmtDuration(Date.now() - startedAt.getTime());
-        const errs = collector.entries.filter((e) => e.level === 'error');
-        const allWarns = collector.entries.filter((e) => e.level === 'warn');
+        const health = collector.entries.filter(isHealthVerdict).at(-1) || null;
+        const errs = collector.entries.filter((e) => e.level === 'error' && !isHealthVerdict(e));
+        const allWarns = collector.entries.filter((e) => e.level === 'warn' && !isHealthVerdict(e));
         const perfAlerts = allWarns.filter(isPerfAlert);       // picks caídos — informativo
         const warns = allWarns.filter((e) => !isPerfAlert(e)); // avisos operacionais
 
@@ -268,11 +285,15 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
             // O dono precisa saber O QUE não terminou sem abrir o TXT.
             out(`  Incompleta(s): ${incomplete.map((s) => s.label).join(', ')} — o run seguiu, mas entregou menos.\n`);
         }
+        if (health && health.meta.healthStatus !== 'OK') {
+            out(`  Saúde do sistema: ${health.meta.healthStatus} (estado do host, não deste sync)\n`);
+            for (const f of healthFailing(health)) out(`    · ${f}\n`);
+        }
         out(`  Relatório detalhado: ${path.relative(process.cwd(), reportFile)}\n`);
         out(`  ${RULE}\n\n`);
 
         try {
-            writeReport({ success, totalDur, errs, warns, perfAlerts, failedStages, incomplete });
+            writeReport({ success, totalDur, errs, warns, perfAlerts, failedStages, incomplete, health });
         } catch (err) {
             out(`  (não foi possível gravar o TXT: ${err.message})\n`);
         }
@@ -323,6 +344,11 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         return points;
     }
 
+    function healthFailing(entry) {
+        const list = entry?.meta?.failing;
+        return Array.isArray(list) && list.length ? list : [entry?.message ?? ''];
+    }
+
     function entriesForStage(stage) {
         return collector.entries.filter((e) => e.stageIdx === stage.idx);
     }
@@ -335,7 +361,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         return line;
     }
 
-    function writeReport({ success, totalDur, errs, warns, perfAlerts = [], failedStages = [], incomplete = [] }) {
+    function writeReport({ success, totalDur, errs, warns, perfAlerts = [], failedStages = [], incomplete = [], health = null }) {
         const finishedAt = new Date();
         const L = [];
         const box = '═'.repeat(58);
@@ -345,7 +371,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         L.push('║  RELATÓRIO DE SINCRONIZAÇÃO — VÉRTICE  (sync:prod)');
         L.push(`╚${box}╝`);
         L.push('');
-        L.push(`Gerado em ....... ${finishedAt.toISOString().slice(0, 10)} ${clockOf(finishedAt)}`);
+        L.push(`Gerado em ....... ${dateOf(finishedAt)} ${clockOf(finishedAt)}`);
         L.push(`Duração total ... ${totalDur}`);
         L.push(
             `Resultado ....... ${!success ? '❌ FALHA' : incomplete.length ? '❗ CONCLUÍDO COM ETAPA(S) INCOMPLETA(S)' : errs.length ? '❗ CONCLUÍDO COM ERROS (fora das etapas)' : warns.length ? '⚠️  SUCESSO COM AVISOS' : perfAlerts.length ? '✅ SUCESSO · com alertas de performance' : '✅ SUCESSO'}`
@@ -355,6 +381,7 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         if (failedStages.length) L.push(`Etapas que falharam ... ${failedStages.map((s) => s.label).join(', ')}`);
         if (incomplete.length) L.push(`Etapas incompletas .... ${incomplete.map((s) => s.label).join(', ')}`);
         L.push(`Código de saída . ${exitCodeFor({ success, incomplete, errs })}  (0 ok · 1 falhou · 2 incompleto)`);
+        if (health) L.push(`Saúde do sistema  ${health.meta.healthStatus}  (estado do host; não entra no código de saída)`);
         L.push('');
 
         // ── PARTE 1 — humanos ────────────────────────────────────────────────
@@ -385,6 +412,13 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
             for (const p of points) L.push(`  • ${p}`);
         }
         L.push('');
+
+        if (health && health.meta.healthStatus !== 'OK') {
+            L.push('Saúde do sistema (rotinas e frescor do banco, avaliados ao fim da coleta —');
+            L.push('estado do host, não falha deste sync):');
+            for (const f of healthFailing(health)) L.push(`  • ${f}`);
+            L.push('');
+        }
 
         // Bloco separado: alertas de performance (não são falha de sync).
         if (perfAlerts.length) {
@@ -426,6 +460,11 @@ export function createSyncReporter({ reportFile, title = 'sync:prod' }) {
         L.push(`[ALERTAS DE PERFORMANCE] (${perfAlerts.length})`);
         if (perfAlerts.length === 0) L.push('  (nenhum)');
         else for (const e of perfAlerts) L.push(fmtEntry(e, '  '));
+        L.push('');
+
+        L.push(`[SAÚDE DO SISTEMA] (${health ? health.meta.healthStatus : 'não avaliada'})`);
+        if (health) L.push(fmtEntry(health, '  '));
+        else L.push('  (a sentinela não rodou neste sync)');
         L.push('');
 
         L.push('[LOG COMPLETO POR ETAPA]');
