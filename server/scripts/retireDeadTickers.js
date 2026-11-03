@@ -46,6 +46,7 @@
  *   node server/scripts/retireDeadTickers.js --tickers=A,B --apply # alvo explícito
  *   node server/scripts/retireDeadTickers.js --tickers=MMC --successor=MRSH --apply
  *   node server/scripts/retireDeadTickers.js --successors=GUAR3:RIAA3,PETZ3:AUAU3 --apply
+ *   node server/scripts/retireDeadTickers.js --tickers=PARA --successor=PSKY --apply  # sigla reusada por outro papel
  *   node server/scripts/retireDeadTickers.js --tickers=X --reason="encerrou as atividades" --apply
  *   node server/scripts/retireDeadTickers.js --tickers=X --undo --apply   # reverte
  *
@@ -235,6 +236,24 @@ const run = async () => {
         // Google servem a última cotação de um símbolo extinto indefinidamente.
         // A troca não afrouxa nada — o que não prova vida ainda precisa passar
         // pelas mesmas guardas (detido em carteira, quarentena, --apply).
+        //
+        // SIGLA REUSADA: negociação provada não é vida quando o dono nomeou o
+        // sucessor. A bolsa americana devolve o símbolo ao mercado depois da
+        // troca, e outro papel passa a negociar nele — PARA era a Paramount até a
+        // fusão que a fez PSKY (ago/2025); em 03/11/2026 o mesmo símbolo era um
+        // papel de centavos indo de 0,42 a 5,20 em uma semana, e o probe juraria
+        // que "a Paramount" estava viva. Quem sabe do evento societário é o dono,
+        // e ele já disse isso ao nomear o sucessor deste ticker.
+        const nomeado = successorMap[a.ticker] || (successor && explicit?.[0] === a.ticker ? successor : null);
+        if (verdict.code === 'RECOVERS' && nomeado) {
+            toRetire.push({
+                a,
+                stale,
+                held,
+                verdict: { code: 'REASSIGNED', label: `🔁 sigla negocia, mas como outro papel — sucessor nomeado: ${nomeado}` },
+            });
+            continue;
+        }
         if (verdict.code === 'RECOVERS') {
             skipped.push({ a, reason: verdict.label });
             continue;
