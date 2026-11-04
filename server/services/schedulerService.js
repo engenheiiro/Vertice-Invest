@@ -55,6 +55,7 @@ import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe, closeOrphanRuns } from '../utils/jobRun.js';
 import { withJobLease } from '../utils/jobLease.js';
 import { withJobWatchdog } from '../utils/jobWatchdog.js';
+import { oncePerMinute } from '../utils/cronTick.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 import { loadCompletedCheckpoints, saveCheckpoint } from '../utils/jobCheckpoint.js';
 import { runDataHealthCheck } from './dataHealthService.js';
@@ -69,6 +70,18 @@ const SCHEDULER_TZ = 'America/Sao_Paulo';
 // ausência de execução não produz log, então sem esse registro um scheduler morto
 // é indistinguível de um scheduler ocioso. O `jobId` deve existir em jobCatalog.js,
 // que define o teto de silêncio tolerado de cada rotina.
+//
+// (recoverMissedExecutions) Sem esta opção o node-cron 3 PERDE disparo em silêncio.
+// Cada tarefa tem o próprio laço de setTimeout(1000), que só dispara se a passada
+// cair DENTRO do segundo :00 do minuto. O laço atrasa alguns ms a cada volta, e de
+// tempos em tempos pula de :59,99 para :01,00 — basta um pulo sobre o :00 e aquele
+// minuto não existiu. Nada falha, nada loga, não abre JobRun: medido em 04/11/2026,
+// 0,2% dos disparos de 30 dias (6 de 2.868 no quotes-sync) e, no fx-history, as
+// noites de 27/10 e 03/11, com o processo vivo e o quotes-sync do mesmo minuto
+// rodando normalmente em 03/11. Num job diário, um disparo perdido é um dia inteiro —
+// foi o alerta CRITICAL de "Taxa USD/BRL histórica". Com a opção, a passada olha
+// também os segundos que pulou. A opção sozinha rodaria todo job duas vezes (defeito
+// da biblioteca), e por isso anda sempre com `oncePerMinute`.
 const schedule = (expression, jobId, fn) => cron.schedule.call(
     cron,
     expression,
@@ -79,8 +92,8 @@ const schedule = (expression, jobId, fn) => cron.schedule.call(
     // do lease que libera o registro no Mongo e para o heartbeat. Invertido, uma
     // execução derrubada por tempo continuaria renovando o lease por baixo e o
     // job não rodaria nunca mais. Ver utils/jobWatchdog.js.
-    () => trackJobSafe(jobId, () => withJobLease(jobId, () => withJobWatchdog(jobId, fn))),
-    { timezone: SCHEDULER_TZ },
+    oncePerMinute(() => trackJobSafe(jobId, () => withJobLease(jobId, () => withJobWatchdog(jobId, fn)))),
+    { timezone: SCHEDULER_TZ, recoverMissedExecutions: true },
 );
 
 // (DISABLE_SCHEDULER) Desliga o scheduler INTEIRO nesta instância — nenhum cron

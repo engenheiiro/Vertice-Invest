@@ -115,6 +115,10 @@ describe('sem a flag — comportamento idêntico ao de hoje', () => {
 
         // Amostra das expressões: o jobId fica dentro do closure, então é pela
         // expressão que se confirma que os 15 min e o pós-mercado entraram.
+        // Sem a opção o node-cron perde disparo em silêncio (ver schedulerService).
+        for (const [, , opcoes] of vi.mocked(cron.schedule).mock.calls) {
+            expect(opcoes).toMatchObject({ timezone: 'America/Sao_Paulo', recoverMissedExecutions: true });
+        }
         const expressoes = vi.mocked(cron.schedule).mock.calls.map(([expr]) => expr);
         expect(expressoes).toContain('*/15 * * * *');   // quotes-sync
         expect(expressoes).toContain('30 18 * * *');    // daily-evening (heavy)

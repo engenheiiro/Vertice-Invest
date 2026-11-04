@@ -195,7 +195,23 @@ export const DEFAULT_THRESHOLDS = {
  * casa de 700.000, que é estouro de divisão na origem.
  */
 export const PLAUSIBILITY_RANGES = {
-    dy: { min: 0, max: 25, label: 'Dividend Yield', unit: '%' },
+    // Régua de fração própria: DY acima de 25% é quase sempre REAL. Conferido em
+    // 04/11/2026 contra os proventos do Yahoo: a maioria dos 25 nomes batia (WEST3
+    // 153%, SCAR3 64%, TGAR11 26%) — dividendo extraordinário ou preço que desabou,
+    // com o provento de 12 meses ainda na conta. Na régua geral de 2%, a contagem
+    // normal cruzava a linha e o painel pedia "coluna trocada" onde não havia nenhuma.
+    // O defeito que este check existe para pegar é de MASSA (coluna ou unidade errada
+    // numa classe inteira), e esse passa folgado de 5%. Quem consome já se protege:
+    // o scoring limita o DY a 14 no Bazin.
+    dy: {
+        min: 0,
+        max: 25,
+        label: 'Dividend Yield',
+        unit: '%',
+        ratioThresholds: { warn: 0.05, critical: 0.10 },
+        hint: 'A lista é quase toda de DY real: provento extraordinário ou preço que desabou. Só preocupa'
+            + ' em massa, numa classe inteira — aí é coluna trocada ou unidade errada no Fundamentus.',
+    },
     pl: { min: -5000, max: 5000, label: 'P/L', unit: '' },
     p_vp: { min: -5000, max: 5000, label: 'P/VP', unit: '' },
     beta: { min: -2, max: 4, label: 'Beta', unit: '' },
@@ -446,7 +462,7 @@ const plausibilityChecks = (facts, th) => {
     for (const [field, range] of Object.entries(PLAUSIBILITY_RANGES)) {
         const count = num(totals[field]) ?? 0;
         const r = ratio(count, universe);
-        const porFracao = gradeAscending(r, th.implausibleRatio);
+        const porFracao = gradeAscending(r, range.ratioThresholds ?? th.implausibleRatio);
         out.push(check({
             id: `plausibility.${field}`,
             label: `${range.label} fora da faixa`,

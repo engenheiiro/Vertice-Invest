@@ -491,6 +491,31 @@ describe('PLAUSIBILIDADE', () => {
         expect(byId(buildHealthReport(facts), 'plausibility.dy').detail).not.toMatch(/:\s*$/);
     });
 
+    // 25 de 1.250 (2,0%) acendeu o painel em 04/11/2026 com DY real, conferido no
+    // Yahoo. O que o check precisa pegar é o defeito em massa, não o dividendo gordo.
+    describe('Dividend Yield julga por régua própria', () => {
+        const statusCom = (quantos) => {
+            const facts = healthyFacts();
+            facts.implausible.dy = quantos;
+            return byId(buildHealthReport(facts), 'plausibility.dy').status;
+        };
+
+        it('2% do universo com DY alto não é defeito', () => {
+            expect(statusCom(20)).toBe(HEALTH_STATUS.OK);
+        });
+
+        it('5% já pede atenção e 10% é crítico', () => {
+            expect(statusCom(50)).toBe(HEALTH_STATUS.WARN);
+            expect(statusCom(100)).toBe(HEALTH_STATUS.CRITICAL);
+        });
+
+        it('a régua geral continua valendo para os outros campos', () => {
+            const facts = healthyFacts();
+            facts.implausible.pl = 20;
+            expect(byId(buildHealthReport(facts), 'plausibility.pl').status).toBe(HEALTH_STATUS.WARN);
+        });
+    });
+
     it('um único preço ≤ 0 já sai de OK', () => {
         const facts = healthyFacts();
         facts.implausible.nonPositivePrice = 1;
