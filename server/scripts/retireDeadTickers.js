@@ -47,6 +47,7 @@
  *   node server/scripts/retireDeadTickers.js --tickers=MMC --successor=MRSH --apply
  *   node server/scripts/retireDeadTickers.js --successors=GUAR3:RIAA3,PETZ3:AUAU3 --apply
  *   node server/scripts/retireDeadTickers.js --tickers=PARA --successor=PSKY --apply  # sigla reusada por outro papel
+ *   node server/scripts/retireDeadTickers.js --tickers=RAIZ4 --successor=RAIZ55 --apply  # troca de código na B3
  *   node server/scripts/retireDeadTickers.js --tickers=X --reason="encerrou as atividades" --apply
  *   node server/scripts/retireDeadTickers.js --tickers=X --undo --apply   # reverte
  *
@@ -60,7 +61,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import UserAsset from '../models/UserAsset.js';
 import { connectScriptDb } from './lib/scriptDb.js';
 import { probeTicker, classifyProbe } from './lib/quoteProbe.js';
-import { loadB3Window, b3Activity, b3Label, isB3Type } from './lib/b3Activity.js';
+import { loadB3Window, b3Activity, b3Label, isB3Type, b3RenamedTo } from './lib/b3Activity.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -214,7 +215,20 @@ const run = async () => {
         // Papel da B3: o pregão decide, nos dois sentidos. O probe fica só com o
         // que ele faz bem — apontar o sucessor quando o símbolo trocou.
         const b3 = isB3Type(a.type) ? b3Activity(a.ticker, janela) : { conclusive: false };
+        const nomeado = successorMap[a.ticker] || (successor && explicit?.[0] === a.ticker ? successor : null);
         if (b3.conclusive) {
+            // TROCA DE CÓDIGO: negócio na janela não prova vida quando o papel saiu
+            // do último arquivo e o sucessor nomeado entrou nele. Em 03/11/2026 o
+            // RAIZ4 virou RAIZ55: "negociou em 9/10 pregões" era tudo do código velho.
+            if (nomeado && b3RenamedTo(a.ticker, nomeado, janela)) {
+                toRetire.push({
+                    a,
+                    stale,
+                    held,
+                    verdict: { code: 'RENAMED', label: `🔁 saiu do último pregão da B3 e ${nomeado} entrou nele` },
+                });
+                continue;
+            }
             if (b3.traded > 0) {
                 skipped.push({ a, reason: b3Label(b3) });
                 continue;
@@ -244,7 +258,6 @@ const run = async () => {
         // papel de centavos indo de 0,42 a 5,20 em uma semana, e o probe juraria
         // que "a Paramount" estava viva. Quem sabe do evento societário é o dono,
         // e ele já disse isso ao nomear o sucessor deste ticker.
-        const nomeado = successorMap[a.ticker] || (successor && explicit?.[0] === a.ticker ? successor : null);
         if (verdict.code === 'RECOVERS' && nomeado) {
             toRetire.push({
                 a,

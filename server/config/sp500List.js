@@ -15,6 +15,8 @@
 // morte (14/08, 17/08 e 04/08) enquanto `quotes` já vinha vazio.
 // Baixa de 30/10/2026: WBD (Warner Bros. Discovery) — último negócio nos EUA em
 // 05/10; a busca por nome só acha as R-shares alemãs e a TLX (mesmo caso do EA).
+// Baixa de 04/11/2026: KVUE (comprada pela Kimberly-Clark; a S&P pôs a OKTA no lugar
+// em 04/11, último candle em 30/10). KMB entrou: faltava na lista e é a sucessora.
 export const SP500_STOCKS = [
   // Technology
   { ticker: 'AAPL', name: 'Apple Inc.', sector: 'Technology', subsector: 'Technology Hardware' },
@@ -136,7 +138,7 @@ export const SP500_STOCKS = [
   { ticker: 'CLX', name: 'Clorox Co.', sector: 'Consumer Staples', subsector: 'Household Products' },
   { ticker: 'CHD', name: 'Church & Dwight', sector: 'Consumer Staples', subsector: 'Household Products' },
   { ticker: 'EL', name: 'Estee Lauder', sector: 'Consumer Staples', subsector: 'Personal Products' },
-  { ticker: 'KVUE', name: 'Kenvue Inc.', sector: 'Consumer Staples', subsector: 'Personal Products' },
+  { ticker: 'KMB', name: 'Kimberly-Clark', sector: 'Consumer Staples', subsector: 'Household Products' },
   { ticker: 'SYY', name: 'Sysco Corp.', sector: 'Consumer Staples', subsector: 'Food Distributors' },
   { ticker: 'KR', name: 'Kroger Co.', sector: 'Consumer Staples', subsector: 'Food Retail' },
   { ticker: 'TSN', name: 'Tyson Foods', sector: 'Consumer Staples', subsector: 'Food Products' },

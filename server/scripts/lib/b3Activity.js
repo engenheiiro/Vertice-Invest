@@ -62,6 +62,17 @@ export const b3Activity = (ticker, janela = []) => {
     };
 };
 
+/**
+ * O código mudou? Só o arquivo oficial do pregão MAIS RECENTE responde, e a janela
+ * vem do mais novo para o mais velho (ver `loadB3Window`). Exige as duas pontas: o
+ * antigo fora e o sucessor dentro. Papel sem negócio em um dia só falha na segunda.
+ */
+export const b3RenamedTo = (ticker, successor, janela = []) => {
+    const ultimo = janela[0]?.closes;
+    if (!ultimo || !successor) return false;
+    return !ultimo.has(ticker) && ultimo.has(successor);
+};
+
 /** Frase pronta para a tela do script. */
 export const b3Label = (a) => {
     if (!a.conclusive) return 'sem arquivo da B3 na janela — evidência indisponível';

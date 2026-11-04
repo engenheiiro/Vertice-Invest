@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { b3Activity, b3Label, isB3Type } from '../scripts/lib/b3Activity.js';
+import { b3Activity, b3Label, b3RenamedTo, isB3Type } from '../scripts/lib/b3Activity.js';
 
 /**
  * A regra que este arquivo protege nasceu de um falso positivo caro.
@@ -55,5 +55,26 @@ describe('atividade real na B3', () => {
         expect(isB3Type('ETF')).toBe(true);
         expect(isB3Type('STOCK_US')).toBe(false);
         expect(isB3Type('CRYPTO')).toBe(false);
+    });
+});
+
+describe('b3RenamedTo', () => {
+    const dia = (...tickers) => ({ closes: new Map(tickers.map((t) => [t, { close: 1, trades: 1 }])) });
+
+    it('o antigo saiu do último pregão e o sucessor entrou', () => {
+        expect(b3RenamedTo('RAIZ4', 'RAIZ55', [dia('RAIZ55'), dia('RAIZ4')])).toBe(true);
+    });
+
+    it('papel que só não negociou no dia, com sucessor ausente, não é troca', () => {
+        expect(b3RenamedTo('RAIZ4', 'RAIZ55', [dia('PETR4'), dia('RAIZ4')])).toBe(false);
+    });
+
+    it('os dois no último pregão ainda não é troca', () => {
+        expect(b3RenamedTo('RAIZ4', 'RAIZ55', [dia('RAIZ4', 'RAIZ55')])).toBe(false);
+    });
+
+    it('sem janela ou sem sucessor, não conclui nada', () => {
+        expect(b3RenamedTo('RAIZ4', 'RAIZ55', [])).toBe(false);
+        expect(b3RenamedTo('RAIZ4', null, [dia('PETR4')])).toBe(false);
     });
 });
