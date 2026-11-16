@@ -6,6 +6,7 @@ import { walletService } from '../../services/wallet';
 import { useWallet } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
+import { useDemo } from '../../contexts/DemoContext';
 import { formatCalendarDate, formatCurrency as fmtCurrency } from '../../utils/format';
 import AssetLogo from '../common/AssetLogo';
 
@@ -39,6 +40,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     // Cofrinhos (CASH) exibem o nome amigável; demais ativos, o próprio ticker.
     const displayName = asset?.type === 'CASH' ? (asset.name || 'Reserva') : ticker;
     const { addToast } = useToast();
+    const { isDemoMode } = useDemo();
     const confirm = useConfirm();
 
     // Reset ao abrir
@@ -59,9 +61,18 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
         // cada render: incluí-la buscaria a primeira página em loop, e cada resposta
         // muda o estado que dispara o render seguinte.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, ticker]);
+    }, [isOpen, ticker, isDemoMode]);
 
     const loadTransactions = async (pageNum: number, isInitial = false) => {
+        // Demo: os ativos são fictícios (DEMO_ASSETS) e não têm extrato. Buscar
+        // na API trazia as movimentações REAIS de um ticker homônimo para o tour.
+        if (isDemoMode) {
+            setTransactions([]);
+            setHasMore(false);
+            setIsLoading(false);
+            setIsLoadingMore(false);
+            return;
+        }
         if (isInitial) setIsLoading(true);
         else setIsLoadingMore(true);
 
@@ -92,6 +103,12 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     };
 
     const handleDelete = async (id: string) => {
+        // Mutação de carteira no demo é no-op: durante o tour um clique aqui
+        // apagaria uma movimentação real do usuário.
+        if (isDemoMode) {
+            addToast('Modo demonstração: nenhuma movimentação foi alterada.', 'info');
+            return;
+        }
         const ok = await confirm({
             title: 'Excluir movimentação',
             message: 'Tem certeza que deseja excluir esta movimentação? O preço médio será recalculado.',

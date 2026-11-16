@@ -402,7 +402,9 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                             </div>
                                             <p className="text-xs text-slate-400 mt-2 font-medium max-w-sm">
                                                 {asset.score >= 80 ? 'Ativo classe A com fundamentos excepcionais e valuation atrativo.' :
-                                                 asset.score >= 65 ? 'Ativo com fundamentos sólidos, recomendado para diversificação.' :
+                                                 // Corte de compra é 70 (score ≥ 70 ⇔ COMPRAR): um 65–69 sai
+                                                 // como AGUARDAR e não pode ler "recomendado" no boletim.
+                                                 asset.score >= 70 ? 'Ativo com fundamentos sólidos, recomendado para diversificação.' :
                                                  'Ativo apresenta riscos ou valuation esticado, requer cautela.'}
                                             </p>
                                         </div>

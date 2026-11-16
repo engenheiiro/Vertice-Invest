@@ -103,6 +103,27 @@ describe('logos dos FIIs', () => {
   });
 });
 
+describe('troca de carteira', () => {
+  it('resposta atrasada da carteira anterior não sobrescreve a atual', async () => {
+    let resolveOld: (v: unknown) => void = () => {};
+    const oldSource = { getDividends: vi.fn(() => new Promise((r) => { resolveOld = r; })) };
+    const newSource = {
+      getDividends: vi.fn(async () => ({ history: [], provisioned: [{ ticker: 'NOVA11', date: '2099-01-10', amount: 1 }] })),
+    };
+    vi.mocked(useWallet).mockReturnValue({ ...walletStub, activeWalletId: 'A', dataSource: oldSource } as any);
+    const { rerender } = render(<DividendDashboard />);
+
+    vi.mocked(useWallet).mockReturnValue({ ...walletStub, activeWalletId: 'B', dataSource: newSource } as any);
+    rerender(<DividendDashboard />);
+    await waitFor(() => expect(screen.getByText('NOVA11')).toBeInTheDocument());
+
+    resolveOld({ history: [], provisioned: [{ ticker: 'VELHA11', date: '2099-01-10', amount: 1 }] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText('VELHA11')).not.toBeInTheDocument();
+    expect(screen.getByText('NOVA11')).toBeInTheDocument();
+  });
+});
+
 describe('simulador de reinvestimento', () => {
   it('alterar o período (10 → 20 anos) atualiza a projeção exibida', async () => {
     getDividends.mockResolvedValue({

@@ -13,6 +13,7 @@ import {
 import { Link } from 'react-router-dom';
 import { PieChart as RechartsPie, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { HOME_ROUTE } from '../config/homeRoute';
+import { formatUnitPrice } from '../utils/format';
 
 interface QuantSignalHistory {
     _id: string;
@@ -204,7 +205,10 @@ export const RadarPage = () => {
         return <span className="flex items-center gap-1 text-blue-400 bg-blue-900/20 px-2 py-1 rounded border border-blue-900/50 text-[10px] font-bold uppercase whitespace-nowrap"><Clock size={11} /> Ativo</span>;
     };
 
-    const formatCurrency = (val?: number) => val ? `R$ ${val.toFixed(2)}` : '-';
+    // Preço na moeda do ativo: cripto e Exterior são cotados em dólar, e o
+    // "R$ 0.12" fixo trocava a moeda e zerava casas de cripto sub-1.
+    const formatCurrency = (val: number | undefined, assetType: string) =>
+        val ? formatUnitPrice(val, assetType === 'CRYPTO' || assetType === 'STOCK_US' ? 'USD' : 'BRL') : '-';
 
     return (
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
@@ -460,7 +464,7 @@ export const RadarPage = () => {
                                                     {signal.sector || '—'}
                                                 </p>
                                                 <p className="text-[9px] text-slate-600 font-mono">
-                                                    entrada {formatCurrency(signal.priceAtSignal)}
+                                                    entrada {formatCurrency(signal.priceAtSignal, signal.assetType)}
                                                 </p>
                                             </div>
                                         </div>
@@ -539,8 +543,8 @@ export const RadarPage = () => {
                                                     )}
                                                 </td>
                                                 <td className="p-4 text-slate-500 text-[11px]">{signal.sector || '—'}</td>
-                                                <td className="p-4 text-right font-mono text-[11px]">{formatCurrency(signal.priceAtSignal)}</td>
-                                                <td className="p-4 text-right font-mono text-[11px]">{formatCurrency(signal.finalPrice)}</td>
+                                                <td className="p-4 text-right font-mono text-[11px]">{formatCurrency(signal.priceAtSignal, signal.assetType)}</td>
+                                                <td className="p-4 text-right font-mono text-[11px]">{formatCurrency(signal.finalPrice, signal.assetType)}</td>
                                                 <td className="p-4 text-right">
                                                     {signal.resultPercent !== undefined ? (
                                                         <span className={`font-bold flex items-center justify-end gap-1 ${signal.resultPercent > 0 ? 'text-emerald-400' : signal.resultPercent < 0 ? 'text-red-400' : 'text-slate-400'}`}>

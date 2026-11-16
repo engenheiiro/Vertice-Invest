@@ -79,8 +79,8 @@ Avalia cada ativo em **3 scores estruturais** (QUALITY / VALUATION / RISK, 0–1
 ### `portfolioEngine.js`
 
 **Draft competitivo** por perfil (DEFENSIVE → MODERATE → BOLD), cada um com até 10 ativos:
-- **GOLD** (score ≥ 55): limite 4 ativos/setor (DEFENSIVE) ou 2 (outros)
-- **SILVER** (score ≥ 40): limite 5/setor
+- **GOLD** (score ≥ 55): limite 3 ativos/setor no DEFENSIVE (4 no ranking de ações, via `STOCK_STRICT_SECTOR_CAP_BY_PROFILE`) ou 2 (outros)
+- **SILVER** (score ≥ 40): limite 3/setor
 - **BRONZE** (score > 30): backfill sem limite — usa `scoreKey` do perfil corrente
 
 **Concentração pós-draft:** 3º ativo mesmo setor → -5; 4º+ → -15. 3º FII mesmo gestor → -20.

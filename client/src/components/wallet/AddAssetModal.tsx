@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePriceFetch } from '../../hooks/usePriceFetch';
 import { useAssetSearch } from '../../hooks/useAssetSearch';
 import {
+    formatUnitPriceInput,
     getLocalDateString,
     parseCurrencyToFloat,
     validateTransaction,
@@ -154,7 +155,10 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         if (suggestedPrice && suggestedPrice > 0) {
             const percentDiff = (Math.abs(userPrice - suggestedPrice) / suggestedPrice) * 100;
             if (percentDiff > 10) {
-                setPriceWarning(`Atenção: O preço inserido difere ${percentDiff.toFixed(0)}% da cotação de referência (R$ ${suggestedPrice.toFixed(2)}).`);
+                // Moeda do ativo (cripto/Exterior em US$) e precisão de preço unitário:
+                // "R$ 0.00" para um SHIB cotado em dólar desinformava duas vezes.
+                const refPrice = `${isDollarAsset ? 'US$' : 'R$'} ${formatUnitPriceInput(suggestedPrice)}`;
+                setPriceWarning(`Atenção: O preço inserido difere ${percentDiff.toFixed(0)}% da cotação de referência (${refPrice}).`);
                 return;
             }
         }
@@ -169,7 +173,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         }
 
         setPriceWarning(null);
-    }, [form.price, form.date, form.type, priceFetch.suggestedPrice]);
+    }, [form.price, form.date, form.type, priceFetch.suggestedPrice, isDollarAsset]);
 
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setForm(prev => ({ ...prev, date: e.target.value }));
@@ -250,7 +254,8 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
                 ticker: selectedTicker,
                 name: asset.name || '',
                 type: asset.type,
-                price: asset.currentPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
+                // Sub-1 com até 8 significativos: 2 casas zeravam o preço de SHIB.
+                price: formatUnitPriceInput(asset.currentPrice),
             }));
         } else {
             setForm(prev => ({ ...prev, ticker: selectedTicker }));

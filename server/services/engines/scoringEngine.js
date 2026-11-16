@@ -484,9 +484,12 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
         audit.BOLD.push({ factor: 'Base Arrojada', points: 35, type: 'base' });
         const effectivePegForBold = effectiveRevenueGrowth > 0 ? m.pl / effectiveRevenueGrowth : 0;
 
-        // PEG tiers: gate em >10% de crescimento efetivo
-        if (effectiveRevenueGrowth > 10) {
-            if (effectivePegForBold > 0 && effectivePegForBold < 0.5) { boldScore += 30; audit.BOLD.push({ factor: 'PEG Excepcional (<0.5)', points: 30, type: 'bonus' }); }
+        // PEG tiers: gate em >10% de crescimento efetivo E PEG positivo. Sem o
+        // segundo gate, P/L ausente (mapeado para 0) ou negativo (prejuízo) dava
+        // PEG <= 0, que escapava do primeiro degrau e caía no "Excelente (<1.0)":
+        // +22 para empresa sem lucro, em vez de bônus nenhum.
+        if (effectiveRevenueGrowth > 10 && effectivePegForBold > 0) {
+            if (effectivePegForBold < 0.5) { boldScore += 30; audit.BOLD.push({ factor: 'PEG Excepcional (<0.5)', points: 30, type: 'bonus' }); }
             else if (effectivePegForBold < 1.0) { boldScore += 22; audit.BOLD.push({ factor: 'PEG Excelente (<1.0)', points: 22, type: 'bonus' }); }
             else if (effectivePegForBold < 1.5) { boldScore += 12; audit.BOLD.push({ factor: 'PEG Saudável (<1.5)', points: 12, type: 'bonus' }); }
             else if (effectivePegForBold < 2.0) { boldScore += 5; audit.BOLD.push({ factor: 'PEG Razoável (<2.0)', points: 5, type: 'bonus' }); }

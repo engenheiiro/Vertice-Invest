@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatCurrency,
+  formatUnitPrice,
   formatPercent,
   formatCompact,
   formatCalendarDate,
@@ -30,6 +31,22 @@ describe('formatCurrency', () => {
   });
   it('mascara no modo privacidade', () => {
     expect(formatCurrency(4253, 'BRL', { privacy: true })).toBe(PRIVACY_MASK);
+  });
+});
+
+describe('formatUnitPrice', () => {
+  it('de 1 para cima segue formatCurrency (2 casas)', () => {
+    expect(norm(formatUnitPrice(38.5))).toBe('R$ 38,50');
+  });
+  it('abaixo de 1 mantém até 8 significativos', () => {
+    expect(norm(formatUnitPrice(0.1234, 'USD'))).toBe('US$ 0,1234');
+    expect(norm(formatUnitPrice(0.00001234, 'USD'))).toBe('US$ 0,00001234');
+  });
+  it('nunca menos de 2 casas', () => {
+    expect(norm(formatUnitPrice(0.5))).toBe('R$ 0,50');
+  });
+  it('mascara no modo privacidade', () => {
+    expect(formatUnitPrice(0.5, 'BRL', { privacy: true })).toBe(PRIVACY_MASK);
   });
 });
 

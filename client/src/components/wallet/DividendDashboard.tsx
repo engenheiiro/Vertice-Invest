@@ -55,10 +55,20 @@ export const DividendDashboard = () => {
     ), [assets]);
 
     useEffect(() => {
+        // Guarda de resposta atrasada: trocando de carteira com a busca anterior
+        // ainda em voo, a resposta velha chegava depois e pintava os proventos da
+        // carteira errada. `cancelled` descarta tudo que não é da execução atual.
+        let cancelled = false;
+        let demoTimer: ReturnType<typeof setTimeout> | undefined;
+
         const load = async () => {
+            // Rebusca mostra o carregando de novo, em vez dos números da carteira
+            // anterior como se fossem desta.
+            setIsLoading(true);
             if (isDemoMode) {
                 // Simula delay e carrega dados estáticos
-                setTimeout(() => {
+                demoTimer = setTimeout(() => {
+                    if (cancelled) return;
                     setData(DEMO_DIVIDENDS);
                     setIsLoading(false);
                 }, 600);
@@ -67,6 +77,7 @@ export const DividendDashboard = () => {
 
             try {
                 const res = await dataSource.getDividends();
+                if (cancelled) return;
                 const cleanHistory = Array.isArray(res?.history) ? res.history : [];
                 while(cleanHistory.length > 0 && cleanHistory[0].value === 0) {
                     cleanHistory.shift();
@@ -82,15 +93,19 @@ export const DividendDashboard = () => {
                     goal: res?.goal ?? null,
                 });
             } catch (e) {
-                console.error("Erro ao carregar dividendos", e);
+                if (!cancelled) console.error("Erro ao carregar dividendos", e);
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
         // Espera a carteira ativa ser resolvida: buscar antes traria os proventos
         // sem escopo e o efeito rodaria de novo com o id (duas chamadas caras).
         if (!isWalletScopeReady) return;
         load();
+        return () => {
+            cancelled = true;
+            if (demoTimer) clearTimeout(demoTimer);
+        };
         // `dataSource` é memoizado pelo escopo da carteira (ou pelo token, no link
         // público), então entra aqui sem provocar rebusca a cada render.
     }, [isDemoMode, activeWalletId, isWalletScopeReady, dataSource]);

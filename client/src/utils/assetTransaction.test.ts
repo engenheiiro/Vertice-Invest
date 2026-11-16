@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatUnitPriceInput,
   getLocalDateString,
   makeReserveTicker,
   parseCurrencyToFloat,
@@ -64,6 +65,24 @@ describe('parseCurrencyToFloat', () => {
   });
 });
 
+describe('formatUnitPriceInput', () => {
+  it('mantém 2 casas de 1 para cima', () => {
+    expect(formatUnitPriceInput(38.5)).toBe('38,50');
+    expect(formatUnitPriceInput(1234.567)).toBe('1.234,57');
+  });
+  it('abaixo de 1 preserva até 8 algarismos significativos', () => {
+    expect(formatUnitPriceInput(0.123)).toBe('0,123');
+    expect(formatUnitPriceInput(0.00001234)).toBe('0,00001234');
+    expect(formatUnitPriceInput(0.123456789)).toBe('0,12345679');
+  });
+  it('nunca menos de 2 casas', () => {
+    expect(formatUnitPriceInput(0.5)).toBe('0,50');
+  });
+  it('ida e volta com parseCurrencyToFloat', () => {
+    expect(parseCurrencyToFloat(formatUnitPriceInput(0.00001234))).toBe(0.00001234);
+  });
+});
+
 describe('getLocalDateString', () => {
   it('retorna data no formato YYYY-MM-DD', () => {
     expect(getLocalDateString()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -85,6 +104,19 @@ describe('validateTransaction — bloqueios', () => {
   it('rejeita preço negativo', () => {
     const { error } = validateTransaction(makeForm({ price: '-5' }), 'BUY', []);
     expect(error).toMatch(/preço/i);
+  });
+
+  it('rejeita preço zero (ação e renda fixa)', () => {
+    expect(validateTransaction(makeForm({ price: '0,00' }), 'BUY', []).error).toMatch(/preço/i);
+    const fi = makeForm({ type: 'FIXED_INCOME', ticker: 'CDB XP', rate: '110', quantity: '1', price: '0,00' });
+    expect(validateTransaction(fi, 'BUY', []).error).toMatch(/preço/i);
+  });
+
+  it('aceita preço sub-centavo de cripto', () => {
+    const form = makeForm({ type: 'CRYPTO', ticker: 'SHIB', price: '0,00001234', currency: 'USD' });
+    const { error, payload } = validateTransaction(form, 'BUY', []);
+    expect(error).toBeUndefined();
+    expect(payload?.price).toBe(0.00001234);
   });
 
   it('rejeita venda acima da posição (saldo insuficiente)', () => {

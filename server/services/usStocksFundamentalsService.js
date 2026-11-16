@@ -386,16 +386,21 @@ export const usStocksFundamentalsService = {
                 // mensal de ativo que jamais gera um evento de provento, e o ranking dava
                 // bônus de "ETF de Renda". Ver o histórico completo em config/brEtfList.js.
                 let dy = (f.dy != null && f.dy > 0) ? f.dy : 0;
+                let dyKnown = true;
                 if (!dy && price > 0) {
-                    const hist = await externalMarketService.getDividendsHistory(etf.ticker, 'ETF');
-                    if (hist.length) {
+                    const hist = await externalMarketService.getDividendsHistory(etf.ticker, 'ETF', { nullOnError: true });
+                    if (hist === null) {
+                        // Fonte fora: não sabemos se distribui. Mantém o DY gravado
+                        // em vez de zerá-lo (o $set sem a chave preserva o anterior).
+                        dyKnown = false;
+                    } else if (hist.length) {
                         const cutoff = new Date();
                         cutoff.setFullYear(cutoff.getFullYear() - 1);
                         const ttm = hist.filter(d => d.date >= cutoff).reduce((s, d) => s + d.amount, 0);
                         if (ttm > 0) dy = safeFloat((ttm / price) * 100);
                     }
                 }
-                updatePayload.dy = dy;
+                if (dyKnown) updatePayload.dy = dy;
 
                 bulkOps.push({ updateOne: { filter: { ticker: etf.ticker }, update: { $set: updatePayload }, upsert: true } });
                 processed++;

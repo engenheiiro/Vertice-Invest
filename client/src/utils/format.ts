@@ -45,6 +45,26 @@ export function formatCurrency(
 }
 
 /**
+ * Preço UNITÁRIO em moeda. Espelha `safeUnitPrice()` do servidor: de 1 para
+ * cima é `formatCurrency`; abaixo de 1, até 8 algarismos significativos (e
+ * nunca menos de 2 casas). `formatCurrency` só afrouxa abaixo de um centavo —
+ * suficiente para total/saldo, mas um DOGE a 0,1234 virava "US$ 0,12".
+ * `formatUnitPrice(0.1234, 'USD')` → `"US$ 0,1234"`.
+ */
+export function formatUnitPrice(
+  value: number | null | undefined,
+  currency: Currency = 'BRL',
+  options: FormatOptions = {},
+): string {
+  if (options.privacy) return PRIVACY_MASK;
+  const v = toSafeNumber(value);
+  if (v === 0 || Math.abs(v) >= 1) return formatCurrency(v, currency);
+  const precise = new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumSignificantDigits: 8 }).format(v);
+  const decimals = precise.split(',')[1]?.replace(/\D/g, '').length ?? 0;
+  return decimals < 2 ? formatCurrency(v, currency) : precise;
+}
+
+/**
  * Percentual em pt-BR. `formatPercent(6.333)` → `"6,33%"`.
  * `sign: true` prefixa `+` em valores positivos (`"+6,33%"`).
  */

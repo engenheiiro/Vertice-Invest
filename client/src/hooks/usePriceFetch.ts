@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { marketService } from '../services/market';
-import { getLocalDateString, type AssetFormState } from '../utils/assetTransaction';
+import { formatUnitPriceInput, getLocalDateString, type AssetFormState } from '../utils/assetTransaction';
 
 interface UsePriceFetchArgs {
   isOpen: boolean;
@@ -24,13 +24,13 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
 
   const priceCache = useRef<Map<string, any>>(new Map());
   const priceFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Id da busca mais recente; resposta com id diferente chegou atrasada e é descartada.
+  const requestIdRef = useRef(0);
 
   const applyPriceData = (data: any, targetDate: string) => {
     if (data && data.price) {
-      const fmtPrice = data.price.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
+      // Abaixo de 1 mantém até 8 significativos (SHIB não pode virar "0,00").
+      const fmtPrice = formatUnitPriceInput(data.price);
       setForm((prev) => {
         const next = { ...prev, price: fmtPrice };
         // Autofill do nome real (vindo da cotação) sem sobrescrever o que o
@@ -53,6 +53,11 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
   };
 
   useEffect(() => {
+    // Cada execução invalida a busca anterior: a resposta de um ticker/data que
+    // o usuário já trocou chega depois e sobrescrevia o preço do valor novo.
+    const requestId = ++requestIdRef.current;
+    const isStale = () => requestId !== requestIdRef.current;
+
     if (
       !isOpen ||
       form.type === 'CASH' ||
@@ -61,10 +66,11 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
       form.ticker.length < 3 ||
       !form.date
     ) {
+      // A busca em voo (se havia) acabou de ser descartada — sem isto o
+      // spinner ficaria girando para sempre.
+      setIsFetchingPrice(false);
       return;
     }
-
-    if (priceFetchTimeoutRef.current) clearTimeout(priceFetchTimeoutRef.current);
 
     // Cache primeiro.
     const cacheKey = `${form.ticker}-${form.date}-${form.type}`;
@@ -95,6 +101,7 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
           }
         }
 
+        if (isStale()) return;
         if (priceData) {
           priceCache.current.set(cacheKey, priceData);
           applyPriceData(priceData, form.date);
@@ -104,14 +111,23 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
       } catch (err) {
         // (A11) falha na cotação degrada visivelmente para entrada manual
         // (em vez de ficar em estado indefinido silencioso).
+        if (isStale()) return;
         console.error('Erro ao buscar preço', err);
         setPriceSource('manual');
       } finally {
-        setIsFetchingPrice(false);
+        if (!isStale()) setIsFetchingPrice(false);
       }
     }, 600);
+
+    // Troca de input ou desmontagem: o debounce pendente não dispara mais.
+    return () => {
+      if (priceFetchTimeoutRef.current) clearTimeout(priceFetchTimeoutRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.date, form.ticker, form.type, isOpen]);
+
+  // Desmontagem invalida a busca em voo (nenhum setState após unmount).
+  useEffect(() => () => { requestIdRef.current++; }, []);
 
   /** Marca o preço como manual (usuário digitou). */
   const setManual = () => {

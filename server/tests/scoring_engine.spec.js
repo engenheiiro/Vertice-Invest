@@ -413,3 +413,24 @@ describe('scoringEngine.processAsset — saída de ativo saudável', () => {
         expect(res.auditLog.length).toBeGreaterThan(0);
     });
 });
+
+describe('scoringEngine — PEG do Arrojado só vale com lucro', () => {
+    // P/L ausente (mapeado para 0) ou negativo dava PEG <= 0, que escapava do
+    // degrau "Excepcional" (exige > 0) e caía no "Excelente (<1.0)": +22 para
+    // empresa sem lucro.
+    const pegFactors = (pl) => scoringEngine
+        .processAsset(makeStock({ metrics: { ...makeStock().metrics, pl, revenueGrowth: 20 } }), DEFAULT_CONTEXT)
+        .auditLog.filter(a => a.factor.startsWith('PEG')).map(a => a.factor);
+
+    it('P/L negativo não ganha bônus de PEG', () => {
+        expect(pegFactors(-20)).toEqual([]);
+    });
+
+    it('P/L zero (ausente) não ganha bônus de PEG', () => {
+        expect(pegFactors(0)).toEqual([]);
+    });
+
+    it('P/L positivo segue no degrau certo (PEG 0,5)', () => {
+        expect(pegFactors(10)).toContain('PEG Excelente (<1.0)');
+    });
+});

@@ -1113,7 +1113,13 @@ export const externalMarketService = {
     // breaker dedicado: depois de falhas consecutivas, fast-fail sem martelar o
     // Yahoo até o cooldown. Sem fallback de terceiro provedor — ver nota no topo
     // do arquivo (Brapi não inclui o módulo `dividends` no plano de token atual).
-    async getDividendsHistory(ticker, type) {
+    /**
+     * `nullOnError`: falha da fonte (rede, timeout, circuito aberto) devolve null
+     * em vez de []. Quem DERIVA um número da lista (DY de ETF) precisa distinguir
+     * "não distribui" de "não deu para saber" — senão grava dy 0 por cima do valor
+     * bom a cada instabilidade do Yahoo. Quem só faz upsert de eventos segue com [].
+     */
+    async getDividendsHistory(ticker, type, { nullOnError = false } = {}) {
         // Cripto, renda fixa e caixa não pagam proventos.
         if (['CRYPTO', 'FIXED_INCOME', 'CASH'].includes(type)) return [];
 
@@ -1151,7 +1157,7 @@ export const externalMarketService = {
                 .sort((a, b) => a.date - b.date);
         } catch (error) {
             logger.warn(`[Dividends] Falha ao buscar proventos de ${ticker}: ${error.message}`);
-            return [];
+            return nullOnError ? null : [];
         }
     },
 

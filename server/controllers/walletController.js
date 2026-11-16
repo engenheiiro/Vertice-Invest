@@ -1298,8 +1298,10 @@ export const addAssetTransaction = async (req, res, next) => {
     const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name, usSubType, currency, isReserve, maturityDate } = req.body;
     // `<input type=date>` envia YYYY-MM-DD. Parsing nativo interpreta isso como
     // meia-noite UTC e desloca para o dia anterior em Brasília; tratamos como dia
-    // civil e ancoramos ao meio-dia UTC (parseCalendarDate).
-    const txDate = date ? parseCalendarDate(date) : new Date();
+    // civil e ancoramos ao meio-dia UTC (parseCalendarDate). Sem data, vale o dia
+    // de HOJE EM BRASÍLIA pela mesma âncora: `new Date()` depois das 21:00 BRT já é
+    // o dia seguinte em UTC, e o rebuild aplicaria a posição e o fluxo um dia tarde.
+    const txDate = date ? parseCalendarDate(date) : parseCalendarDate(brazilDateKey());
     const transactionType = quantity >= 0 ? 'BUY' : 'SELL';
     let updatedAsset;
     try {

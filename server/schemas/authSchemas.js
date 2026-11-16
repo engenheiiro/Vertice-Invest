@@ -105,6 +105,21 @@ export const resetPasswordSchema = z.object({
   }).strict(),
 });
 
+// Troca de senha: sem schema, oldPassword ausente fazia bcrypt.compare(undefined)
+// lançar e a resposta virava 500. A política da NOVA senha continua no handler,
+// depois da conferência da atual (mesma ordem de mensagens de antes). Não é
+// .strict(): o formulário manda também a confirmação.
+export const changePasswordSchema = z.object({
+  body: z.object({
+    oldPassword: currentPassword,
+    newPassword: z.string(typeMessages({ required: 'Nova senha é obrigatória.' })).max(1024, 'Senha inválida.'),
+  }),
+});
+
+export const deactivateAccountSchema = z.object({
+  body: z.object({ password: currentPassword }).strict(),
+});
+
 export const mfaSetupSchema = z.object({
   body: z.object({ password: currentPassword }).strict(),
 });

@@ -58,7 +58,8 @@ export const mongoCircuitBreaker = (req, res, next) => {
 
     logger.warn('🔌 [MongoCB] Request rejeitada (fail-fast): banco indisponível', {
         source: 'mongoCircuitBreaker',
-        path: req.originalUrl,
+        // req.path, nunca originalUrl: a query string crua vazaria segredo (?token=) no log.
+        path: req.path,
         circuit: breaker.state,
         readyState: mongoose.connection.readyState,
     });

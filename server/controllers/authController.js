@@ -134,7 +134,9 @@ const revokeUserSessions = async (userId) => {
 // Log de Auditoria
 const logAudit = async (req, action, details, userId = null, email = null) => {
     try {
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        // req.ip, não o X-Forwarded-For cru: o cabeçalho vem do cliente e forjava o IP
+        // da trilha de auditoria. Com `trust proxy` = 1, req.ip já é o IP que o proxy viu.
+        const ip = req.ip || req.socket?.remoteAddress;
         AuditLog.create({
             user: userId,
             email: email,
@@ -405,13 +407,35 @@ export const refreshToken = async (req, res, next) => {
 
     // ROTAÇÃO (uso único): invalida o token apresentado e emite um novo. Limita a
     // janela de utilidade de um refresh token vazado a uma única renovação.
-    await RefreshToken.findByIdAndDelete(tokenInDb._id);
-
+    //
+    // A baixa é a TRAVA: só quem apaga o documento rotaciona. Antes era findOne +
+    // delete sem conferir o resultado, e duas requisições simultâneas com o mesmo
+    // cookie passavam as duas — cada uma criava um refresh novo, a sessão bifurcava
+    // e a detecção de reuso nunca disparava. O perdedor da corrida é a aba
+    // retardatária legítima: recebe o token do vencedor pela janela de graça.
     const newRefreshTokenString = jwt.sign(
       { id: user._id },
       JWT_REFRESH_SECRET,
       { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
     );
+    const claimed = await RefreshToken.findOneAndDelete({ _id: tokenInDb._id });
+    if (!claimed) {
+      let grace = consumeGraceRotation(requestHash);
+      if (!grace) {
+        // O vencedor registra a rotação logo depois da própria baixa; dá a ele um
+        // instante antes de concluir que o token sumiu por outro motivo.
+        await new Promise((r) => setTimeout(r, 150));
+        grace = consumeGraceRotation(requestHash);
+      }
+      if (grace && String(grace.userId) === String(user._id)) {
+        const graceAccessToken = emitSession(req, res, user, grace.newTokenString);
+        return res.status(200).json({ accessToken: graceAccessToken });
+      }
+      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Refresh token consumido por outra requisição');
+      return res.status(401).json({ message: "Sessão expirada." });
+    }
+    // Registrada já aqui (antes do create) para o perdedor de uma corrida a achar.
+    rememberRotation(requestHash, newRefreshTokenString, user._id.toString());
     const expiredAt = new Date();
     expiredAt.setDate(expiredAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
     await RefreshToken.create({
@@ -419,9 +443,6 @@ export const refreshToken = async (req, res, next) => {
       user: user._id,
       expiryDate: expiredAt,
     });
-    // Registra a rotação para a janela de graça (corrida multi-aba).
-    rememberRotation(requestHash, newRefreshTokenString, user._id.toString());
-
     const newAccessToken = emitSession(req, res, user, newRefreshTokenString);
     res.status(200).json({ accessToken: newAccessToken });
 

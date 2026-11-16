@@ -24,6 +24,8 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Id da busca mais recente; resposta com id diferente chegou atrasada e é descartada.
+  const requestIdRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Fecha o dropdown ao clicar fora do campo.
@@ -37,12 +39,23 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Desmontagem: cancela o debounce pendente e descarta a busca em voo.
+  useEffect(() => () => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    requestIdRef.current++;
+  }, []);
+
   /** Dispara a busca debounced para o valor de ticker digitado. */
   const searchTicker = (val: string) => {
     // Venda usa <select> de ativos da carteira; CASH não tem busca.
     if (transactionType === 'SELL' || form.type === 'CASH') return;
 
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    // Toda digitação invalida a busca anterior: sem isto a resposta lenta de
+    // "PET" chegava depois da de "PETR4" e repunha o dropdown antigo.
+    const requestId = ++requestIdRef.current;
+    const isStale = () => requestId !== requestIdRef.current;
 
     const minChars = form.type === 'FIXED_INCOME' ? 2 : 3;
 
@@ -51,6 +64,7 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const results = await walletService.searchAsset(val, form.type);
+          if (isStale()) return;
           setActiveIndex(-1); // (A10) novo conjunto de resultados → reseta destaque
           if (results && Array.isArray(results) && results.length > 0) {
             setSearchResults(results);
@@ -63,15 +77,17 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
             setShowDropdown(false);
           }
         } catch {
+          if (isStale()) return;
           // (A11) erro de busca agora é visível ao usuário, não mais silencioso.
           setSearchResults([]);
           setShowDropdown(false);
           addToast('Não foi possível buscar o ativo. Verifique sua conexão.', 'error');
         } finally {
-          setIsSearching(false);
+          if (!isStale()) setIsSearching(false);
         }
       }, 300);
     } else {
+      setIsSearching(false);
       setSearchResults([]);
       setShowDropdown(false);
     }
@@ -114,12 +130,19 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
       ...(finalMaturity ? { maturityDate: finalMaturity } : {}),
     }));
 
+    // Escolheu: busca ainda em voo não pode reabrir o dropdown por cima.
+    requestIdRef.current++;
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setIsSearching(false);
     setShowDropdown(false);
     setSearchResults([]);
     setActiveIndex(-1);
   };
 
   const reset = () => {
+    requestIdRef.current++;
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setIsSearching(false);
     setSearchResults([]);
     setShowDropdown(false);
     setActiveIndex(-1);

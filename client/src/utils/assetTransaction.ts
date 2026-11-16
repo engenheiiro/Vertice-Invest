@@ -129,6 +129,22 @@ export const parseCurrencyToFloat = (value: string): number => {
 };
 
 /**
+ * Preço unitário em texto pt-BR para o campo do formulário (sem símbolo).
+ * Espelha `safeUnitPrice()` do servidor: de 1 para cima, 2 casas; abaixo de 1,
+ * até 8 algarismos significativos. Com 2 casas fixas o SHIB (~0,00001) virava
+ * "0,00" e o DOGE 0,123 virava "0,12" — o preço pré-preenchido gravava errado.
+ * Sem separador de milhar abaixo de 1 (não há milhar ali) e nunca menos de 2
+ * casas, para "0,5" continuar aparecendo como "0,50".
+ */
+export const formatUnitPriceInput = (price: number): string => {
+  const twoDecimals = price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (!Number.isFinite(price) || price === 0 || Math.abs(price) >= 1) return twoDecimals;
+  const precise = price.toLocaleString('pt-BR', { maximumSignificantDigits: 8, useGrouping: false });
+  const decimals = precise.split(',')[1]?.length ?? 0;
+  return decimals < 2 ? twoDecimals : precise;
+};
+
+/**
  * Validação pura da transação (M3, extraída do `handleSubmit` do AddAssetModal).
  * Retorna `{ error }` se inválida ou `{ payload }` pronto para `addAsset()`.
  * Não realiza efeitos colaterais — toasts/recálculo ficam no componente.
@@ -174,8 +190,11 @@ export function validateTransaction(
     if (isNaN(finalQty) || finalQty <= 0) {
       return { error: 'A quantidade deve ser um número válido maior que zero.' };
     }
-    if (isNaN(finalPrice) || finalPrice < 0) {
-      return { error: 'O preço deve ser um valor válido.' };
+    // Preço zero não é lançamento válido: na Renda Fixa o campo é o valor
+    // investido e nas demais o preço unitário — custo zero distorce preço médio
+    // e rentabilidade. (CASH já barra `<= 0` no ramo acima.)
+    if (isNaN(finalPrice) || finalPrice <= 0) {
+      return { error: 'O preço deve ser um valor válido maior que zero.' };
     }
 
     if (transactionType === 'SELL') {

@@ -82,6 +82,17 @@ export const CashFlowHistory = () => {
     const [isCategoryOpen, setIsCategoryOpen] = useState(false);
     const categoryMenuRef = useRef<HTMLDivElement>(null);
 
+    // Troca de carteira volta à página 1 e descarta o acumulado. Sem isto, depois
+    // de "carregar mais" a carteira nova era buscada já na página N e anexada à
+    // lista da anterior — extrato misturando duas carteiras. Ajuste feito no
+    // render (não em efeito) para nem chegar a disparar a busca da página N.
+    const [scopedWalletId, setScopedWalletId] = useState(activeWalletId);
+    if (scopedWalletId !== activeWalletId) {
+        setScopedWalletId(activeWalletId);
+        setPage(1);
+        setTransactions([]);
+    }
+
     const { data, isLoading, isFetching } = useQuery({
         queryKey: ['cashFlow', activeWalletId, page, activeFilter],
         queryFn: () => dataSource.getCashFlow(page, 15, activeFilter),

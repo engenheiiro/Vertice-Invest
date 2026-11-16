@@ -311,8 +311,9 @@ export const signalEngine = {
                                         updateOne: {
                                             filter: { ticker: asset.ticker, type: 'RSI_OVERSOLD', status: 'ACTIVE' },
                                             update: {
-                                                $set: { quality, value: rsi, message, urgencyLevel, volumeRatio, timestamp: new Date() },
+                                                $set: { quality, value: rsi, message, urgencyLevel, volumeRatio },
                                                 $setOnInsert: {
+                                                    timestamp: new Date(),
                                                     ticker: asset.ticker,
                                                     type: 'RSI_OVERSOLD',
                                                     assetType: asset.type,
@@ -352,8 +353,9 @@ export const signalEngine = {
                                     updateOne: {
                                         filter: { ticker: asset.ticker, type: 'BULLISH_DIVERGENCE', status: 'ACTIVE' },
                                         update: {
-                                            $set: { quality, value: divergence.rsiAtLow, message, urgencyLevel, volumeRatio, timestamp: new Date() },
+                                            $set: { quality, value: divergence.rsiAtLow, message, urgencyLevel, volumeRatio },
                                             $setOnInsert: {
+                                                timestamp: new Date(),
                                                 ticker: asset.ticker,
                                                 type: 'BULLISH_DIVERGENCE',
                                                 assetType: asset.type,
@@ -386,8 +388,9 @@ export const signalEngine = {
                                 updateOne: {
                                     filter: { ticker: asset.ticker, type: 'DEEP_VALUE', status: 'ACTIVE' },
                                     update: {
-                                        $set: { quality, value: grahamNumber, message, urgencyLevel, timestamp: new Date() },
+                                        $set: { quality, value: grahamNumber, message, urgencyLevel },
                                         $setOnInsert: {
+                                            timestamp: new Date(),
                                             ticker: asset.ticker,
                                             type: 'DEEP_VALUE',
                                             assetType: asset.type,
@@ -403,10 +406,22 @@ export const signalEngine = {
                         }
                     }
 
-                } catch { continue; }
+                } catch {
+                    // Exceção no meio da análise: as condições do ativo NÃO foram
+                    // avaliadas. Fica fora de scannedTickers, senão a auto-invalidação
+                    // abaixo encerraria os sinais ativos dele como "condição revertida".
+                    scannedTickers.delete(asset.ticker);
+                    continue;
+                }
             }
 
             // 5. PERSISTÊNCIA — UPSERT atômico (sem acúmulo: máximo 1 ACTIVE por ticker/tipo)
+            //
+            // `timestamp` é a data de EMISSÃO e só entra na inserção. Quando ia no $set,
+            // toda varredura de 15 min o renovava: a idade do sinal no backtest nunca
+            // passava do horizonte (o sinal não expirava e o preço de entrada, fixo no
+            // $setOnInsert, ficava com outra data), e o atraso do plano ESSENTIAL
+            // (`timestamp <= agora - atraso`) nunca alcançava um sinal ainda ativo.
             if (upsertOps.length > 0) {
                 await QuantSignal.bulkWrite(upsertOps, { ordered: false });
             }
@@ -541,7 +556,7 @@ export const signalEngine = {
 
         } catch (error) {
             logger.error(`❌ [Backtest] Erro: ${error.message}`);
-            return { error: error.message };
+            return { success: false, error: error.message };
         }
     }
 };

@@ -22,7 +22,7 @@ import {
 } from '../controllers/walletController.js';
 import { authenticateToken, requireAdmin, requireElitePlan, requireTaxReportPlan, requireDividendsPlan } from '../middleware/authMiddleware.js';
 import { resolveWallet } from '../middleware/resolveWallet.js';
-import { researchHeavyLimiter } from '../middleware/rateLimiters.js';
+import { researchHeavyLimiter, adminLimiter } from '../middleware/rateLimiters.js';
 import { getTaxReport, getTaxReportPdf } from '../controllers/taxController.js';
 import validate from '../middleware/validateResource.js';
 import {
@@ -104,9 +104,9 @@ router.get('/tax-report/:year/pdf', requireTaxReportPlan, researchHeavyLimiter, 
 router.post('/fix-splits', writeLimiter, validate(corporateActionSchema), runCorporateAction);
 
 // Rotas Admin de Saúde
-router.post('/fix-snapshots', requireAdmin, fixWalletSnapshots);
-router.get('/snapshot-health', requireAdmin, getSnapshotHealth);
+router.post('/fix-snapshots', adminLimiter, requireAdmin, fixWalletSnapshots);
+router.get('/snapshot-health', adminLimiter, requireAdmin, getSnapshotHealth);
 // NOVO: Trigger Manual de Snapshot
-router.post('/admin/snapshot/force', requireAdmin, forceSnapshot);
+router.post('/admin/snapshot/force', adminLimiter, requireAdmin, forceSnapshot);
 
 export default router;

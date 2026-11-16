@@ -483,10 +483,12 @@ export const marketDataService = {
     // Reusada pelo refreshQuotesBatch (BR) e pelo path Exterior/Cripto do syncService.
     buildQuoteFailureOps(assets, successfulTickers) {
         const ops = [];
-        const todayKey = new Date().toISOString().slice(0, 10);
+        // Dia de Brasília, não UTC: com a data UTC o dia virava às 21:00 BRT, e uma
+        // instabilidade de 20:45 a 21:15 contava como duas das falhas que desativam.
+        const todayKey = brazilDateKey();
         for (const asset of assets) {
             if (!asset || successfulTickers.has(asset.ticker)) continue;
-            const lastFailKey = asset.lastFailDate ? new Date(asset.lastFailDate).toISOString().slice(0, 10) : null;
+            const lastFailKey = asset.lastFailDate ? brazilDateKey(new Date(asset.lastFailDate)) : null;
             if (lastFailKey === todayKey) continue; // já contabilizou falha hoje
             const currentFail = Number.isFinite(asset.failCount) ? asset.failCount : 0;
             const newFailCount = Math.min(currentFail + 1, 999);

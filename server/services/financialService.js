@@ -1274,8 +1274,22 @@ export const financialService = {
         let totalCostBrl = 0;
         let realizedProfitBrl = 0;
         const fxToStamp = [];
+        // Saldo negativo é checado na VIRADA DE DIA, não só no fim. Com o check
+        // apenas no fim, VENDA 10 em 01/01 + COMPRA 20 em 01/02 passava: a venda
+        // saía com preço médio 0 (lucro realizado fictício = valor inteiro da venda)
+        // e a compra herdava o custo da quantidade negativa (médio 80 em vez de 40),
+        // enquanto o rebuild do histórico zerava o negativo e chegava a outra posição.
+        // Dentro do mesmo dia a ordem de digitação decide (day trade lançado com a
+        // venda primeiro continua aceito, como antes).
+        const insufficientBalance = () => txError(400, `Saldo insuficiente para ${ticker}: uma venda ficaria maior que a quantidade comprada até a data dela.`);
+        let currentDayKey = null;
 
         for (const tx of transactions) {
+            const txDayKey = toDateKeyUtil(tx.date);
+            if (currentDayKey !== null && txDayKey !== currentDayKey && quantity < -QUANTITY_EPSILON) {
+                throw insufficientBalance();
+            }
+            currentDayKey = txDayKey;
             // Quantidade em 8 casas (cripto); valor monetário continua em 2/4 casas.
             const txQty = safeQuantity(tx.quantity);
             const txPrice = safeUnitPrice(tx.price);
@@ -1346,7 +1360,9 @@ export const financialService = {
                 mergedCostBrl = safeAdd(mergedCostBrl, safeCurrency(l.quantity * l.price * (l.fxRate || 1)));
             });
 
-            const mergedPrice = mergedQty > 0 ? safeFloat(mergedCost / mergedQty) : 0;
+            // safeUnitPrice, não safeFloat (regra 7): as 4 casas zeravam o lote consolidado
+            // de cripto sub-centavo.
+            const mergedPrice = mergedQty > 0 ? safeUnitPrice(mergedCost / mergedQty) : 0;
             // Câmbio médio ponderado pelo custo — mantém o lote consolidado com o
             // mesmo valor em reais que os lotes originais somavam.
             const mergedFx = mergedCost > 0 ? safeFloat(mergedCostBrl / mergedCost) : 1;
@@ -1365,7 +1381,7 @@ export const financialService = {
         // da qual uma venda posterior depende). Sem status, virava 500 e chegava
         // como "Erro interno no servidor" — e entrava no painel como falha nossa.
         if (quantity < -QUANTITY_EPSILON) {
-            throw txError(400, `Saldo insuficiente para ${ticker}: uma venda ficaria maior que a quantidade comprada até a data dela.`);
+            throw insufficientBalance();
         }
         if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; totalCostBrl = 0; taxLots = []; }
 

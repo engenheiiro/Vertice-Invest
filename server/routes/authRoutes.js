@@ -13,6 +13,8 @@ import {
   mfaSetupSchema,
   mfaEnableSchema,
   mfaDisableSchema,
+  changePasswordSchema,
+  deactivateAccountSchema,
 } from '../schemas/authSchemas.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 import { dataExportLimiter, accountDeleteLimiter, avatarUploadLimiter, changePasswordLimiter, mfaWriteLimiter } from '../middleware/rateLimiters.js';
@@ -32,9 +34,11 @@ router.put('/me', authenticateToken, validate(updateProfileSchema), updateProfil
 // (3.17) Foto de perfil — rate limiter dedicado (payload maior).
 router.put('/me/avatar', avatarUploadLimiter, authenticateToken, validate(avatarSchema), updateAvatar);
 router.delete('/me/avatar', authenticateToken, removeAvatar);
-router.post('/change-password', changePasswordLimiter, authenticateToken, changePassword);
+router.post('/change-password', changePasswordLimiter, authenticateToken, validate(changePasswordSchema), changePassword);
 router.post('/tutorial-seen', authenticateToken, markTutorialSeen);
-router.post('/me/deactivate', authenticateToken, deactivateAccount);
+// Desativar confere a senha (bcrypt): sem limiter, uma sessão sequestrada tinha o
+// orçamento do apiLimiter inteiro para adivinhá-la. Divide o balde da exclusão.
+router.post('/me/deactivate', accountDeleteLimiter, authenticateToken, validate(deactivateAccountSchema), deactivateAccount);
 router.get('/me/export', dataExportLimiter, authenticateToken, exportData);
 router.delete('/me', accountDeleteLimiter, authenticateToken, deleteAccount);
 

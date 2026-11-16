@@ -638,6 +638,7 @@ export const initScheduler = () => {
             await macroDataService.performMacroSync();
         } catch (error) {
             logger.error(`❌ Rotina Macro: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -668,24 +669,27 @@ export const initScheduler = () => {
             }
         } catch (e) {
             logger.error(`❌ Rotina Preços: ${e.message}`);
+            return { success: false, error: e.message };
         }
     });
 
     // 3. RADAR ALPHA 3.1
     schedule('2,17,32,47 * * * *', 'radar-alpha', async () => {
         try {
-            await signalEngine.runScanner();
+            return await signalEngine.runScanner();
         } catch (e) {
             logger.error(`❌ Rotina Radar Alpha: ${e.message}`);
+            return { success: false, error: e.message };
         }
     });
 
     // 4. BACKTEST INTRADAY
     schedule('5,35 * * * *', 'backtest-intraday', async () => {
         try {
-            await signalEngine.runBacktest();
+            return await signalEngine.runBacktest();
         } catch (e) {
             logger.error(`❌ Rotina Backtest: ${e.message}`);
+            return { success: false, error: e.message };
         }
     });
 
@@ -716,10 +720,12 @@ export const initScheduler = () => {
                 // Falha de sync NÃO-tolerada (não é o 403 do Fundamentus): research não roda
                 // hoje — alerta ativo, senão só descobriríamos olhando log.
                 Sentry.captureMessage(`Sync da manhã falhou (${syncResult.error || 'erro desconhecido'}) — research não rodou`, 'error');
+                return { success: false, error: `sync falhou: ${syncResult.error || 'erro desconhecido'}` };
             }
         } catch (e) {
             logger.error(`❌ Rotina Manhã V3: ${e.message}`);
             Sentry.captureException(e);
+            return { success: false, error: e.message };
         }
     });
 
@@ -783,10 +789,12 @@ export const initScheduler = () => {
                 } catch (e) { logger.warn(`⚠️ Carteira Recomendada (tarde): ${e.message}`); }
             } else {
                 Sentry.captureMessage(`Sync da tarde falhou (${syncResult.error || 'erro desconhecido'}) — research não rodou`, 'error');
+                return { success: false, error: `sync falhou: ${syncResult.error || 'erro desconhecido'}` };
             }
         } catch (e) {
             logger.error(`❌ Rotina Tarde V3: ${e.message}`);
             Sentry.captureException(e);
+            return { success: false, error: e.message };
         }
     });
 
@@ -798,6 +806,7 @@ export const initScheduler = () => {
         } catch (e) {
             logger.error(`❌ Auto-publish semanal: ${e.message}`);
             Sentry.captureException(e);
+            return { success: false, error: e.message };
         }
     });
 
@@ -843,6 +852,7 @@ export const initScheduler = () => {
         } catch (e) {
             logger.error(`❌ Publicação âncora mensal: ${e.message}`);
             Sentry.captureException(e);
+            return { success: false, error: e.message };
         }
     });
 
@@ -888,6 +898,7 @@ export const initScheduler = () => {
             if (res?.modifiedCount > 0) clearUserCache();
         } catch (error) {
             logger.error(`❌ Erro Check Expiração: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -903,6 +914,7 @@ export const initScheduler = () => {
             if (uniq.size > 0) await financialService.syncDividends([...uniq.values()]);
         } catch (error) {
             logger.error(`❌ Erro Sync Proventos: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -924,6 +936,7 @@ export const initScheduler = () => {
             logger.info("✅ [Scheduler] Fundamentals S&P 500 sincronizados.");
         } catch (error) {
             logger.error(`❌ [Scheduler] Fundamentals US: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -978,6 +991,7 @@ export const initScheduler = () => {
             });
         } catch (error) {
             logger.error(`❌ [Scheduler] Sync USD/BRL histórico: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -997,6 +1011,7 @@ export const initScheduler = () => {
             );
         } catch (error) {
             logger.error(`❌ [Scheduler] Erro na reativação de ativos: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -1009,6 +1024,7 @@ export const initScheduler = () => {
             await runStorageCleanup();
         } catch (error) {
             logger.error(`❌ [Scheduler] Cleanup de armazenamento: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 
@@ -1092,6 +1108,7 @@ export const initScheduler = () => {
             }
         } catch (error) {
             logger.error(`❌ [LGPD] Cleanup RefreshToken: ${error.message}`);
+            return { success: false, error: error.message };
         }
     });
 

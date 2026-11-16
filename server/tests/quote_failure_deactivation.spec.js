@@ -85,3 +85,19 @@ describe('ativo grande — proteção com prazo', () => {
         expect(opFor(asset({ ...grandePorMcap, failCount: 100 })).failCount).toBe(101);
     });
 });
+
+describe('dia da falha é o de Brasília', () => {
+    it('falha às 20:45 e às 21:15 BRT do mesmo dia conta uma vez só', async () => {
+        const { vi } = await import('vitest');
+        vi.useFakeTimers({ now: new Date('2026-11-04T00:15:00Z') }); // 21:15 BRT de 03/11
+        try {
+            const ops = marketDataService.buildQuoteFailureOps(
+                [asset({ failCount: 3, lastFailDate: new Date('2026-11-03T23:45:00Z') })], // 20:45 BRT
+                new Set(),
+            );
+            expect(ops).toHaveLength(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});

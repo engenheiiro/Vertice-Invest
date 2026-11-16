@@ -90,6 +90,10 @@ describe('Quantitative Regression Engine', () => {
         expect(rsiOp).toBeTruthy();
         expect(rsiOp.updateOne.filter.ticker).toBe('TEST3');
         expect(rsiOp.updateOne.update.$set.value).toBeLessThan(30);
+        // Data de EMISSÃO só na inserção: renovada a cada varredura, o sinal nunca
+        // expirava no backtest e o atraso do plano ESSENTIAL nunca o alcançava.
+        expect(rsiOp.updateOne.update.$set).not.toHaveProperty('timestamp');
+        expect(rsiOp.updateOne.update.$setOnInsert.timestamp).toBeInstanceOf(Date);
     });
 
     it('Lida com banco vazio sem gerar sinais', async () => {
