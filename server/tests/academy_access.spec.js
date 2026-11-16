@@ -11,7 +11,7 @@ const Course = (await import('../models/Course.js')).default;
 const UserProgress = (await import('../models/UserProgress.js')).default;
 const Quiz = (await import('../models/Quiz.js')).default;
 const QuizAttempt = (await import('../models/QuizAttempt.js')).default;
-const { getCourses, getCourseProgress, getQuizByCourseId } = await import('../controllers/academyController.js');
+const { getCourses, getCourseProgress, getQuizByCourseId, submitQuiz } = await import('../controllers/academyController.js');
 
 const response = () => {
   const res = { statusCode: 200, body: null };
@@ -74,5 +74,37 @@ describe('Academy — autenticação e gates de plano', () => {
     expect(UserProgress.find).toHaveBeenCalledWith({ userId: 'user-a', courseId: 'course-pp' });
     expect(QuizAttempt.find).toHaveBeenCalledWith({ userId: 'user-a', courseId: 'course-pp' });
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('Academy — gabarito do quiz', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const QUESTIONS = [{ correctOptionIndex: 1 }, { correctOptionIndex: 2 }, { correctOptionIndex: 0 }];
+  const submit = async (answers) => {
+    Course.findById.mockResolvedValue({ _id: 'course-free', requiredPlan: 'GUEST', isLocked: false });
+    Quiz.findOne.mockResolvedValue({ questions: QUESTIONS, passingScore: 70 });
+    QuizAttempt.create.mockImplementation(async (doc) => doc);
+    const res = response();
+    await submitQuiz({
+      body: { courseId: 'course-free', answers },
+      user: { _id: 'user-a', plan: 'GUEST', role: 'USER' },
+    }, res, vi.fn());
+    return res;
+  };
+
+  // Devolvido sempre, uma tentativa errada entregava o gabarito e a seguinte
+  // passava — e a aprovação libera o certificado.
+  it('reprovado recebe só a pontuação, sem gabarito', async () => {
+    const res = await submit([0, 0, 0]);
+    expect(res.body.passed).toBe(false);
+    expect(res.body).not.toHaveProperty('correctAnswers');
+    expect(JSON.stringify(res.body)).not.toContain('correctOptionIndex');
+  });
+
+  it('aprovado recebe o gabarito para revisar', async () => {
+    const res = await submit([1, 2, 0]);
+    expect(res.body.passed).toBe(true);
+    expect(res.body.correctAnswers).toEqual([1, 2, 0]);
   });
 });

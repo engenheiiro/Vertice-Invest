@@ -499,22 +499,17 @@ export const CoursePlayer = () => {
                                             <div className="max-h-60 overflow-y-auto mb-8 bg-black/20 rounded-xl p-4 text-left border border-white/5">
                                                 <h4 className="text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Revisão das Respostas</h4>
                                                 <div className="space-y-4">
-                                                    {quiz.questions.map((q: any, idx: number) => {
-                                                        const isCorrect = quizAnswers[idx] === quizResult.correctAnswers[idx];
-                                                        return (
-                                                            <div key={idx} className="text-sm">
-                                                                <p className="text-slate-300 mb-1">{idx + 1}. {q.text}</p>
-                                                                <p className={isCorrect ? "text-green-500" : "text-red-400"}>
-                                                                    Sua resposta: {q.options[quizAnswers[idx]]}
-                                                                    {!isCorrect && (
-                                                                        <span className="block text-slate-500 mt-1 italic">
-                                                                            Resposta correta: {q.options[quizResult.correctAnswers[idx]]}
-                                                                        </span>
-                                                                    )}
-                                                                </p>
-                                                            </div>
-                                                        );
-                                                    })}
+                                                    {/* O servidor só devolve o gabarito a quem passou: na
+                                                        reprovação a revisão mostra as próprias respostas, sem
+                                                        apontar certo/errado (senão a tentativa seguinte vira cópia). */}
+                                                    {quiz.questions.map((q: any, idx: number) => (
+                                                        <div key={idx} className="text-sm">
+                                                            <p className="text-slate-300 mb-1">{idx + 1}. {q.text}</p>
+                                                            <p className="text-slate-400">
+                                                                Sua resposta: {q.options[quizAnswers[idx]]}
+                                                            </p>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
 

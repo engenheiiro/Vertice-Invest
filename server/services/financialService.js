@@ -502,7 +502,7 @@ export const financialService = {
                     }
                     const state = fixedIncomeState[tx.ticker];
                     state.currentValue += tx.totalValue;
-                    state.lots.push({ dateIso: txDateIso, cost: tx.totalValue });
+                    state.lots.push({ dateIso: txDateIso, cost: tx.totalValue, qty: tx.quantity });
                     // `currentValue` acima é só o valor de partida do dia da compra:
                     // a partir daqui quem manda são os LOTES, recompostos do zero a
                     // cada dia por `accrueLotsValue`. É de lá que vem a regra de que a
@@ -531,13 +531,15 @@ export const financialService = {
                 if (isFixed) {
                     const state = fixedIncomeState[tx.ticker];
                     state.currentValue = Math.max(0, state.currentValue - tx.totalValue);
-                    // Resgate parcial baixa os lotes na mesma proporção da posição
-                    // (mesma regra do custo acima) — a marcação continua sobre o que
-                    // ficou, sem reprecificar as compras remanescentes.
-                    if (soldFraction > 0) {
-                        const remaining = Math.max(0, 1 - soldFraction);
-                        state.lots = state.lots.map((lot) => ({ ...lot, cost: lot.cost * remaining }));
-                    }
+                    // Resgate parcial consome os lotes MAIS ANTIGOS primeiro (PEPS), a
+                    // mesma regra de `recalculatePosition`, de onde saem os taxLots que
+                    // o KPI ao vivo e o snapshot valorizam. Antes aqui a baixa era
+                    // proporcional em todos os lotes: CDB de R$ 10 mil de 2024 + R$ 10 mil
+                    // de 2026, resgate de metade — o KPI tirava o lote velho (que rendeu
+                    // mais) e o histórico tirava metade de cada, ~R$ 1,1 mil de degrau no
+                    // dia em que os dois caminhos se encontram. Dentro do lote, o custo
+                    // cai na proporção da quantidade resgatada dele.
+                    this._consumeFixedIncomeLotsFifo(state, tx.quantity, soldFraction);
                 }
                 dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
                 dayFlowNominal -= tx.totalValue * txUsdRate;
@@ -556,6 +558,33 @@ export const financialService = {
         }
 
         return { txIndex, dayFlowAdjusted, dayFlowNominal };
+    },
+
+    /**
+     * Baixa PEPS dos lotes de renda fixa do rebuild (muta `state.lots`).
+     * Lote sem `qty` (não deveria existir: todo lote nasce com ela) derruba para a
+     * baixa proporcional pela fração da posição, que era a regra antiga.
+     */
+    _consumeFixedIncomeLotsFifo(state, soldQty, soldFraction) {
+        if (!(soldQty > 0) || !state?.lots?.length) return;
+        if (state.lots.some((lot) => !(lot.qty > 0))) {
+            const remaining = Math.max(0, 1 - soldFraction);
+            state.lots = state.lots.map((lot) => ({ ...lot, cost: lot.cost * remaining }));
+            return;
+        }
+        let toSell = soldQty;
+        const kept = [];
+        for (const lot of state.lots) {
+            if (toSell <= QUANTITY_EPSILON) { kept.push(lot); continue; }
+            if (lot.qty > toSell + QUANTITY_EPSILON) {
+                const left = lot.qty - toSell;
+                kept.push({ ...lot, qty: left, cost: lot.cost * (left / lot.qty) });
+                toSell = 0;
+            } else {
+                toSell -= lot.qty;
+            }
+        }
+        state.lots = kept;
     },
 
     /**

@@ -18,6 +18,7 @@ import {
     getQuizByCourseId,
     submitQuiz
 } from '../controllers/academyController.js';
+import { academyQuizLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.get('/progress/:courseId', validate(academyCourseParamSchema), getCourseP
 router.post('/progress', validate(academyProgressSchema), updateProgress);
 router.get('/certificate/:courseId', validate(academyCourseParamSchema), generateCertificate);
 router.get('/quiz/:courseId', validate(academyCourseParamSchema), getQuizByCourseId);
-router.post('/quiz/submit', validate(academyQuizSubmitSchema), submitQuiz);
+router.post('/quiz/submit', academyQuizLimiter, validate(academyQuizSubmitSchema), submitQuiz);
 
 // Rota de seed: apenas admins, apenas fora de produção
 router.post('/seed', requireAdmin, (req, res, next) => {

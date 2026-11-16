@@ -440,7 +440,8 @@ describe('undoImport — reversão do lote', () => {
 
     const result = await undoImport({ userId: 'u1', walletId: 'w1', batchId: 'batch1' });
 
-    expect(AssetTransaction.deleteMany).toHaveBeenCalledWith({ wallet: 'w1', importBatchId: 'batch1' });
+    expect(AssetTransaction.deleteMany).toHaveBeenCalledWith({ wallet: 'w1', importBatchId: 'batch1' }, { session });
+    expect(session.commitTransaction).toHaveBeenCalled();
     expect(result).toMatchObject({ removed: 3 });
     expect(batch.undoneAt).toBeInstanceOf(Date);
     expect(batch.save).toHaveBeenCalled();
@@ -456,7 +457,8 @@ describe('undoImport — reversão do lote', () => {
     await undoImport({ userId: 'u1', walletId: 'w1', batchId: 'batch1' });
 
     expect(UserAsset.deleteMany).toHaveBeenCalledWith(
-      expect.objectContaining({ ticker: { $in: ['PETR4'] } })
+      expect.objectContaining({ ticker: { $in: ['PETR4'] } }),
+      { session },
     );
   });
 
@@ -470,6 +472,26 @@ describe('undoImport — reversão do lote', () => {
     await undoImport({ userId: 'u1', walletId: 'w1', batchId: 'batch1' });
 
     expect(UserAsset.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('recálculo recusado desfaz TUDO e devolve 409 — o lote não fica marcado como desfeito', async () => {
+    // Import de COMPRA 100 + VENDA 50 manual: sem a compra, a venda fica sem lastro.
+    const batch = { _id: 'batch1', tickers: ['PETR4'], save: vi.fn(), undoneAt: null };
+    ImportBatch.findOne.mockResolvedValue(batch);
+    AssetTransaction.deleteMany.mockResolvedValue({ deletedCount: 1 });
+    financialService.recalculatePosition.mockRejectedValueOnce(
+      Object.assign(new Error('Saldo insuficiente para PETR4.'), { httpStatus: 400 }),
+    );
+
+    await expect(undoImport({ userId: 'u1', walletId: 'w1', batchId: 'batch1' }))
+      .rejects.toMatchObject({ status: 409 });
+
+    expect(financialService.recalculatePosition).toHaveBeenCalledWith('u1', 'PETR4', null, session, null, 'w1');
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.commitTransaction).not.toHaveBeenCalled();
+    expect(batch.undoneAt).toBeNull();
+    expect(batch.save).not.toHaveBeenCalled();
+    expect(financialService.rebuildUserHistory).not.toHaveBeenCalled();
   });
 
   it('devolve null para lote de outra carteira (a query já filtra por dono)', async () => {

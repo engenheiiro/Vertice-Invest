@@ -216,12 +216,16 @@ export const submitQuiz = async (req, res, next) => {
             answers
         });
 
-        res.json({ 
-            attempt, 
-            score, 
-            passed, 
+        // Gabarito só para quem passou. Devolvido sempre, uma tentativa errada
+        // revelava a resposta de cada questão e a seguinte passava — e a aprovação
+        // é o que libera o certificado. Reprovado recebe só a pontuação: nem o
+        // certo/errado por questão, que com 4 alternativas também se varre rápido.
+        res.json({
+            attempt,
+            score,
+            passed,
             passingScore: quiz.passingScore,
-            correctAnswers: quiz.questions.map(q => q.correctOptionIndex)
+            ...(passed ? { correctAnswers: quiz.questions.map(q => q.correctOptionIndex) } : {}),
         });
     } catch (error) { next(error); }
 };

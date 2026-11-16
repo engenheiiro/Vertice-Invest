@@ -407,36 +407,50 @@ export const undoImport = async ({ userId, walletId, batchId }) => {
     const batch = await ImportBatch.findOne({ _id: batchId, user: userId, wallet: walletId });
     if (!batch) return null;
 
-    const { deletedCount } = await AssetTransaction.deleteMany({
-        wallet: walletId,
-        importBatchId: String(batch._id),
-    });
+    // Apagar, recalcular e limpar órfãos numa transação SÓ. Antes cada passo
+    // corria solto e a falha do recálculo era só logada: importar COMPRA 100,
+    // lançar à mão VENDA 50 e desfazer apagava a compra, o recálculo recusava
+    // ("Saldo insuficiente"), a posição ficava em 100 com só a VENDA 50 no
+    // extrato — e o lote ainda saía marcado como desfeito, sem erro nenhum.
+    // Agora qualquer recálculo que falhe desfaz tudo e a pessoa recebe o motivo.
+    let deletedCount = 0;
+    try {
+        await runTransaction(async (session) => {
+            ({ deletedCount } = await AssetTransaction.deleteMany({
+                wallet: walletId,
+                importBatchId: String(batch._id),
+            }, { session }));
 
-    for (const ticker of batch.tickers) {
-        try {
-            await financialService.recalculatePosition(userId, ticker, null, null, null, walletId);
-        } catch (error) {
-            logger.warn('[Import] Recálculo falhou ao desfazer importação', {
-                userId: String(userId), walletId: String(walletId), ticker, error: error.message,
-            });
-        }
-    }
+            for (const ticker of batch.tickers) {
+                await financialService.recalculatePosition(userId, ticker, null, session, null, walletId);
+            }
 
-    // Desfazer tem que apagar o rastro, não só zerar. `recalculatePosition` deixa
-    // a posição com quantity=0 em vez de removê-la (é o comportamento correto para
-    // uma venda total — vira "posição encerrada" e conta para o IR). Mas um ativo
-    // que só existia por causa do import não deve sobrar como posição encerrada
-    // fantasma, então some quando não resta nenhuma transação dele na carteira.
-    const remaining = await AssetTransaction.find({ wallet: walletId, ticker: { $in: batch.tickers } })
-        .distinct('ticker');
-    const orphans = batch.tickers.filter((t) => !remaining.includes(t));
-    if (orphans.length > 0) {
-        await UserAsset.deleteMany({
-            user: userId,
-            wallet: walletId,
-            ticker: { $in: orphans },
-            quantity: { $lte: QUANTITY_EPSILON },
+            // Desfazer tem que apagar o rastro, não só zerar. `recalculatePosition` deixa
+            // a posição com quantity=0 em vez de removê-la (é o comportamento correto para
+            // uma venda total — vira "posição encerrada" e conta para o IR). Mas um ativo
+            // que só existia por causa do import não deve sobrar como posição encerrada
+            // fantasma, então some quando não resta nenhuma transação dele na carteira.
+            const remaining = await AssetTransaction.find(
+                { wallet: walletId, ticker: { $in: batch.tickers } }, null, { session },
+            ).distinct('ticker');
+            const orphans = batch.tickers.filter((t) => !remaining.includes(t));
+            if (orphans.length > 0) {
+                await UserAsset.deleteMany({
+                    user: userId,
+                    wallet: walletId,
+                    ticker: { $in: orphans },
+                    quantity: { $lte: QUANTITY_EPSILON },
+                }, { session });
+            }
         });
+    } catch (error) {
+        logger.warn('[Import] Desfazer importação revertido: recálculo recusou o estado final', {
+            userId: String(userId), walletId: String(walletId), batchId, error: error.message,
+        });
+        if (error.httpStatus) {
+            throw AppError.conflict(`Não foi possível desfazer esta importação: ${error.message} Remova antes os lançamentos manuais que dependem dela.`);
+        }
+        throw error;
     }
 
     try {

@@ -110,6 +110,15 @@ export const mfaWriteLimiter = createUserLimiter({
   message: 'Muitas tentativas de alteração do MFA. Aguarde alguns minutos.',
 });
 
+// Envio de quiz da Academy: aprovação libera certificado. Sem teto, dava para
+// varrer as alternativas até passar. 10/hora por usuário sobra para estudar e
+// tentar de novo; não sobra para força bruta.
+export const academyQuizLimiter = createUserLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: 'Muitas tentativas de prova. Revise as aulas e tente novamente mais tarde.',
+});
+
 // (C4/E6) Rota pública de carteira — NÃO autenticada, então a chave é o IP
 // (userKey cai no ramo defensivo de IP). O link renderiza a página Carteira
 // inteira, então UMA visita gasta várias chamadas (carteira, histórico e a aba

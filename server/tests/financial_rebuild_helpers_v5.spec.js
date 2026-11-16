@@ -242,3 +242,44 @@ describe('financialService V5 — marcação a mercado', () => {
     expect(result.totalInvested).toBe(1_500);
   });
 });
+
+describe('rebuild — resgate parcial de renda fixa é PEPS, como o KPI', () => {
+  // CDB R$ 10 mil em 2024 + R$ 10 mil em 2026; resgata 1 de 2 unidades. O KPI ao
+  // vivo valoriza os taxLots de recalculatePosition (PEPS: some o lote de 2024). O
+  // rebuild baixava metade de cada lote — os dois caminhos divergiam.
+  const meta = new Map([['CDB-X', { ticker: 'CDB-X', type: 'FIXED_INCOME', fixedIncomeRate: 100 }]]);
+  const fi = (type, iso, quantity, totalValue) => ({
+    ticker: 'CDB-X', type, quantity, price: totalValue / quantity, totalValue,
+    currency: 'BRL', date: new Date(`${iso}T12:00:00Z`),
+  });
+  const applyAll = (txs, cursorIso) => {
+    const ctx = {
+      txs, txIndex: 0, cursorIso, portfolio: {}, fixedIncomeState: {},
+      assetMetadataMap: meta, priceCacheMap: new Map(), lastKnownPrices: {}, getUsdRateForDate: () => 1,
+    };
+    financialService._applyDayTransactions(ctx);
+    return ctx.fixedIncomeState['CDB-X'].lots;
+  };
+
+  it('resgate de uma unidade tira o lote mais antigo inteiro', () => {
+    const lots = applyAll([
+      fi('BUY', '2024-01-10', 1, 10_000),
+      fi('BUY', '2026-01-10', 1, 10_000),
+      fi('SELL', '2026-06-01', 1, 12_500),
+    ], '2026-06-01');
+    expect(lots).toHaveLength(1);
+    expect(lots[0]).toMatchObject({ dateIso: '2026-01-10', cost: 10_000, qty: 1 });
+  });
+
+  it('resgate que atravessa lotes fecha o antigo e baixa o seguinte na proporção', () => {
+    const lots = applyAll([
+      fi('BUY', '2024-01-10', 2, 2_000),
+      fi('BUY', '2026-01-10', 4, 4_000),
+      fi('SELL', '2026-06-01', 3, 3_300),
+    ], '2026-06-01');
+    expect(lots).toHaveLength(1);
+    expect(lots[0].dateIso).toBe('2026-01-10');
+    expect(lots[0].qty).toBeCloseTo(3, 8);
+    expect(lots[0].cost).toBeCloseTo(3_000, 6);
+  });
+});
