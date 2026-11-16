@@ -273,7 +273,15 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
     // a ex-date normalizada à meia-noite UTC do dia-calendário — casa 1:1 com dayStr.
     let dayDividendIncome = 0;
     const qtyByTicker = new Map();
-    positions.forEach(p => { if (p.quantity > 0) qtyByTicker.set(String(p.ticker).toUpperCase(), p.quantity); });
+    // Provento em dólar entra em reais pelo câmbio do dia-ex (o amount é da fonte).
+    const divFxByTicker = new Map();
+    const dayUsdRate = getUsdRateForDate ? getUsdRateForDate(dayStr) : usdRate;
+    positions.forEach(p => {
+        if (!(p.quantity > 0)) return;
+        const t = String(p.ticker).toUpperCase();
+        qtyByTicker.set(t, p.quantity);
+        divFxByTicker.set(t, isDollarized(p) ? dayUsdRate : 1);
+    });
     if (qtyByTicker.size > 0) {
         const [dy, dm, dd] = dayStr.split('-').map(Number);
         const exDateUtc = new Date(Date.UTC(dy, dm - 1, dd));
@@ -285,7 +293,7 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
             if (seenDiv.has(key)) continue;
             seenDiv.add(key);
             const qty = qtyByTicker.get(t);
-            if (qty > 0) dayDividendIncome += qty * ev.amount;
+            if (qty > 0) dayDividendIncome += qty * ev.amount * (divFxByTicker.get(t) ?? 1);
         }
     }
 

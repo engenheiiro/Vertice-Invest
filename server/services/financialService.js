@@ -26,7 +26,7 @@ import logger from '../config/logger.js';
 import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
-import { loadUsdRateResolver, effectiveFxRate } from '../utils/fxRate.js';
+import { loadUsdRateResolver, effectiveFxRate, positionCostBRL } from '../utils/fxRate.js';
 import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixedIncome.js';
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
@@ -111,6 +111,36 @@ export const financialService = {
      * Para datas sem cotação, faz busca binária pela taxa mais recente <= alvo,
      * evitando cair na taxa ATUAL em datas passadas com gaps (P&L histórico).
      */
+    /**
+     * Câmbio do PROVENTO: `(ticker, dayKey) => taxa`, 1 para ativo em real.
+     *
+     * DividendEvent.amount fica na moeda da fonte, por ação — e para STOCK_US (e
+     * ETF/REIT em dólar) o Yahoo publica em DÓLAR. Toda soma de provento da carteira
+     * (rebuild, snapshot, acumulado, tela de Proventos) é em REAIS, e somava o valor
+     * em dólar como se fosse real: 10 AAPL × US$ 0,25 viravam R$ 2,50 em vez de
+     * ~R$ 13,75, subestimando proventos, resultado e a renda do TWRR no dia-ex.
+     *
+     * A moeda vem do ATIVO (posição ou lançamento), não do evento: o `currency` do
+     * DividendEvent sempre foi gravado 'BRL' e não diz nada. A taxa é a do DIA-EX
+     * — a mesma régua do acumulado, que credita o provento na data-ex.
+     *
+     * `assetsLike`: posições/lançamentos com { ticker, type?, currency? }.
+     * `getUsdRateForDate`: resolvedor já carregado pelo chamador (evita 2ª leitura).
+     */
+    async _dividendFxResolver(assetsLike, getUsdRateForDate = null) {
+        const dollarTickers = new Set();
+        for (const a of assetsLike || []) {
+            if (a && isDollarizedAsset(a)) dollarTickers.add(String(a.ticker).toUpperCase());
+        }
+        if (dollarTickers.size === 0) return () => 1;
+        let resolve = getUsdRateForDate;
+        if (!resolve) {
+            const macro = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).select('dollar').lean().catch(() => null);
+            resolve = await this._loadUsdRateResolver(macro?.dollar);
+        }
+        return (ticker, dayKey) => (dollarTickers.has(String(ticker).toUpperCase()) ? resolve(dayKey) : 1);
+    },
+
     async _loadUsdRateResolver(currentUsdRate) {
         // Implementação única em utils/fxRate.js — a mesma que carimba o câmbio de
         // compra nos lançamentos, para que P&L histórico e custo da posição não
@@ -277,6 +307,16 @@ export const financialService = {
 
         const dividendDateMap = options.dividendDateMap
             || await this._loadDividendDateMap([...new Set(txs.map(t => t.ticker))]);
+        // Moeda: lançamento com currency gravado + posição atual (cobre o legado sem
+        // o campo). Posição zerada e sem registro fica em real, como antes. Com
+        // `transactions` injetado e sem `assets`, fica só com os lançamentos: o
+        // caminho injetado é puro (não vai ao banco) por contrato.
+        const positions = options.assets
+            || (options.transactions ? [] : await UserAsset.find({ user: userId, wallet: walletId }).select('ticker type currency').lean());
+        const dividendFx = options.dividendFx || await this._dividendFxResolver([
+            ...txs.filter(t => t.currency === 'USD'),
+            ...positions,
+        ], options.getUsdRateForDate || null);
 
         const days = [...dividendDateMap.keys()].filter(d => d <= throughDayKey).sort();
         const qty = {};
@@ -298,7 +338,7 @@ export const financialService = {
             }
             for (const div of dividendDateMap.get(day)) {
                 if (qty[div.ticker] > 0) {
-                    const value = qty[div.ticker] * div.amount;
+                    const value = qty[div.ticker] * div.amount * dividendFx(div.ticker, day);
                     total = safeAdd(total, value);
                     byTicker[div.ticker] = safeAdd(byTicker[div.ticker] || 0, value);
                     if (sinceDayKey && day > sinceDayKey) {
@@ -710,6 +750,12 @@ export const financialService = {
             const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
             const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFromByTicker);
             const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
+            // Mesma regra de moeda do acumulado (lançamento + posição): um ativo em
+            // dólar já vendido não pode ser convertido lá e ficar em real aqui.
+            const dividendFx = await this._dividendFxResolver(
+                [...txs.filter(t => t.currency === 'USD'), ...userAssets],
+                getUsdRateForDate,
+            );
             // Séries de PU: o histórico precisa marcar o título público pela mesma
             // régua do KPI ao vivo e do snapshot, senão a curva de patrimônio dá um
             // degrau no dia em que os dois caminhos se encontram.
@@ -784,7 +830,8 @@ export const financialService = {
                 let dayDividendCash = 0;
                 for (const div of dayDividends) {
                     if (portfolio[div.ticker] && portfolio[div.ticker].qty > 0) {
-                        dayDividendCash += (portfolio[div.ticker].qty * div.amount);
+                        // Provento em dólar entra em reais pelo câmbio do dia-ex.
+                        dayDividendCash += (portfolio[div.ticker].qty * div.amount * dividendFx(div.ticker, cursorIso));
                     }
                 }
                 accumulatedDividends += dayDividendCash;
@@ -1058,7 +1105,7 @@ export const financialService = {
      *
      * `MarketAsset.dy` não participa mais deste cálculo em nenhum ponto.
      */
-    _projectMonthlyIncome(relevantAssets, eventsMap, marketMap) {
+    _projectMonthlyIncome(relevantAssets, eventsMap, marketMap, fxNow = () => 1) {
         const cutoff = new Date();
         cutoff.setFullYear(cutoff.getFullYear() - 1);
 
@@ -1083,6 +1130,8 @@ export const financialService = {
             const marketValue = safeMult(asset.quantity, marketMap.get(asset.ticker)?.lastPrice || 0);
             const ceiling = safeMult(marketValue, 0.25);
             if (ceiling > 0 && annualIncome > ceiling) annualIncome = ceiling;
+            // Teto comparado na moeda nativa (renda e preço na mesma); só depois em reais.
+            annualIncome = safeMult(annualIncome, fxNow(asset.ticker));
 
             projectedMonthly = safeAdd(projectedMonthly, safeDiv(annualIncome, 12));
         }
@@ -1109,7 +1158,11 @@ export const financialService = {
             eventsMap.get(e.ticker).push(e);
         });
 
-        const projectedMonthly = this._projectMonthlyIncome(relevantAssets, eventsMap, marketMap);
+        const dividendFx = await this._dividendFxResolver(relevantAssets);
+        const todayKey = this.toDateKey(new Date());
+        const projectedMonthly = this._projectMonthlyIncome(
+            relevantAssets, eventsMap, marketMap, (ticker) => dividendFx(ticker, todayKey),
+        );
 
         // `new ObjectId(undefined)` geraria um id ALEATÓRIO (não omite o filtro!),
         // então o campo só entra no $match quando walletId de fato foi passado.
@@ -1160,7 +1213,7 @@ export const financialService = {
                 if (seenEvents.has(dedupeKey)) continue;
                 seenEvents.add(dedupeKey);
 
-                const totalValue = safeMult(asset.quantity, event.amount);
+                const totalValue = safeCurrency(safeMult(asset.quantity, event.amount) * dividendFx(asset.ticker, this.toDateKey(event.date)));
 
                 if (totalValue > 0) {
                     const { date: pDate, isEstimated } = this.resolvePaymentDate(event);
@@ -1210,7 +1263,8 @@ export const financialService = {
         const yieldOnCost = relevantAssets
             .map((asset) => {
                 const receivedLast12Months = receivedLast12MonthsByTicker.get(asset.ticker) || 0;
-                const totalCost = asset.totalCost || 0;
+                // Custo em reais (câmbio das compras), na mesma moeda do recebido.
+                const totalCost = positionCostBRL(asset, dividendFx(asset.ticker, todayKey)) || 0;
                 return {
                     ticker: asset.ticker,
                     receivedLast12Months,

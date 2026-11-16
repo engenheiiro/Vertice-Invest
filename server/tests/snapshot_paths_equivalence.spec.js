@@ -306,4 +306,31 @@ describe('accruedDividendsThroughDay — proventos pela quantidade da época', (
     expect(pending).toBeCloseTo(4, 2);
     expect(paid + pending).toBeCloseTo(total, 2);
   });
+
+  // DividendEvent.amount de STOCK_US vem em DÓLAR da fonte. Somado como real, 10
+  // ações × US$ 0,25 viravam R$ 2,50 em vez de 10 × 0,25 × câmbio do dia-ex.
+  it('provento de ativo em dólar entra em reais pelo câmbio do dia-ex', async () => {
+    const US = 'AAPL';
+    vi.spyOn(financialService, '_loadDividendDateMap').mockResolvedValue(new Map([
+      ['2026-07-07', [{ ticker: TICKER, amount: 0.4, type: 'DIVIDEND' }]],
+      ['2026-08-07', [{ ticker: US, amount: 0.25, type: 'DIVIDEND' }]],
+    ]));
+    mocks.txFind.mockReturnValue({ sort: () => Promise.resolve([
+      BUY,
+      { ...BUY, ticker: US, quantity: 10, date: new Date('2026-06-01T12:00:00Z') },
+    ]) });
+    mocks.userAssetFind.mockReturnValue({ select: () => ({ lean: async () => [
+      { ticker: TICKER, type: 'STOCK' },
+      { ticker: US, type: 'STOCK_US', currency: 'USD' },
+    ] }) });
+    mocks.systemConfigFindOne.mockReturnValue({ select: () => ({ lean: async () => ({ dollar: 5.6 }) }) });
+    const resolver = vi.fn((day) => (day === '2026-08-07' ? 5.5 : 9));
+    vi.spyOn(financialService, '_loadUsdRateResolver').mockResolvedValue(resolver);
+
+    const { total, byTicker } = await financialService.accrueDividendsByTicker('u1', 'w1', '2026-08-31');
+
+    expect(byTicker[US]).toBeCloseTo(13.75, 2);   // 10 × US$ 0,25 × 5,50
+    expect(byTicker[TICKER]).toBeCloseTo(4, 2);   // real não é convertido
+    expect(total).toBeCloseTo(17.75, 2);
+  });
 });
