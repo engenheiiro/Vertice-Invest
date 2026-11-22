@@ -46,20 +46,24 @@ jobs:
           echo "::group::client" && npm audit --audit-level=high --prefix client; echo "::endgroup::"
           echo "::group::server" && npm audit --audit-level=high --prefix server; echo "::endgroup::"
 
-      - name: Lint (ESLint)
-        run: npm run lint
+      # O portão completo (scripts/qualidade/check.mjs): tipos, lint, build,
+      # testes com cobertura (server, client e scripts), duplicação,
+      # dependências e catraca contra docs/metricas.json. O build vem antes dos
+      # testes do server porque tests/app_shell_contract.spec.js lê client/dist.
+      # O e2e roda no job próprio abaixo. Os logs de cada etapa ficam no
+      # artefato "portao-logs".
+      - name: Portão (npm run check, sem e2e)
+        run: npm run check -- --sem-e2e
 
-      - name: Typecheck (client + server)
-        run: npm run typecheck
-
-      # ANTES dos testes do servidor: tests/app_shell_contract.spec.js sobe o
-      # app e confere a CSP e o shell da SPA, derivados de client/dist. Sem o
-      # build, a CSP sai vazia e o teste de contrato falha (5 casos).
-      - name: Build client
-        run: npm run build --prefix client
-
-      - name: Test backend (com cobertura)
-        run: npm run test:ci --prefix server
+      - name: Upload logs do portão
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: portao-logs
+          path: .qualidade/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload cobertura backend
         if: always()
@@ -69,9 +73,6 @@ jobs:
           path: server/coverage/
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Test frontend (com cobertura)
-        run: npm run test:coverage --prefix client
 
       - name: Upload cobertura frontend
         if: always()

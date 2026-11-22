@@ -38,6 +38,10 @@ function lerArgs(argv) {
     rapido: argv.includes('--rapido'),
     estrito: argv.includes('--estrito') || argv.includes('--rapido'),
     rodada: rodada ? Number(rodada.split('=')[1]) : null,
+    // O runner do CI é ~2× mais lento que a máquina de desenvolvimento (suíte do
+    // server: 67 s lá, 29 s aqui). O teto de 1 min é do ciclo local; no CI o
+    // tempo não é julgado, senão o portão reprovaria o hardware, não o código.
+    semTempo: process.env.CI === 'true',
   };
 }
 
@@ -65,6 +69,7 @@ function baseAnterior() {
 function julgar(base, valores, args) {
   return CATALOGO.map((def) => {
     if (args.rapido && def.modo === 'completo') return { def, estado: 'pulado' };
+    if (args.semTempo && def.chave.startsWith('tempo.')) return { def, estado: 'pulado' };
     const limite = base.limites[def.chave];
     const valor = valores[def.chave];
     if (limite === undefined && def.tipo !== 'info') return { def, valor, estado: 'piorou', detalhe: ['sem limite na base: rode --apertar'] };
