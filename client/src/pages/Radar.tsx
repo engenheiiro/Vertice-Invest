@@ -257,7 +257,7 @@ export const RadarPage = () => {
                 <div className="bg-blue-900/10 border border-blue-900/30 rounded-xl p-4 flex items-start gap-3">
                     <Info size={18} className="text-blue-400 mt-0.5 shrink-0" />
                     <div>
-                        <h4 className="text-xs font-bold text-blue-300 uppercase mb-1">Critérios de Saída Automática</h4>
+                        <h2 className="text-xs font-bold text-blue-300 uppercase mb-1">Critérios de Saída Automática</h2>
                         <p className="text-[11px] text-slate-400 leading-relaxed">
                             O sistema encerra a auditoria de um sinal quando um dos alvos é atingido:&nbsp;
                             <span className="text-emerald-400 font-bold">+3.5% Take Profit</span> &nbsp;|&nbsp;

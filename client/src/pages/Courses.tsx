@@ -201,7 +201,7 @@ export const Courses = () => {
                         <Lock size={32} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-amber-500 mb-1">Área em Manutenção</h3>
+                        <h2 className="text-xl font-bold text-amber-500 mb-1">Área em Manutenção</h2>
                         <p className="text-amber-500/70 text-sm max-w-2xl">
                             Estamos atualizando nossas trilhas com conteúdos exclusivos e vídeos em alta definição. 
                             O acesso às aulas está temporariamente suspenso para garantir a melhor experiência de aprendizado. Voltaremos em breve!

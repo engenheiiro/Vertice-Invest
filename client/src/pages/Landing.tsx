@@ -956,7 +956,7 @@ export const Landing = () => {
             <p className="max-w-sm text-[10px] leading-5 text-slate-600">Análises quantitativas, gestão patrimonial e educação financeira reunidas em uma única plataforma.</p>
           </div>
           <div>
-            <h4 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Produto</h4>
+            <h3 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Produto</h3>
             <ul className="space-y-2 text-[10px]">
               <li><a href="#recursos" className="inline-block py-1.5 hover:text-blue-400">Carteiras e recursos</a></li>
               <li><a href="#metas" className="inline-block py-1.5 hover:text-blue-400">Sistema de Metas</a></li>
@@ -965,7 +965,7 @@ export const Landing = () => {
             </ul>
           </div>
           <div>
-            <h4 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Legal</h4>
+            <h3 className="mb-3 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Legal</h3>
             <ul className="space-y-2 text-[10px]">
               <li><Link to="/terms" className="inline-block py-1.5 hover:text-blue-400">Termos de Uso</Link></li>
               <li><Link to="/privacy" className="inline-block py-1.5 hover:text-blue-400">Privacidade</Link></li>

@@ -393,7 +393,7 @@ function AssetSelect({
     <div>
       <label className="block text-[12.5px] text-slate-400 mb-1.5">{label}</label>
       <div className="relative">
-        <select
+        <select aria-label={label}
           value={value ?? ''}
           onChange={e => onChange(e.target.value || null)}
           className="w-full appearance-none bg-deep border border-white/10 focus:border-purple-500/50 focus:outline-none rounded-xl px-3.5 py-2.5 text-sm text-white transition-colors pr-8"

@@ -366,7 +366,7 @@ export function Chinelada() {
       </header>
 
       <div className="relative mx-auto grid max-w-[1500px] gap-5 px-4 py-5 lg:grid-cols-[270px_minmax(0,1fr)_300px] lg:px-8">
-        <aside className="order-2 rounded-[28px] border border-white/10 bg-[#211a16]/90 p-5 lg:order-1">
+        <aside aria-label="Kit anti-praga" className="order-2 rounded-[28px] border border-white/10 bg-[#211a16]/90 p-5 lg:order-1">
           <div className="mb-5 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-400">Durante a run</p><h2 className="text-xl font-black">Kit anti-praga</h2></div><span className="rounded-full bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-300">🪙 {coins}</span></div>
           <div className="space-y-3">
             {RUN_UPGRADES.map(item => {
@@ -471,7 +471,7 @@ export function Chinelada() {
           </div>
         </section>
 
-        <aside className="order-3 rounded-[28px] border border-white/10 bg-[#211a16]/90 p-5">
+        <aside aria-label="Legado da casa" className="order-3 rounded-[28px] border border-white/10 bg-[#211a16]/90 p-5">
           <div className="mb-5"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-300">Entre as runs</p><h2 className="text-xl font-black">Legado da casa</h2><p className="mt-2 text-xs leading-5 text-stone-400">Melhorias permanentes. Elas continuam ativas depois que seu braço cansar.</p></div>
           <div className="space-y-3">
             {META_UPGRADES.map(item => {

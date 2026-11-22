@@ -258,7 +258,7 @@ export const CoursePlayer = () => {
             <div className="flex-1 flex flex-col h-screen overflow-y-auto">
                 {/* Header */}
                 <div className="p-6 flex items-center gap-4 border-b border-white/5 bg-deep/80 backdrop-blur-md sticky top-0 z-30">
-                    <button 
+                    <button aria-label="Voltar aos cursos"
                         onClick={() => navigate('/courses')}
                         className="p-2 hover:bg-white/10 rounded-full transition-colors"
                     >
