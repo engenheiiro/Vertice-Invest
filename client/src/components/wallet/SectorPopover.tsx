@@ -269,97 +269,100 @@ export const SectorPopover = ({ items, kind, isPrivacyMode = false, variant = 'c
             </button>
 
             {isOpen && position && createPortal(
-                <div
-                    ref={popoverRef}
-                    role="dialog"
-                    aria-label={`${copy.title}: ${summary}`}
-                    // O popover vai por PORTAL, mas evento de React sobe pela árvore de
-                    // COMPONENTES, não pela do DOM: sem isto, qualquer clique aqui dentro
-                    // chega no cabeçalho do grupo e contrai a classe. Fica no container
-                    // (e não em cada controle) para valer também para o próximo que entrar.
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseEnter={cancelClose}
-                    onMouseLeave={scheduleClose}
-                    style={{ top: position.top, left: position.left, width: POPOVER_WIDTH }}
-                    className="fixed z-[100] bg-panel border border-slate-700 rounded-xl shadow-2xl p-3.5 animate-fade-in"
-                >
-                    <div className="flex items-baseline justify-between mb-2">
-                        <h4 className="text-xs font-bold text-white">{copy.title}</h4>
-                        <span className="text-[10px] text-slate-500">{isEtfHidden ? '% das ações individuais' : copy.subtitle}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <div className="w-[112px] h-[112px] shrink-0 relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={slices}
-                                        dataKey="value"
-                                        nameKey="label"
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={33}
-                                        outerRadius={54}
-                                        paddingAngle={2}
-                                        stroke="none"
-                                        isAnimationActive={false}
-                                    >
-                                        {slices.map((slice) => (
-                                            <Cell key={slice.key} fill={slice.color} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip
-                                        content={(
-                                            <SectorTooltip
-                                                formatValue={formatValue}
-                                                isLight={theme === 'light'}
-                                            />
-                                        )}
-                                        allowEscapeViewBox={{ x: true, y: true }}
-                                        wrapperStyle={{ zIndex: 20, pointerEvents: 'none' }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-[9px] text-slate-500 uppercase font-bold">{copy.count}</span>
-                                <span className="text-xs text-white tabular-nums font-bold">{slices.length}</span>
-                            </div>
+                // O popover vai por PORTAL, mas evento de React sobe pela árvore de
+                // COMPONENTES, não pela do DOM: sem isto, qualquer clique aqui dentro
+                // chega no cabeçalho do grupo e contrai a classe. Fica no invólucro
+                // (e não em cada controle) para valer também para o próximo que entrar.
+                <div role="presentation" onClick={(e) => e.stopPropagation()}>
+                    <div
+                        ref={popoverRef}
+                        role="dialog"
+                        aria-label={`${copy.title}: ${summary}`}
+                        onMouseEnter={cancelClose}
+                        onMouseLeave={scheduleClose}
+                        style={{ top: position.top, left: position.left, width: POPOVER_WIDTH }}
+                        className="fixed z-[100] bg-panel border border-slate-700 rounded-xl shadow-2xl p-3.5 animate-fade-in"
+                    >
+                        <div className="flex items-baseline justify-between mb-2">
+                            <h4 className="text-xs font-bold text-white">{copy.title}</h4>
+                            <span className="text-[10px] text-slate-500">{isEtfHidden ? '% das ações individuais' : copy.subtitle}</span>
                         </div>
 
-                        {/* Legenda sempre presente e rotulada: a identidade da fatia nunca
-                            depende só da cor (o par vizinho mais fraco da paleta fica na
-                            faixa 6–8 de separação para daltonismo). */}
-                        <ul className="flex-1 min-w-0 space-y-[3px]">
-                            {slices.map((slice) => (
-                                <li key={slice.key} className="flex items-center justify-between gap-2 text-[11px]">
-                                    <span className="flex items-center gap-1.5 min-w-0">
-                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: slice.color }} />
-                                        <span className="text-slate-400 truncate" title={`${slice.label} — ${slice.tickers.join(', ')}`}>{slice.label}</span>
-                                    </span>
-                                    <span className="text-right shrink-0">
-                                        <span className="block leading-none font-bold text-white tabular-nums">{slice.pct.toFixed(1)}%</span>
-                                        <span className="block leading-none text-[9px] text-slate-500 tabular-nums mt-0.5">{formatValue(slice.value)}</span>
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
+                        <div className="flex items-center gap-3">
+                            <div className="w-[112px] h-[112px] shrink-0 relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={slices}
+                                            dataKey="value"
+                                            nameKey="label"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={33}
+                                            outerRadius={54}
+                                            paddingAngle={2}
+                                            stroke="none"
+                                            isAnimationActive={false}
+                                        >
+                                            {slices.map((slice) => (
+                                                <Cell key={slice.key} fill={slice.color} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            content={(
+                                                <SectorTooltip
+                                                    formatValue={formatValue}
+                                                    isLight={theme === 'light'}
+                                                />
+                                            )}
+                                            allowEscapeViewBox={{ x: true, y: true }}
+                                            wrapperStyle={{ zIndex: 20, pointerEvents: 'none' }}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span className="text-[9px] text-slate-500 uppercase font-bold">{copy.count}</span>
+                                    <span className="text-xs text-white tabular-nums font-bold">{slices.length}</span>
+                                </div>
+                            </div>
+
+                            {/* Legenda sempre presente e rotulada: a identidade da fatia nunca
+                                depende só da cor (o par vizinho mais fraco da paleta fica na
+                                faixa 6–8 de separação para daltonismo). */}
+                            <ul className="flex-1 min-w-0 space-y-[3px]">
+                                {slices.map((slice) => (
+                                    <li key={slice.key} className="flex items-center justify-between gap-2 text-[11px]">
+                                        <span className="flex items-center gap-1.5 min-w-0">
+                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: slice.color }} />
+                                            <span className="text-slate-400 truncate" title={`${slice.label} — ${slice.tickers.join(', ')}`}>
+                                                {slice.label}
+                                            </span>
+                                        </span>
+                                        <span className="text-right shrink-0">
+                                            <span className="block leading-none font-bold text-white tabular-nums">{slice.pct.toFixed(1)}%</span>
+                                            <span className="block leading-none text-[9px] text-slate-500 tabular-nums mt-0.5">{formatValue(slice.value)}</span>
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        {etfSplit && (
+                            <button
+                                type="button"
+                                aria-pressed={isEtfHidden}
+                                onClick={() => setHideEtf((hidden) => !hidden)}
+                                title={isEtfHidden
+                                    ? 'Voltar a contar os ETFs de índice na repartição da classe'
+                                    : 'Tirar os ETFs de índice da conta e reler os setores só sobre as ações individuais'}
+                                className="mt-3 w-full flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white bg-elevated hover:bg-slate-700/50 px-2 py-1.5 rounded-lg border border-slate-800 transition-colors"
+                            >
+                                {isEtfHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                                {isEtfHidden ? 'Mostrar ETFs' : 'Ocultar ETFs'}
+                                {/* O peso do ETF não some junto com a fatia: ele fica no botão. */}
+                                <span className="text-slate-500 tabular-nums normal-case">({etfSplit.pct.toFixed(0)}% da classe)</span>
+                            </button>
+                        )}
                     </div>
-                    {etfSplit && (
-                        <button
-                            type="button"
-                            aria-pressed={isEtfHidden}
-                            onClick={() => setHideEtf((hidden) => !hidden)}
-                            title={isEtfHidden
-                                ? 'Voltar a contar os ETFs de índice na repartição da classe'
-                                : 'Tirar os ETFs de índice da conta e reler os setores só sobre as ações individuais'}
-                            className="mt-3 w-full flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white bg-elevated hover:bg-slate-700/50 px-2 py-1.5 rounded-lg border border-slate-800 transition-colors"
-                        >
-                            {isEtfHidden ? <Eye size={11} /> : <EyeOff size={11} />}
-                            {isEtfHidden ? 'Mostrar ETFs' : 'Ocultar ETFs'}
-                            {/* O peso do ETF não some junto com a fatia: ele fica no botão. */}
-                            <span className="text-slate-500 tabular-nums normal-case">({etfSplit.pct.toFixed(0)}% da classe)</span>
-                        </button>
-                    )}
                 </div>,
                 document.body,
             )}

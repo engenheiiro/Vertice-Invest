@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, PieChart } from 'lucide-react';
 import { Input } from '../ui/Input';
@@ -22,10 +22,16 @@ export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, mo
     const { addToast } = useToast();
     const [name, setName] = useState(currentName);
     const [status, setStatus] = useState<'idle' | 'loading'>('idle');
+    const nameId = useId();
 
     useEffect(() => {
         if (isOpen) setName(mode === 'rename' ? currentName : '');
     }, [isOpen, currentName, mode]);
+
+    // Foco no nome ao abrir (no lugar de autoFocus).
+    useEffect(() => {
+        if (isOpen) document.getElementById(nameId)?.focus();
+    }, [isOpen, nameId]);
 
     if (!isOpen) return null;
 
@@ -52,7 +58,7 @@ export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, mo
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
+            <div role="presentation" className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
                     <div className="relative w-full max-w-sm rounded-2xl bg-base border border-slate-800 shadow-2xl animate-fade-in">
@@ -74,7 +80,7 @@ export const RenameWalletModal: React.FC<RenameWalletModalProps> = ({ isOpen, mo
                                 containerClassName="mb-0"
                                 className="px-4 py-3"
                                 maxLength={40}
-                                autoFocus
+                                id={nameId}
                             />
                             <div className="flex gap-3">
                                 <Button type="button" variant="ghost" onClick={onClose} className="flex-1">Cancelar</Button>

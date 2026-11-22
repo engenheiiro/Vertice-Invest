@@ -374,7 +374,7 @@ export function Chinelada() {
               const Icon = item.icon;
               const affordable = coins >= cost && status === 'playing';
               return (
-                <button key={item.id} onClick={() => buyRunUpgrade(item.id)} disabled={!affordable} className={`group w-full rounded-2xl border p-4 text-left transition ${affordable ? 'border-orange-400/30 bg-orange-400/10 hover:-translate-y-0.5 hover:border-orange-300/60' : 'border-white/5 bg-black/10 opacity-55'}`}>
+                <button key={item.id} onClick={() => buyRunUpgrade(item.id)} disabled={!affordable} aria-label={`${item.title} (nível ${upgradeLevels[item.id]}): ${item.description}. Custo ${cost} moedas`} className={`group w-full rounded-2xl border p-4 text-left transition ${affordable ? 'border-orange-400/30 bg-orange-400/10 hover:-translate-y-0.5 hover:border-orange-300/60' : 'border-white/5 bg-black/10 opacity-55'}`}>
                   <div className="flex items-start gap-3"><div className="rounded-xl bg-black/20 p-2"><Icon className={`h-5 w-5 ${item.color}`} /></div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-extrabold">{item.title}</p><span className="text-[10px] font-black text-stone-500">NV. {upgradeLevels[item.id]}</span></div><p className="mt-1 text-[11px] leading-4 text-stone-400">{item.description}</p><p className="mt-2 text-xs font-black text-amber-300">🪙 {cost}</p></div></div>
                 </button>
               );
@@ -390,7 +390,8 @@ export function Chinelada() {
           </div>
 
           <div className="relative overflow-hidden rounded-[30px] border-4 border-[#49382d] bg-[#b18d65] shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
-            <div onClick={miss} className="relative block h-[510px] w-full cursor-crosshair overflow-hidden text-left sm:h-[570px]" aria-label="Área do jogo">
+            {/* Clique no vazio é só o erro de mira do mouse (zera o combo): não há o que oferecer ao teclado, que acerta pelos botões. */}
+            <div role="presentation" onClick={miss} className="relative block h-[510px] w-full cursor-crosshair overflow-hidden text-left sm:h-[570px]">
               {/* Back wall and ceiling line establish the first isometric axis. */}
               <div className="absolute inset-x-0 top-0 h-[35%] bg-gradient-to-b from-[#ead9bd] to-[#c9ac87] [background-image:linear-gradient(120deg,rgba(255,255,255,.22),transparent_42%)]" />
               <div className="absolute inset-x-0 top-[34%] h-5 bg-[#4a3124] shadow-[0_10px_18px_rgba(30,15,8,.45)]" />
@@ -479,7 +480,7 @@ export function Chinelada() {
               const Icon = item.icon;
               const affordable = save.reputation >= cost && status !== 'playing';
               return (
-                <button key={item.id} onClick={() => buyMetaUpgrade(item.id)} disabled={!affordable} className={`w-full rounded-2xl border p-4 text-left transition ${affordable ? 'border-violet-400/30 bg-violet-400/10 hover:border-violet-300/60' : 'border-white/5 bg-black/10 opacity-60'}`}>
+                <button key={item.id} onClick={() => buyMetaUpgrade(item.id)} disabled={!affordable} aria-label={`${item.title} (nível ${level}): ${item.description}. Custo ${cost} de reputação`} className={`w-full rounded-2xl border p-4 text-left transition ${affordable ? 'border-violet-400/30 bg-violet-400/10 hover:border-violet-300/60' : 'border-white/5 bg-black/10 opacity-60'}`}>
                   <div className="flex items-start gap-3"><div className="rounded-xl bg-violet-400/10 p-2 text-violet-300"><Icon className="h-5 w-5" /></div><div className="flex-1"><div className="flex items-center justify-between"><p className="text-sm font-extrabold">{item.title}</p><span className="text-[10px] font-black text-stone-500">NV. {level}</span></div><p className="mt-1 text-[11px] text-stone-400">{item.description}</p><p className="mt-2 text-xs font-black text-violet-300"><Crown className="mr-1 inline h-3 w-3" /> {cost}</p></div></div>
                 </button>
               );

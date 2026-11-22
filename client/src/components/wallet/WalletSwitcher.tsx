@@ -108,7 +108,14 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
                                     <div
                                         key={w.id}
                                         onClick={() => handleSelect(w.id)}
+                                        onKeyDown={(e) => {
+                                            // Só a própria linha: Enter num botão interno não troca a carteira.
+                                            if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                                            e.preventDefault();
+                                            handleSelect(w.id);
+                                        }}
                                         role="menuitem"
+                                        tabIndex={0}
                                         className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'}`}
                                     >
                                         <span className="w-4 shrink-0 flex items-center justify-center">

@@ -126,9 +126,10 @@ export const AssetSection: React.FC<AssetSectionProps> = ({
             const availableAssets = assets.filter(a => a.type === form.type && a.quantity > 0);
             return (
                 <div className="flex flex-col gap-1.5 mb-4">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Ativo para Venda</label>
+                    <label htmlFor="asset-sell-select" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Ativo para Venda</label>
                     <div className="relative">
                         <select
+                            id="asset-sell-select"
                             value={form.ticker}
                             onChange={onSellAssetSelect}
                             className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"
@@ -211,6 +212,7 @@ export const AssetSection: React.FC<AssetSectionProps> = ({
                                 key={idx}
                                 id={`asset-option-${idx}`}
                                 role="option"
+                                tabIndex={-1}
                                 aria-selected={idx === search.activeIndex}
                                 onMouseEnter={() => search.setActiveIndex(idx)}
                                 onMouseDown={(e) => {
@@ -271,10 +273,10 @@ export const AssetSection: React.FC<AssetSectionProps> = ({
             {/* ETF: mercado (B3 em R$ ou Exterior em US$). Define moeda e fração. */}
             {form.type === 'ETF' && transactionType === 'BUY' && (
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                    <span id="etf-market-label" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
                         Mercado do ETF
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    </span>
+                    <div role="group" aria-labelledby="etf-market-label" className="grid grid-cols-2 gap-2">
                         {([['BR', 'Brasil (R$)'], ['US', 'Exterior (US$)']] as const).map(([mkt, label]) => (
                             <button
                                 key={mkt}
@@ -299,11 +301,12 @@ export const AssetSection: React.FC<AssetSectionProps> = ({
             {/* Exterior: sub-tipo (ramificação). Vazio = classificação automática. */}
             {form.type === 'STOCK_US' && transactionType === 'BUY' && (
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                    <label htmlFor="asset-us-subtype" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
                         Tipo (Exterior)
                     </label>
                     <div className="relative">
                         <select
+                            id="asset-us-subtype"
                             value={form.usSubType || ''}
                             onChange={(e) => setForm(prev => ({ ...prev, usSubType: e.target.value || undefined }))}
                             className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"

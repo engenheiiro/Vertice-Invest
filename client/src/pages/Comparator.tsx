@@ -247,10 +247,8 @@ export const Comparator = () => {
                                     <th scope="col" className="p-4 font-bold text-slate-500 uppercase text-[11px] sticky left-0 bg-card">Métrica</th>
                                     {selected.map((item) => (
                                         <th key={item.ticker} scope="col" className="p-4 font-bold text-white min-w-[140px]">
-                                            <div className="flex flex-col">
-                                                <span>{item.ticker}</span>
-                                                <span className="text-[10px] text-slate-500 font-normal truncate max-w-[160px]">{item.name}</span>
-                                            </div>
+                                            <span className="block">{item.ticker}</span>
+                                            <span className="block text-[10px] text-slate-500 font-normal truncate max-w-[160px]">{item.name}</span>
                                         </th>
                                     ))}
                                 </tr>

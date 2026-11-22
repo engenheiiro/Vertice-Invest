@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Target, CheckCircle2, Info, Copy, Check, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -44,6 +44,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
     const [copied, setCopied] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
+    const amountId = useId();
 
     useEffect(() => {
         if (isOpen) {
@@ -82,10 +83,11 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
             if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
             else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
         };
-        (focusables()[0] ?? panelRef.current)?.focus();
+        // Foco inicial no valor do aporte (no lugar de autoFocus).
+        (document.getElementById(amountId) ?? focusables()[0] ?? panelRef.current)?.focus();
         document.addEventListener('keydown', onKeyDown);
         return () => { document.removeEventListener('keydown', onKeyDown); previouslyFocused?.focus?.(); };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, amountId]);
 
     const calculateDistribution = () => {
         const contribution = parseFloat(amount);
@@ -266,7 +268,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         <div className="relative z-[100]" aria-labelledby="modal-title" role="dialog" aria-modal="true">
             
             {/* Backdrop */}
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+            <div role="presentation" className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
 
             {/* Container Centralizado */}
             <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -314,7 +316,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                                         if (val === '' || parseFloat(val) >= 0) setAmount(val);
                                     }}
                                     onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                    autoFocus
+                                    id={amountId}
                                 />
 
                                 <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-900/30 cursor-pointer hover:border-slate-700 transition-colors select-none">

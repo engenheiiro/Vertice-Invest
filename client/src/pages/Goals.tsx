@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Target, Sparkles, ArrowRight, ArrowDown, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react';
 import { Header } from '../components/dashboard/Header';
@@ -125,6 +125,9 @@ const GoalChain: React.FC<GoalChainProps> = ({ goals, privacy, onSelect, onRenam
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const settled = useRef(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  // Foco no campo ao entrar em edição (no lugar de autoFocus).
+  useEffect(() => { if (editing) nameInputRef.current?.focus(); }, [editing]);
   const trailCount = useMemo(() => collapsibleAchievedCount(goals), [goals]);
 
   const nodes: ChainNode[] = useMemo(() => {
@@ -177,7 +180,7 @@ const GoalChain: React.FC<GoalChainProps> = ({ goals, privacy, onSelect, onRenam
           </span>
           {editing ? (
             <input
-              autoFocus
+              ref={nameInputRef}
               value={draft}
               maxLength={60}
               onChange={(e) => setDraft(e.target.value)}

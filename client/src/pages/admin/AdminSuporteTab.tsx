@@ -573,6 +573,7 @@ const TicketDetail: React.FC<{
 
             {lightbox && (
                 <div
+                    role="presentation"
                     className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center p-8"
                     onClick={() => setLightbox(null)}
                 >

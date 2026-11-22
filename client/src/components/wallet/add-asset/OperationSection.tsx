@@ -57,9 +57,10 @@ export const OperationSection: React.FC<OperationSectionProps> = ({
             o ano (24/07/…). Só a partir de sm volta a dividir a linha. */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500 ml-1 mb-1.5 block">Tipo de Ativo</label>
+                <label htmlFor="asset-type-select" className="text-[10px] font-bold uppercase text-slate-500 ml-1 mb-1.5 block">Tipo de Ativo</label>
                 <div className="relative">
                     <select
+                        id="asset-type-select"
                         value={assetType}
                         onChange={onTypeChange}
                         className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"

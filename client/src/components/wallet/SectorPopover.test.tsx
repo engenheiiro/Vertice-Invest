@@ -236,7 +236,7 @@ describe('SectorPopover — isolamento do cabeçalho do grupo', () => {
         const user = userEvent.setup();
         const onHeaderClick = vi.fn();
         render(
-            <div onClick={onHeaderClick}>
+            <div role="presentation" onClick={onHeaderClick}>
                 <SectorPopover
                     kind="STOCK"
                     items={[stock('ITUB4', 400, 'Bancos'), stock('BOVA11', 600, 'Índice Amplo', 'ETF')]}

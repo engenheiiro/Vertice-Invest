@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Input } from '../components/ui/Input';
 import { Button, ButtonStatus } from '../components/ui/Button';
 import { Link, useNavigate } from 'react-router-dom';
@@ -21,6 +21,9 @@ export const Login = () => {
   // campo de código e reenviamos o login com o mfaToken.
   const [mfaStep, setMfaStep] = useState(false);
   const [mfaToken, setMfaToken] = useState('');
+  const mfaInputId = useId();
+  // Foco no código ao chegar no segundo fator (no lugar de autoFocus).
+  useEffect(() => { if (mfaStep) document.getElementById(mfaInputId)?.focus(); }, [mfaStep, mfaInputId]);
 
   const { errors, validate, clearError } = useFormValidation(
     { email, password },
@@ -159,7 +162,7 @@ export const Login = () => {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              autoFocus
+              id={mfaInputId}
               maxLength={11}
               placeholder="000000 ou código de backup"
               value={mfaToken}

@@ -453,7 +453,6 @@ export const AssetList = () => {
                             {visibleTypes.map(type => {
                                 const groupItems = groupedAssets[type];
                                 const isCollapsed = collapsedGroups[type];
-                                
                                 const totalValueGroup = groupItems.reduce((acc, item) => acc + (item.totalValue || 0), 0);
                                 // Reserva: % do PATRIMÔNIO total (quanto do total está guardado).
                                 // Investimento: % da BASE (patrimônio − reserva), coerente com o donut.
@@ -478,6 +477,10 @@ export const AssetList = () => {
                                             onClick={() => toggleGroup(type)}
                                         >
                                             <td colSpan={isReadOnly ? 7 : 8} className="px-4 py-3">
+                                                {/* Alvo de teclado do cabeçalho: o clique sobe para a linha, que contrai/expande. */}
+                                                <button type="button" aria-expanded={!isCollapsed} className="sr-only">
+                                                    {isCollapsed ? 'Expandir' : 'Recolher'} {TYPE_LABELS[type]}
+                                                </button>
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
                                                         <span className={`shrink-0 ${accent.label}`}>
@@ -509,13 +512,11 @@ export const AssetList = () => {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    
                                                     <div className="flex items-center gap-6 text-[10px] md:text-xs">
                                                         <div className="flex flex-col items-end">
                                                             <span className="text-slate-500 font-bold uppercase text-[9px]">Total</span>
                                                             <span className="text-white tabular-nums font-bold">{formatCurrency(totalValueGroup)}</span>
                                                         </div>
-                                                        
                                                         <div className="flex flex-col items-end" title="Variação do preço (sem proventos)">
                                                             <span className="text-slate-500 font-bold uppercase text-[9px]">Variação</span>
                                                             <span className={`font-bold ${gm.capital >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
@@ -650,16 +651,14 @@ export const AssetList = () => {
                                                             {isVarUp ? '+' : '-'}{formatPercent(m.variationPct)}
                                                         </span>
                                                     </td>
-                                                    <td className="p-4 text-right">
-                                                        <div className={`flex flex-col items-end ${isRentUp ? 'text-emerald-500' : 'text-red-500'}`} title="Retorno total: valorização + proventos recebidos">
-                                                            <span className="font-bold flex items-center gap-1">
-                                                                {isRentUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                                                                {isRentUp ? '+' : '-'}{formatPercent(m.rentabilityPct)}
-                                                            </span>
-                                                            <span className="text-[10px] opacity-80">
-                                                                {isRentUp ? '+' : ''}{formatCurrency(m.totalResult, 'BRL')}
-                                                            </span>
-                                                        </div>
+                                                    <td className={`p-4 text-right ${isRentUp ? 'text-emerald-500' : 'text-red-500'}`} title="Retorno total: valorização + proventos recebidos">
+                                                        <span className="font-bold flex items-center justify-end gap-1">
+                                                            {isRentUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                                            {isRentUp ? '+' : '-'}{formatPercent(m.rentabilityPct)}
+                                                        </span>
+                                                        <span className="block text-[10px] opacity-80">
+                                                            {isRentUp ? '+' : ''}{formatCurrency(m.totalResult, 'BRL')}
+                                                        </span>
                                                     </td>
                                                     {!isReadOnly && <td className="p-4 text-center">
                                                         <div className="flex items-center justify-center gap-1.5">

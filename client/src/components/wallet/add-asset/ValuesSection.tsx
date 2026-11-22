@@ -112,11 +112,12 @@ export const ValuesSection: React.FC<ValuesSectionProps> = ({
             return (
                 <>
                     <div className="col-span-2 flex flex-col gap-1.5">
-                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                        <label htmlFor="fixed-income-mode" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
                             Tipo de rendimento
                         </label>
                         <div className="relative">
                             <select
+                                id="fixed-income-mode"
                                 value={mode}
                                 onChange={(e) => onModeChange(e.target.value as FixedIncomeMode)}
                                 className="w-full bg-card text-white text-sm border border-slate-800 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-600 outline-none appearance-none cursor-pointer hover:border-slate-700 hover:bg-elevated transition-all duration-300 shadow-sm"

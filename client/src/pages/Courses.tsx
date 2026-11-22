@@ -21,6 +21,14 @@ const LessonCard = ({ lesson, onClick, isLocked: _propIsLocked }: { lesson: any,
         <div 
             className={`relative min-w-[260px] md:min-w-[280px] aspect-[2/3] rounded-xl overflow-hidden cursor-pointer group bg-deep border border-white/5 flex flex-col transition-all duration-300 ${isLocked ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/10'}`}
             onClick={() => !isLocked && onClick()}
+            onKeyDown={(e) => {
+                if (isLocked || (e.key !== 'Enter' && e.key !== ' ')) return;
+                e.preventDefault();
+                onClick();
+            }}
+            role="button"
+            tabIndex={0}
+            aria-disabled={isLocked}
         >
         <div className="absolute inset-0 w-full h-full">
             <AcademyImage 

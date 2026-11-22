@@ -304,8 +304,11 @@ export const Profile = () => {
                                             />
                                         )}
                                         <div>
-                                            <label className="text-xs text-slate-400 font-semibold">Digite <span className="text-red-400 font-bold">EXCLUIR</span> para confirmar</label>
+                                            <label htmlFor="delete-account-confirm" className="text-xs text-slate-400 font-semibold">
+                                                Digite <span className="text-red-400 font-bold">EXCLUIR</span> para confirmar
+                                            </label>
                                             <input
+                                                id="delete-account-confirm"
                                                 type="text"
                                                 value={deleteConfirm}
                                                 onChange={e => setDeleteConfirm(e.target.value)}

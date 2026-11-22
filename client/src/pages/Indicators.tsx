@@ -24,6 +24,13 @@ const POPULAR_CDB_LCI = [
     { _id: 'c6', title: 'C6 Bank (CDB Cartão)', type: 'CDB', rate: 100, index: 'CDI', minInvestment: 100.00, issuer: 'C6 Bank', maturity: 'Imediata' }
 ];
 
+/** Teclado no cabeçalho recolhível (que tem botões dentro e por isso não vira <button>). */
+const onToggleKey = (toggle: () => void) => (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    toggle();
+};
+
 export const Indicators = () => {
     // Mesma chave do Dashboard (useDashboardData): vindo de lá, a tela abre com o
     // dado em cache em vez de buscar tudo de novo. O refetchInterval do React
@@ -154,13 +161,18 @@ export const Indicators = () => {
                     <div 
                         className="p-6 border-b border-slate-800 bg-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-panel transition-colors"
                         onClick={() => setIsTreasuryOpen(!isTreasuryOpen)}
+                        onKeyDown={onToggleKey(() => setIsTreasuryOpen(!isTreasuryOpen))}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isTreasuryOpen}
+                        aria-labelledby="treasury-heading"
                     >
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                 <ShieldCheck size={20} className="text-emerald-500" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">Tesouro Direto</h2>
+                                <h2 id="treasury-heading" className="text-lg font-bold text-white uppercase tracking-wide">Tesouro Direto</h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
                                     <Database size={10} /> Base Oficial: {data?.bonds?.length || 0} Títulos
                                     {data?.lastUpdated && (
@@ -174,7 +186,7 @@ export const Indicators = () => {
 
                         <div className="flex items-center gap-4">
                             {isTreasuryOpen && (
-                                <div className="hidden md:flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                <div role="presentation" className="hidden md:flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 animate-fade-in" onClick={(e) => e.stopPropagation()}>
                                     <Filter size={14} className="text-slate-500 ml-2" />
                                     {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
                                         <button
@@ -258,13 +270,18 @@ export const Indicators = () => {
                     <div 
                         className="p-6 border-b border-slate-800 bg-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-panel transition-colors"
                         onClick={() => setIsPrivateFixedOpen(!isPrivateFixedOpen)}
+                        onKeyDown={onToggleKey(() => setIsPrivateFixedOpen(!isPrivateFixedOpen))}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isPrivateFixedOpen}
+                        aria-labelledby="private-fixed-heading"
                     >
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                 <Landmark size={20} className="text-blue-500" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-white uppercase tracking-wide">CDBs, Caixinhas & Cofrinhos</h2>
+                                <h2 id="private-fixed-heading" className="text-lg font-bold text-white uppercase tracking-wide">CDBs, Caixinhas & Cofrinhos</h2>
                                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
                                     <Database size={10} /> Bancos Digitais & Corretoras · <span className="text-slate-600 font-medium normal-case">Dados Curados</span>
                                 </p>

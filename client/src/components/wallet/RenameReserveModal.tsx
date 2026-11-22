@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, PiggyBank, ArrowRightLeft, Percent, Tag } from 'lucide-react';
 import { Input } from '../ui/Input';
@@ -40,6 +40,8 @@ export const RenameReserveModal: React.FC<RenameReserveModalProps> = ({ isOpen, 
     const [rate, setRate] = useState('100,00');
     const [maturity, setMaturity] = useState('');
     const [keepAsReserve, setKeepAsReserve] = useState(false);
+    const nameId = useId();
+    const modeId = useId();
 
     useEffect(() => {
         if (isOpen) {
@@ -51,6 +53,11 @@ export const RenameReserveModal: React.FC<RenameReserveModalProps> = ({ isOpen, 
             setKeepAsReserve(false);
         }
     }, [isOpen, currentName]);
+
+    // Foco no nome ao abrir (no lugar de autoFocus).
+    useEffect(() => {
+        if (isOpen) document.getElementById(nameId)?.focus();
+    }, [isOpen, nameId]);
 
     if (!isOpen || !assetId) return null;
 
@@ -93,7 +100,7 @@ export const RenameReserveModal: React.FC<RenameReserveModalProps> = ({ isOpen, 
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
+            <div role="presentation" className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
                     <div className="relative w-full max-w-sm rounded-2xl bg-base border border-slate-800 shadow-2xl animate-fade-in">
@@ -117,7 +124,7 @@ export const RenameReserveModal: React.FC<RenameReserveModalProps> = ({ isOpen, 
                                     containerClassName="mb-0"
                                     className="px-4 py-3"
                                     maxLength={120}
-                                    autoFocus
+                                    id={nameId}
                                 />
                                 <Button
                                     type="submit"
@@ -148,9 +155,12 @@ export const RenameReserveModal: React.FC<RenameReserveModalProps> = ({ isOpen, 
                                         </p>
 
                                         <div className="flex flex-col gap-1.5">
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">Tipo de rendimento</label>
+                                            <label htmlFor={modeId} className="text-[10px] font-bold uppercase tracking-wider text-slate-500 ml-1">
+                                                Tipo de rendimento
+                                            </label>
                                             <div className="relative">
                                                 <select
+                                                    id={modeId}
                                                     value={mode}
                                                     onChange={(e) => {
                                                         const m = e.target.value as FixedIncomeMode;

@@ -904,7 +904,7 @@ export const Calculator: React.FC = () => {
               <section className="rounded-[18px] bg-card border border-white/[0.08] p-[22px] shadow-[0_18px_40px_-28px_rgba(0,0,0,0.9)]">
                 <div className="mb-[18px]"><SectionTitle>CONFIGURAÇÃO</SectionTitle></div>
 
-                <label className="block text-[12.5px] text-slate-400 mb-1.5">Investimento inicial</label>
+                <span className="block text-[12.5px] text-slate-400 mb-1.5">Investimento inicial</span>
                 <div className="mb-2">
                   <MoneyField value={initial} onChange={setInitial} ariaLabel="Investimento inicial" />
                 </div>
@@ -917,7 +917,7 @@ export const Calculator: React.FC = () => {
                 {!isMeta && (
                   <div>
                     <div className="flex justify-between items-baseline mb-2">
-                      <label className="text-[12.5px] text-slate-400">Aportes mensais</label>
+                      <span className="text-[12.5px] text-slate-400">Aportes mensais</span>
                       <span className="font-mono text-[15px] font-semibold text-white">{brl0(monthly)}</span>
                     </div>
                     <Slider value={monthly} min={0} max={10000} step={50} onChange={setMonthly} ariaLabel="Aportes mensais" />
@@ -931,7 +931,7 @@ export const Calculator: React.FC = () => {
 
                 {isMeta && (
                   <div>
-                    <label className="block text-[12.5px] text-slate-400 mb-1.5">Quero chegar em</label>
+                    <span className="block text-[12.5px] text-slate-400 mb-1.5">Quero chegar em</span>
                     <div className="mb-5">
                       <MoneyField value={goal} onChange={setGoal} accent="amber" ariaLabel="Meta de patrimônio" />
                     </div>
@@ -939,7 +939,7 @@ export const Calculator: React.FC = () => {
                 )}
 
                 <div className="flex justify-between items-baseline mb-2">
-                  <label className="text-[12.5px] text-slate-400">Período da aplicação</label>
+                  <span className="text-[12.5px] text-slate-400">Período da aplicação</span>
                   <span className="font-mono text-[15px] font-semibold text-white">{formatPeriod(periodMonths)}</span>
                 </div>
                 <Slider value={periodMonths} min={1} max={360} step={1} onChange={setPeriodMonths} ariaLabel="Período da aplicação em meses" />

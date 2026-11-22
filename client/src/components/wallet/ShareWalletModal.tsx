@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { X, Share2, Copy, Check, RefreshCw, Globe, Eye, EyeOff, ExternalLink } from 'lucide-react';
@@ -32,6 +32,7 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
     const [showValues, setShowValues] = useState(initialShowValues);
     const [busy, setBusy] = useState<null | 'toggle' | 'values' | 'regen'>(null);
     const [copied, setCopied] = useState(false);
+    const linkId = useId();
 
     useEffect(() => {
         if (isOpen) {
@@ -126,7 +127,7 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
+            <div role="presentation" className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
                     <div className="relative w-full max-w-md rounded-2xl bg-base border border-slate-800 shadow-2xl animate-fade-in">
@@ -174,9 +175,10 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
                                 <>
                                     {/* Link + copiar */}
                                     <div>
-                                        <label className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Link</label>
+                                        <label htmlFor={linkId} className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Link</label>
                                         <div className="flex gap-2 mt-1.5">
                                             <input
+                                                id={linkId}
                                                 readOnly
                                                 value={publicUrl}
                                                 onFocus={(e) => e.currentTarget.select()}

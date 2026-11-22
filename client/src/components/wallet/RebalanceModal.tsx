@@ -184,7 +184,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true" aria-labelledby="rebalance-title">
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
+            <div role="presentation" className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 sm:p-0">

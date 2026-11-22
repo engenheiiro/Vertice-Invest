@@ -121,7 +121,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
 
     return createPortal(
         <div className="relative z-[150]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+            <div role="presentation" className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
             
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
