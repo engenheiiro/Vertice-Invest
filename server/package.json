@@ -29,7 +29,7 @@
     "check:email": "node scripts/checkEmail.js"
   },
   "dependencies": {
-    "@google/genai": "^1.38.0",
+    "@google/genai": "^3.6.1",
     "@sentry/node": "^11.16.0",
     "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",
@@ -37,7 +37,7 @@
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^18.0.10",
     "express": "^4.22.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",

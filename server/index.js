@@ -51,7 +51,8 @@ const panicLog = (message) => {
         .map((root) => path.resolve(root, '.env'))
         .find((p) => fs.existsSync(p));
 
-    dotenv.config(envPath ? { path: envPath } : undefined);
+    // quiet: desde o dotenv 17 cada carga imprime "injected env (N) from .env".
+    dotenv.config(envPath ? { path: envPath, quiet: true } : { quiet: true });
 
     try {
         await import('./instrument.js');
