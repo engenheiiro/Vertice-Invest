@@ -6,9 +6,9 @@
  * zero, a virada de ano contra o fechamento de dezembro, mês sem ponto, YTD
  * e acumulado, privacidade, carregando, vazio e modo demo.
  *
- * Datas no meio do mês de propósito: o componente lê o mês do primeiro ponto
- * por `new Date(...)` no fuso local, e o dia 1 em UTC cai no mês anterior em
- * fuso negativo — fora do escopo deste teste.
+ * O mês do primeiro ponto vem da própria string `YYYY-MM-DD` — antes era lido
+ * por `new Date(...)` no fuso local, e o dia 1 (meia-noite UTC) caía no mês
+ * anterior em fuso negativo (America/Sao_Paulo): o primeiro mês saía "-".
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -69,6 +69,17 @@ describe('MonthlyReturnsTable', () => {
     expect(rowCells('2026')).toEqual(['-0.95%', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '+4.76%', '+10.00%']);
     expect(within(screen.getByRole('table')).getByText('-0.95%')).toHaveClass('text-red-400');
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('primeiro ponto no dia 01 não cai no mês anterior pelo fuso local (antes o 1º mês saía "-")', async () => {
+    // '2025-11-01' é meia-noite UTC = 31/10 21h em São Paulo; o mês é o da string, novembro.
+    getPerformance.mockResolvedValue({ history: [{ date: '2025-11-01', wallet: 3 }, { date: '2025-12-01T00:00:00Z', wallet: 6 }] });
+    renderTable();
+    await screen.findByText('Rentabilidade Mensal');
+    const cells = rowCells('2025');
+    expect(cells[10]).toBe('+3.00%');
+    expect(cells[11]).toBe('+2.91%');
+    expect(cells[9]).toBe('-');
   });
 
   it('aceita a resposta como array puro', async () => {

@@ -17,6 +17,16 @@ interface YearRow {
     accumulated: number;
 }
 
+/**
+ * Ano e mês (1–12) lidos da própria string `YYYY-MM-DD[THH:mm...]`. Nunca por
+ * `new Date(...).getMonth()`: 'YYYY-MM-01' é meia-noite UTC e, no fuso de
+ * São Paulo, cai no mês anterior.
+ */
+const yearMonthOf = (date: string): [number, number] => {
+    const [y, m] = date.split('T')[0].split('-');
+    return [parseInt(y, 10), parseInt(m, 10)];
+};
+
 export const MonthlyReturnsTable = () => {
     const { isPrivacyMode, activeWalletId, isWalletScopeReady, dataSource } = useWallet();
     const { isDemoMode } = useDemo();
@@ -45,12 +55,9 @@ export const MonthlyReturnsTable = () => {
         const yearsSet = new Set<number>();
 
         sortedData.forEach((point: any) => {
-            const dateStr = point.date.split('T')[0]; 
-            const [y, m] = dateStr.split('-'); 
-            const key = `${y}-${m}`; 
-            
-            yearsSet.add(parseInt(y));
-            monthEndValues.set(key, point.wallet);
+            const [y, m] = yearMonthOf(point.date);
+            yearsSet.add(y);
+            monthEndValues.set(`${y}-${String(m).padStart(2, '0')}`, point.wallet);
         });
 
         const years = Array.from(yearsSet).sort((a, b) => b - a); 
@@ -75,12 +82,8 @@ export const MonthlyReturnsTable = () => {
 
                 if (currentValue !== undefined) {
                     if (prevValue === undefined) {
-                        const firstDataPoint: any = sortedData[0];
-                        const firstDate = new Date(firstDataPoint.date);
-                        // Ajuste para pegar mês correto (getMonth é 0-index)
-                        if (firstDate.getFullYear() === year && (firstDate.getMonth() + 1) === m) {
-                            prevValue = 0; 
-                        }
+                        const [firstYear, firstMonth] = yearMonthOf(sortedData[0].date);
+                        if (firstYear === year && firstMonth === m) prevValue = 0;
                     }
 
                     if (prevValue !== undefined) {
