@@ -14,7 +14,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import axios from 'axios';
+import { getB3IndexSeries } from '../services/b3IndexHistoryService.js';
 
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import RecommendedPortfolioCurve from '../models/RecommendedPortfolioCurve.js';
@@ -96,25 +96,14 @@ const loadPriceMap = async (ticker, type = 'INDEX') => {
     return financialService.indexHistoryByDate(history);
 };
 
+// IFIX direto da B3: a brapi grátis recusa range de 1 ano (400) e o benchmark
+// saía nulo. Falha da B3 → null (benchmark ausente), nunca série inventada.
 const loadIfixMap = async () => {
-    try {
-        const token = process.env.BRAPI_TOKEN;
-        if (!token) return null;
-        const url = `https://brapi.dev/api/quote/IFIX?range=1y&interval=1d&token=${token}`;
-        const resp = await axios.get(url, { timeout: 10000 });
-        const hist = resp.data?.results?.[0]?.historicalDataPrice;
-        if (!hist || !hist.length) return null;
-        const map = new Map();
-        for (const h of hist) {
-            if (h.close > 0) {
-                const key = new Date(h.date * 1000).toISOString().split('T')[0];
-                map.set(key, { close: h.close, adjClose: h.close });
-            }
-        }
-        return map;
-    } catch {
-        return null;
-    }
+    const desde = new Date();
+    desde.setUTCFullYear(desde.getUTCFullYear() - 1);
+    const serie = await getB3IndexSeries('IFIX', desde.toISOString().slice(0, 10));
+    if (!serie) return null;
+    return new Map(serie.map((p) => [p.date, { close: p.close, adjClose: p.close }]));
 };
 
 // CDI: accumulatedFactor é o fator DIÁRIO (1 + taxa do dia), 1 por dia útil.

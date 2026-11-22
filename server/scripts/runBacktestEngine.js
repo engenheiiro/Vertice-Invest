@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import axios from 'axios';
+import { getB3IndexSeries } from '../services/b3IndexHistoryService.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import AlgorithmPerformance from '../models/AlgorithmPerformance.js';
 import SystemConfig from '../models/SystemConfig.js';
@@ -104,21 +104,13 @@ export const createBacktestContext = () => {
         return asc.length > 0 ? asc : null;
     });
 
-    // IFIX via Brapi (Yahoo Finance não tem o índice IFIX). Série ascendente
-    // normalizada para o mesmo formato das outras.
+    // IFIX direto da B3 (o Yahoo não tem o índice; a brapi grátis recusa range
+    // de 5 anos com 400, e o IFIX saía nulo de todo backtest). Série ascendente
+    // `{ date, close }`, no mesmo formato das outras.
     const ifixSeries = () => once('ifix', async () => {
-        const token = process.env.BRAPI_TOKEN;
-        if (!token) return null;
-        const url = `https://brapi.dev/api/quote/IFIX?range=5y&interval=1d&token=${token}`;
-        const response = await axios.get(url, { timeout: 10000 });
-        const history = response.data?.results?.[0]?.historicalDataPrice;
-        if (!Array.isArray(history) || history.length === 0) return null;
-        // Brapi retorna timestamps em segundos.
-        const asc = history
-            .filter(h => h.close > 0 && Number.isFinite(h.date))
-            .map(h => ({ date: new Date(h.date * 1000).toISOString().slice(0, 10), close: h.close }))
-            .sort((a, b) => a.date.localeCompare(b.date));
-        return asc.length > 0 ? asc : null;
+        const desde = new Date();
+        desde.setUTCFullYear(desde.getUTCFullYear() - 5);
+        return getB3IndexSeries('IFIX', desde.toISOString().slice(0, 10));
     });
 
     const cdiCurve = () => once('cdi', async () => {
