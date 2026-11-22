@@ -7,6 +7,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { Button } from '../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
 import { useWallet } from '../../contexts/WalletContext';
+import { useDemoGuard } from '../../hooks/useDemoGuard';
 import { goalsService, type Goal } from '../../services/goals';
 import { STALE_TIME } from '../../config/queryConfig';
 import { parseCurrencyToFloat } from '../../utils/assetTransaction';
@@ -31,7 +32,8 @@ const pct = (v: number): string => `${v.toFixed(1).replace('.', ',')}%`;
 export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClose, goal }) => {
   const isEdit = !!goal;
   const { addToast } = useToast();
-  const { kpis, activeWalletId } = useWallet();
+  const { kpis, activeWalletId, isWalletScopeReady } = useWallet();
+  const blockInDemo = useDemoGuard();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState(goal?.name || '');
@@ -58,10 +60,17 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
     queryKey: ['goalRateSuggestion', activeWalletId],
     queryFn: () => goalsService.getRateSuggestion(activeWalletId),
     staleTime: STALE_TIME.LONG,
-    enabled: isOpen,
+    enabled: isOpen && isWalletScopeReady,
   });
   // Metas existentes para o seletor de encadeamento (usa cache da página de Metas).
-  const { data: goalsData } = useQuery({ queryKey: ['goals', activeWalletId], queryFn: () => goalsService.getGoals(activeWalletId), staleTime: STALE_TIME.REALTIME });
+  // Só com o escopo de carteira pronto: antes disso o id é indefinido e a busca
+  // sairia sem escopo (e de novo quando o id chegasse).
+  const { data: goalsData } = useQuery({
+    queryKey: ['goals', activeWalletId],
+    queryFn: () => goalsService.getGoals(activeWalletId),
+    staleTime: STALE_TIME.REALTIME,
+    enabled: isOpen && isWalletScopeReady,
+  });
   const cdiRate = rateCtx?.cdi ?? null;
   const suggestedRate = rateCtx?.suggested ?? null;
   const walletReturn = rateCtx?.walletReturn;
@@ -120,6 +129,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   }, [targetAmount, monthlyTarget, rate, mirrorWallet, manualBalance, targetDate, kpis.totalEquity]);
 
   const handleSubmit = () => {
+    if (blockInDemo()) return;
     const target = num(targetAmount);
     if (!name.trim()) return addToast('Dê um nome para a meta.', 'error');
     if (target <= 0) return addToast('Defina um valor-alvo maior que zero.', 'error');

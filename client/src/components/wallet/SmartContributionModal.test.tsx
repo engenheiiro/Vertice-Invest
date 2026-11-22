@@ -107,3 +107,54 @@ describe('SmartContributionModal — atalho para o Research', () => {
         expect(mockNavigate).not.toHaveBeenCalled();
     });
 });
+
+describe('SmartContributionModal — sem cotação do dólar', () => {
+    it('não converte por taxa inventada: abre a aba em US$ sem valor pré-preenchido', () => {
+        (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ ...walletStub, usdRate: null });
+        renderWithAmount('1000');
+
+        fireEvent.click(screen.getByText('ETFs'));
+
+        expect(mockNavigate).toHaveBeenCalledWith('/research', {
+            state: { aporte: { assetClass: 'ETF', exteriorView: undefined, etfOrigin: 'US', amount: undefined, currency: 'USD' } },
+        });
+    });
+
+    it('linha em BRL segue com o valor mesmo sem cotação', () => {
+        (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ ...walletStub, usdRate: null });
+        renderWithAmount('1000');
+
+        fireEvent.click(screen.getByText('Ações BR'));
+
+        expect(mockNavigate).toHaveBeenCalledWith('/research', {
+            state: { aporte: { assetClass: 'STOCK', exteriorView: undefined, etfOrigin: undefined, amount: 500, currency: 'BRL' } },
+        });
+    });
+
+    it('posição em dólar entra pelo totalValue (BRL do servidor), não por quantidade × preço × câmbio', () => {
+        // 100% Exterior já cheio em BRL (R$ 1.000 de 1.000 com meta de 50%):
+        // o aporte inteiro deve ir para Ações BR.
+        (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+            ...walletStub,
+            usdRate: null,
+            assets: [{ id: 'a', ticker: 'IVV', type: 'STOCK_US', currency: 'USD', quantity: 1, currentPrice: 200, totalValue: 1000, allocationClass: 'STOCK_US' }],
+        });
+        renderWithAmount('1000');
+        expect(screen.getByText('Ações BR')).toBeInTheDocument();
+        expect(screen.queryByText('ETFs')).not.toBeInTheDocument();
+    });
+});
+
+describe('SmartContributionModal — modo privacidade', () => {
+    it('mascara os valores na tela, mas o texto copiado mantém os números', async () => {
+        (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ ...walletStub, isPrivacyMode: true });
+        renderWithAmount('1000');
+
+        expect(screen.queryByText(/R\$\s?500,00/)).not.toBeInTheDocument();
+        expect(screen.getAllByText(/••••••/).length).toBeGreaterThan(0);
+
+        fireEvent.click(screen.getByText('Copiar aporte'));
+        await screen.findByText('Copiado');
+        expect(writeText.mock.calls[0][0]).toMatch(/TOTAL\s+R\$ 1\.000,00/);
+    });
+});

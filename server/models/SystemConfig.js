@@ -8,9 +8,16 @@ const SystemConfigSchema = new mongoose.Schema({
   selic: { type: Number, required: true, default: 14.25 },
   ipca: { type: Number, required: true, default: 4.50 },
   cdi: { type: Number, required: true, default: 14.15 },
-  cdiReturn12m: { type: Number, default: 14.15 },
+  // Defaults NULOS abaixo (cdiReturn12m, ntnbLong, dollar, ibov, spx, btc): o
+  // número de fábrica (14,15 / 6,30 / 5,75 / 128000 / 5800 / 90000) era servido
+  // e gravado como dado real no primeiro insert do documento — e em TODO
+  // documento SystemConfig, de qualquer `key`. null = "ainda não medido"; cada
+  // consumidor já trata a ausência (fallback em memória ou tela vazia).
+  cdiReturn12m: { type: Number, default: null },
   riskFree: { type: Number, required: true, default: 14.25 },
-  ntnbLong: { type: Number, required: true, default: 6.30 },
+  // Sem `required`: com default nulo, o required reprovaria o save de qualquer
+  // documento que ainda não tem NTN-B medida (inclusive os de outras `key`).
+  ntnbLong: { type: Number, default: null },
 
   // Observabilidade das taxas oficiais: quando true, ao menos uma métrica
   // (SELIC/IPCA/CDI) veio do fallback hardcoded — BCB e fonte secundária falharam.
@@ -25,7 +32,7 @@ const SystemConfigSchema = new mongoose.Schema({
   // Último instante em que TODAS as taxas vieram de fonte real (sem fallback).
   ratesUpdatedAt: { type: Date, default: null },
   
-  dollar: { type: Number, default: 5.75 },
+  dollar: { type: Number, default: null },
   dollarChange: { type: Number, default: 0 },
 
   // Observabilidade do bloco de MOEDAS, separada da das taxas oficiais e do
@@ -46,13 +53,13 @@ const SystemConfigSchema = new mongoose.Schema({
 
 
   // Cache de Índices
-  ibov: { type: Number, default: 128000 },
+  ibov: { type: Number, default: null },
   ibovChange: { type: Number, default: 0 },
-  ibovReturn12m: { type: Number, default: 15.50 },
+  ibovReturn12m: { type: Number, default: null }, // null = nunca medido (o 15,50 antigo era servido como real)
 
-  spx: { type: Number, default: 5800 },
+  spx: { type: Number, default: null },
   spxChange: { type: Number, default: 0 },
-  spxReturn12m: { type: Number, default: 32.50 },
+  spxReturn12m: { type: Number, default: null }, // idem (o 32,50 antigo)
 
   // Observabilidade do bloco de ÍNDICES — mesmo motivo, e mesmo defeito, do
   // bloco de moedas acima. O painel de fontes creditava a entrega dos índices a
@@ -70,7 +77,7 @@ const SystemConfigSchema = new mongoose.Schema({
   // Último instante em que OS DOIS índices vieram de fonte real.
   indicesUpdatedAt: { type: Date, default: null },
   
-  btc: { type: Number, default: 90000 },
+  btc: { type: Number, default: null },
   btcChange: { type: Number, default: 0 },
 
   // Campo genérico para metadados (ex: RADAR_SCAN_META)

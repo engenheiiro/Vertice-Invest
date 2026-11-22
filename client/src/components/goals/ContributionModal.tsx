@@ -7,6 +7,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { Button } from '../ui/Button';
 import { useToast } from '../../contexts/ToastContext';
 import { useWallet } from '../../contexts/WalletContext';
+import { useDemoGuard } from '../../hooks/useDemoGuard';
 import { goalsService, type Goal } from '../../services/goals';
 import { parseCurrencyToFloat, getLocalDateString } from '../../utils/assetTransaction';
 import { formatMonths } from './goalTheme';
@@ -20,6 +21,7 @@ interface ContributionModalProps {
 export const ContributionModal: React.FC<ContributionModalProps> = ({ isOpen, onClose, goal }) => {
   const { addToast } = useToast();
   const { activeWalletId } = useWallet();
+  const blockInDemo = useDemoGuard();
   const queryClient = useQueryClient();
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(getLocalDateString());
@@ -45,6 +47,7 @@ export const ContributionModal: React.FC<ContributionModalProps> = ({ isOpen, on
   });
 
   const handleSubmit = () => {
+    if (blockInDemo()) return;
     const value = parseCurrencyToFloat(amount);
     if (!Number.isFinite(value) || value === 0) return addToast('Informe um valor de aporte.', 'error');
     mutation.mutate();

@@ -7,6 +7,7 @@ import MarketAsset from '../models/MarketAsset.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import MarketAnalysis from '../models/MarketAnalysis.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { resolveCurrentCdiRate } from '../utils/mathUtils.js';
 
 export const getHistoricalPrice = async (req, res, next) => {
     try {
@@ -170,9 +171,9 @@ export const getLandingData = async (req, res, next) => {
         res.json({
             macro: {
                 // Aqui usamos o cdiReturn12m para a performance histórica, se disponível
-                cdi: config?.cdiReturn12m || config?.cdi || DEFAULT_SELIC_FALLBACK,
-                spx: config?.spxReturn12m || 25.0, 
-                ibov: config?.ibovReturn12m || 15.50, 
+                cdi: config?.cdiReturn12m || resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK),
+                spx: Number.isFinite(config?.spxReturn12m) ? config.spxReturn12m : null,
+                ibov: Number.isFinite(config?.ibovReturn12m) ? config.ibovReturn12m : null,
                 spxChange: config?.spxChange || 0
             },
             tickers: topAssets.map(a => ({

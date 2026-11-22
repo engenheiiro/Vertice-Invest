@@ -28,13 +28,22 @@ vi.mock('../../services/goals', () => ({
   goalsService: { getRateSuggestion: vi.fn(), getGoals: vi.fn(), createGoal: vi.fn(), updateGoal: vi.fn() },
 }));
 
+const demo = { on: false };
+vi.mock('../../contexts/DemoContext', () => ({ useDemo: () => ({ isDemoMode: demo.on }) }));
+
 const rateCtx: { current: RateContext | undefined } = { current: undefined };
+// `enabled` de cada query, pela primeira parte da chave — o mock ignora o flag,
+// então é aqui que se confere SE a busca sairia.
+const queryEnabled: Record<string, unknown> = {};
+const mutate = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: ({ queryKey }: { queryKey: unknown[] }) =>
-    (queryKey[0] === 'goalRateSuggestion'
+  useQuery: ({ queryKey, enabled }: { queryKey: unknown[]; enabled?: boolean }) => {
+    queryEnabled[String(queryKey[0])] = enabled;
+    return queryKey[0] === 'goalRateSuggestion'
       ? { data: rateCtx.current, isLoading: false }
-      : { data: { goals: [] }, isLoading: false }),
-  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      : { data: { goals: [] }, isLoading: false };
+  },
+  useMutation: () => ({ mutate, isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
@@ -50,13 +59,48 @@ const context = (over: Partial<RateContext> = {}): RateContext => ({
 
 const rateInput = () => screen.getByLabelText(/Rentabilidade esperada/i) as HTMLInputElement;
 
+const addToast = vi.fn();
+
 beforeEach(() => {
+  vi.clearAllMocks();
+  demo.on = false;
   rateCtx.current = context();
   (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
     kpis: { totalEquity: 46_667 },
     activeWalletId: 'w1',
+    isWalletScopeReady: true,
   });
-  (useToast as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ addToast: vi.fn() });
+  (useToast as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ addToast });
+});
+
+describe('CreateGoalModal — escopo de carteira e modo demo', () => {
+  it('não busca metas nem sugestão de taxa antes do escopo de carteira ficar pronto', () => {
+    (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      kpis: { totalEquity: 0 }, activeWalletId: undefined, isWalletScopeReady: false,
+    });
+    render(<CreateGoalModal isOpen onClose={() => {}} />);
+    expect(queryEnabled.goals).toBe(false);
+    expect(queryEnabled.goalRateSuggestion).toBe(false);
+  });
+
+  it('modal fechado não busca a lista de metas', () => {
+    render(<CreateGoalModal isOpen={false} onClose={() => {}} />);
+    expect(queryEnabled.goals).toBe(false);
+  });
+
+  it('com o escopo pronto e o modal aberto, busca', () => {
+    render(<CreateGoalModal isOpen onClose={() => {}} />);
+    expect(queryEnabled.goals).toBe(true);
+    expect(queryEnabled.goalRateSuggestion).toBe(true);
+  });
+
+  it('no demo, "Criar meta" não grava nada e avisa', () => {
+    demo.on = true;
+    render(<CreateGoalModal isOpen onClose={() => {}} />);
+    fireEvent.click(screen.getByText('Criar meta'));
+    expect(mutate).not.toHaveBeenCalled();
+    expect(addToast).toHaveBeenCalledWith(expect.stringMatching(/demonstração/i), 'info');
+  });
 });
 
 describe('CreateGoalModal — taxa esperada', () => {

@@ -187,6 +187,51 @@ export interface WalletDataSource {
     getCashFlow: (page: number, limit: number, filterType: string) => Promise<any>;
 }
 
+export interface WalletTargets {
+    targetAllocation: AllocationMap;
+    targetReserve: number;
+    targetMonthlyDividendIncome: number;
+    targetSubAllocation: SubAllocationMap;
+}
+
+/** Plano padrão de quem ainda não salvou Carteira Ideal nesta carteira. */
+export const DEFAULT_WALLET_TARGETS: WalletTargets = {
+    targetAllocation: { STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 },
+    targetReserve: 10000,
+    targetMonthlyDividendIncome: 0,
+    targetSubAllocation: DEFAULT_SUB_ALLOCATION,
+};
+
+/**
+ * Carteira Ideal DERIVADA da resposta de GET /wallet. Campo ausente cai no
+ * padrão — nunca no valor da carteira vista antes: copiar para estado só quando
+ * o servidor mandava fazia a troca A → B (sem metas) manter as metas de A.
+ */
+export const deriveWalletTargets = (data: any): WalletTargets => {
+    const sub: SubAllocationMap = {
+        STOCK: { ...DEFAULT_SUB_ALLOCATION.STOCK, ...data?.targetSubAllocation?.STOCK },
+        FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data?.targetSubAllocation?.FIXED_INCOME },
+        STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data?.targetSubAllocation?.STOCK_US },
+    };
+    // Normaliza metas legadas: alvo de topo ETF (nacional) é absorvido por Ações BR
+    // (STOCK) como sub-meta. Idempotente para carteiras já salvas no formato novo.
+    const folded = data?.targetAllocation
+        ? foldEtfIntoStock(data.targetAllocation, sub)
+        : { targetAllocation: DEFAULT_WALLET_TARGETS.targetAllocation, targetSubAllocation: sub };
+    return {
+        targetAllocation: folded.targetAllocation,
+        targetSubAllocation: folded.targetSubAllocation,
+        targetReserve: typeof data?.targetReserve === 'number' ? data.targetReserve : DEFAULT_WALLET_TARGETS.targetReserve,
+        targetMonthlyDividendIncome: typeof data?.targetMonthlyDividendIncome === 'number'
+            ? data.targetMonthlyDividendIncome
+            : DEFAULT_WALLET_TARGETS.targetMonthlyDividendIncome,
+    };
+};
+
+/** Cotação válida (> 0, finita) ou `null` — nunca um valor de reserva fixo. */
+export const toUsdRate = (raw: unknown): number | null =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? raw : null;
+
 export interface WalletContextType {
     assets: Asset[];
     kpis: WalletKPIs;
@@ -195,7 +240,12 @@ export interface WalletContextType {
     targetReserve: number;
     targetMonthlyDividendIncome: number;
     targetSubAllocation: SubAllocationMap;
-    usdRate: number;
+    /**
+     * Cotação USD/BRL que o servidor usou na valorização. `null` quando ela não
+     * veio: a tela esconde o badge e as conversões "≈ R$" em vez de exibir uma
+     * cotação inventada como se fosse real.
+     */
+    usdRate: number | null;
     isLoading: boolean;
     isRefreshing: boolean;
     isPrivacyMode: boolean;
@@ -256,10 +306,8 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const { addToast } = useToast();
     const queryClient = useQueryClient();
 
-    const [targetAllocation, setTargetAllocation] = useState<AllocationMap>({ STOCK: 40, FII: 30, STOCK_US: 20, CRYPTO: 10 });
-    const [targetReserve, setTargetReserve] = useState(10000);
-    const [targetMonthlyDividendIncome, setTargetMonthlyDividendIncome] = useState(0);
-    const [targetSubAllocation, setTargetSubAllocation] = useState<SubAllocationMap>(DEFAULT_SUB_ALLOCATION);
+    // Modo demo não tem GET /wallet: as metas do tour vivem só aqui (não persistem).
+    const [demoTargets, setDemoTargets] = useState<WalletTargets>(DEFAULT_WALLET_TARGETS);
 
     // Escolha EXPLÍCITA de carteira (seletor, criação, exclusão). Guardada junto do
     // dono para que a seleção de uma conta nunca vaze para a próxima após um
@@ -319,33 +367,13 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         staleTime: STALE_TIME.MEDIUM,
     });
 
-    // --- HIDRATA CARTEIRA IDEAL DO SERVIDOR ---
-    // O backend retorna targetAllocation/targetReserve persistidos na carteira ativa.
-    // Sincroniza sempre que a carteira recarregar (login, refresh, troca de conta/carteira).
-    useEffect(() => {
-        if (isDemoMode) return;
-        const data = walletQuery.data;
-        if (typeof data?.targetReserve === 'number') setTargetReserve(data.targetReserve);
-        if (typeof data?.targetMonthlyDividendIncome === 'number') setTargetMonthlyDividendIncome(data.targetMonthlyDividendIncome);
-        if (data?.targetAllocation) {
-            // Normaliza metas legadas: alvo de topo ETF (nacional) é absorvido por Ações BR
-            // (STOCK) como sub-meta. Idempotente para carteiras já salvas no formato novo.
-            const sub: SubAllocationMap = {
-                STOCK: { ...DEFAULT_SUB_ALLOCATION.STOCK, ...data.targetSubAllocation?.STOCK },
-                FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation?.FIXED_INCOME },
-                STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data.targetSubAllocation?.STOCK_US },
-            };
-            const folded = foldEtfIntoStock(data.targetAllocation, sub);
-            setTargetAllocation(folded.targetAllocation);
-            setTargetSubAllocation(folded.targetSubAllocation);
-        } else if (data?.targetSubAllocation) {
-            setTargetSubAllocation({
-                STOCK: { ...DEFAULT_SUB_ALLOCATION.STOCK, ...data.targetSubAllocation.STOCK },
-                FIXED_INCOME: { ...DEFAULT_SUB_ALLOCATION.FIXED_INCOME, ...data.targetSubAllocation.FIXED_INCOME },
-                STOCK_US: { ...DEFAULT_SUB_ALLOCATION.STOCK_US, ...data.targetSubAllocation.STOCK_US },
-            });
-        }
-    }, [walletQuery.data, isDemoMode]);
+    // --- CARTEIRA IDEAL ---
+    // Derivada da query da carteira ativa (nunca copiada para estado por efeito): a
+    // chave da query inclui activeWalletId, então trocar de carteira troca as metas
+    // junto — e carteira sem metas salvas mostra o padrão, não as da anterior.
+    const serverTargets = useMemo(() => deriveWalletTargets(walletQuery.data), [walletQuery.data]);
+    const { targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation } =
+        isDemoMode ? demoTargets : serverTargets;
 
     // --- FORCE REFRESH ON MOUNT ---
     useEffect(() => {
@@ -469,15 +497,22 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => {
-        // Atualização otimista (UI responde na hora); persiste no backend logo em seguida.
-        setTargetAllocation(newTargets);
-        setTargetReserve(newReserveTarget);
-        if (newSubAllocation) setTargetSubAllocation(newSubAllocation);
-        if (newDividendGoal !== undefined) setTargetMonthlyDividendIncome(newDividendGoal);
-        if (isDemoMode) return; // Demo não persiste
+        const patch: Partial<WalletTargets> = {
+            targetAllocation: newTargets,
+            targetReserve: newReserveTarget,
+            ...(newSubAllocation ? { targetSubAllocation: newSubAllocation } : {}),
+            ...(newDividendGoal !== undefined ? { targetMonthlyDividendIncome: newDividendGoal } : {}),
+        };
+        if (isDemoMode) { setDemoTargets(prev => ({ ...prev, ...patch })); return; } // Demo não persiste
+        // Atualização otimista no CACHE da carteira ativa (a fonte das metas): a UI
+        // responde na hora e, se a gravação falhar, o cache volta ao que era.
+        const key = ['wallet', user?.id, activeWalletId];
+        const previous = queryClient.getQueryData(key);
+        queryClient.setQueryData(key, (old: any) => (old ? { ...old, ...patch } : old));
         try {
             await walletService.updateTargets(newTargets as Record<string, number>, newReserveTarget, newSubAllocation, newDividendGoal, activeWalletId);
         } catch (err: unknown) {
+            queryClient.setQueryData(key, previous);
             addToast(getErrorMessage(err, 'Erro ao salvar carteira ideal.'), 'error');
         }
     };
@@ -535,7 +570,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return computeWalletKpis(assets, serverKpis);
     }, [assets, serverKpis, isDemoMode]);
 
-    const usdRate = walletQuery.data?.meta?.usdRate || 5.75;
+    const usdRate = toUsdRate(walletQuery.data?.meta?.usdRate);
     // `!isWalletScopeReady` entra aqui porque enquanto GET /wallets não responde as
     // queries estão desligadas — e query desligada tem isLoading=false. Sem isso a
     // carteira piscaria "vazia" antes de começar a carregar.

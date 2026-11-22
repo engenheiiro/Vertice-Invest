@@ -13,7 +13,7 @@ interface ValuesSectionProps {
     transactionType: TransactionType;
     isDollarAsset: boolean;
     totalValueInput: string;
-    usdRate: number;
+    usdRate: number | null;
     priceFetch: PriceFetch;
     priceWarning: string | null;
     validationError: string;
@@ -60,7 +60,7 @@ export const ValuesSection: React.FC<ValuesSectionProps> = ({
                 </span>
                 <span className="text-sm font-bold text-emerald-400 font-mono">
                     {fmtCurrency(totalNative, isDollarAsset ? 'USD' : 'BRL')}
-                    {isDollarAsset && usdRate > 0 && (
+                    {isDollarAsset && usdRate != null && usdRate > 0 && (
                         <span className="ml-2 text-[11px] font-medium text-slate-400">
                             ≈ {fmtCurrency(totalNative * usdRate, 'BRL')}
                         </span>

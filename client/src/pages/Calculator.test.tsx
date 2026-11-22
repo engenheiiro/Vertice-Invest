@@ -7,7 +7,7 @@
  * cupom vir primeiro na lista para a simulação adotar a taxa dele.
  */
 import { describe, it, expect } from 'vitest';
-import { pickPrefixadoRate } from './Calculator';
+import { pickPrefixadoRate, macroRates } from './Calculator';
 
 describe('pickPrefixadoRate', () => {
     it('pula o título com juros semestrais mesmo quando ele vem primeiro', () => {
@@ -36,5 +36,25 @@ describe('pickPrefixadoRate', () => {
         expect(pickPrefixadoRate([
             { title: 'Tesouro Prefixado 2029', type: 'PREFIXADO', annualRate: 14.13 },
         ])).toBe(14.13);
+    });
+});
+
+/**
+ * Sem taxa real, nada de simulação: o fallback antigo (14,40 / 4,62 / 6,50)
+ * calculava os resultados e o "melhor investimento" com números fixos, sob o
+ * selo AO VIVO, quando o macro falhava.
+ */
+describe('macroRates', () => {
+    const full = { selic: { value: 15 }, cdi: { value: 14.9 }, ipca: { value: 4.5 }, ntnbLong: { value: 7.2 } };
+
+    it('devolve as quatro taxas quando todas chegaram', () => {
+        expect(macroRates(full)).toEqual({ selic: 15, cdi: 14.9, ipca: 4.5, ntnbLong: 7.2 });
+    });
+
+    it('qualquer taxa ausente → null (nunca um número inventado)', () => {
+        expect(macroRates(undefined)).toBeNull();
+        expect(macroRates({})).toBeNull();
+        expect(macroRates({ ...full, ntnbLong: { value: null } })).toBeNull();
+        expect(macroRates({ ...full, ipca: undefined })).toBeNull();
     });
 });

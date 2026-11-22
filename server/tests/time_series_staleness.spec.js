@@ -6,7 +6,7 @@
  * O helper ignora lastUpdated e julga pela idade do candle mais recente.
  */
 import { describe, it, expect } from 'vitest';
-import { isHistoryStale, HISTORY_MAX_CANDLE_AGE_DAYS } from '../services/workers/timeSeriesWorker.js';
+import { isHistoryStale, isCandleDateStale, sessionsSinceCandle, HISTORY_MAX_CANDLE_AGE_DAYS } from '../services/workers/timeSeriesWorker.js';
 import {
     buildCandleClock,
     candleDaysStale,
@@ -259,5 +259,47 @@ describe('tolerância por classe na coorte da carteira', () => {
         expect(toleranceFor('STOCK', REGUA)).toBe(2);
         expect(toleranceFor(undefined, REGUA)).toBe(2);
         expect(toleranceFor('crypto', REGUA)).toBe(3);
+    });
+});
+
+/**
+ * Staleness em PREGÕES, por classe (22/11/2026): com a régua de dias corridos o
+ * worker re-baixou 1.216 de 1.254 séries num domingo e 1.225 voltaram idênticas.
+ */
+describe('isCandleDateStale com classe — pregões, não horas', () => {
+    const at = (iso) => new Date(iso);
+    const SUNDAY = at('2026-11-22T18:49:00-03:00'); // 20/11 feriado (Consciência Negra)
+
+    it('B3 no domingo depois do feriado: candle de quinta 19/11 é fresco', () => {
+        expect(isCandleDateStale('2026-11-19', SUNDAY, 'STOCK')).toBe(false);
+        expect(isCandleDateStale('2026-11-19', SUNDAY, 'FII')).toBe(false);
+    });
+
+    it('EUA no mesmo domingo: falta o pregão de sexta 20/11 (NY abriu) — ainda 1, fresco', () => {
+        expect(sessionsSinceCandle('2026-11-19', SUNDAY, 'STOCK_US')).toBe(1);
+        expect(isCandleDateStale('2026-11-19', SUNDAY, 'STOCK_US')).toBe(false);
+        expect(isCandleDateStale('2026-11-18', SUNDAY, 'STOCK_US')).toBe(true);
+    });
+
+    it('cripto segue em dias corridos', () => {
+        expect(isCandleDateStale('2026-11-21', SUNDAY, 'CRYPTO')).toBe(false);
+        expect(isCandleDateStale('2026-11-20', SUNDAY, 'CRYPTO')).toBe(true);
+    });
+
+    it('dia útil: mesma tolerância de antes (~1 pregão)', () => {
+        const qua = at('2026-11-18T18:30:00-03:00');
+        expect(isCandleDateStale('2026-11-17', qua, 'STOCK')).toBe(false); // ontem
+        expect(isCandleDateStale('2026-11-16', qua, 'STOCK')).toBe(true);  // anteontem
+    });
+
+    it('segunda-feira com o candle de sexta é fresco; com o de quinta, não', () => {
+        const seg = at('2026-11-16T18:30:00-03:00');
+        expect(isCandleDateStale('2026-11-13', seg, 'STOCK')).toBe(false);
+        expect(isCandleDateStale('2026-11-12', seg, 'STOCK')).toBe(true);
+    });
+
+    it('série parada há semanas é stale; sem série é stale', () => {
+        expect(isCandleDateStale('2026-09-01', SUNDAY, 'STOCK')).toBe(true);
+        expect(isCandleDateStale(null, SUNDAY, 'STOCK')).toBe(true);
     });
 });

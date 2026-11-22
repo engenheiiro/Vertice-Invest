@@ -24,12 +24,15 @@ import { walletService } from '../../../services/wallet';
 
 vi.mock('../../../contexts/WalletContext', () => ({ useWallet: vi.fn() }));
 vi.mock('../../../contexts/ToastContext', () => ({ useToast: vi.fn() }));
+const demo = { on: false };
+vi.mock('../../../contexts/DemoContext', () => ({ useDemo: () => ({ isDemoMode: demo.on }) }));
 vi.mock('../../../services/wallet', () => ({
     walletService: { importPreview: vi.fn() },
 }));
 
 const mockImportCommit = vi.fn();
 const mockImportUndo = vi.fn();
+const mockAddToast = vi.fn();
 
 /** Resposta de preview com dois ativos: um limpo, um com linha duplicada. */
 const previewResponse = {
@@ -73,9 +76,23 @@ beforeEach(() => {
         activeWalletId: 'w1',
         activeWalletName: 'Minha Carteira',
     });
-    (useToast as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ addToast: vi.fn() });
+    (useToast as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ addToast: mockAddToast });
+    demo.on = false;
     (walletService.importPreview as ReturnType<typeof vi.fn>).mockResolvedValue(previewResponse);
     mockImportCommit.mockResolvedValue({ batchId: 'b1', inserted: 2 });
+});
+
+describe('ImportWalletModal — modo demo', () => {
+    it('não manda a planilha ao servidor durante o tour — avisa e fica na escolha da fonte', async () => {
+        demo.on = true;
+        render(<ImportWalletModal isOpen onClose={vi.fn()} />);
+        const input = screen.getByLabelText(/Enviar planilha/i) as HTMLInputElement;
+        fireEvent.change(input, { target: { files: [new File([PLANILHA], 'carteira.csv', { type: 'text/csv' })] } });
+        await waitFor(() => expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/demonstração/i), 'info'));
+        expect(walletService.importPreview).not.toHaveBeenCalled();
+        expect(mockImportCommit).not.toHaveBeenCalled();
+        expect(screen.queryByText(/Posição resultante/i)).not.toBeInTheDocument();
+    });
 });
 
 describe('ImportWalletModal — escolha da fonte', () => {

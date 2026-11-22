@@ -95,3 +95,30 @@ describe('getLatestReport — gate de plano por classe (F1)', () => {
     expect(LIMITS_CONFIG.research_general.GUEST).toBe(0);
   });
 });
+
+// O parser `qs` do Express transforma `?assetClass=STOCK&assetClass=STOCK` em
+// array. O array não tinha feature no mapa (chave "STOCK,STOCK"), pulava o gate,
+// e o Mongoose convertia o mesmo array em `$in` — GUEST lia o ranking STOCK.
+describe('getLatestReport — parâmetro repetido não contorna o gate', () => {
+  const PublishedResearchPointer = async () => (await import('../models/PublishedResearchPointer.js')).default;
+
+  it.each([
+    [['STOCK', 'STOCK']],
+    [{ $ne: 'BRASIL_10' }],
+    [undefined],
+  ])('assetClass %j → 400, sem consulta', async (assetClass) => {
+    const req = { query: { assetClass, strategy: 'BUY_HOLD' }, user: { plan: 'GUEST', role: 'USER' } };
+    const res = mockRes();
+    await getLatestReport(req, res, (e) => { throw e; });
+    expect(res.statusCode).toBe(400);
+    expect((await PublishedResearchPointer()).find).not.toHaveBeenCalled();
+    expect(MarketAnalysis.findOne).not.toHaveBeenCalled();
+  });
+
+  it('strategy repetida → 400', async () => {
+    const req = { query: { assetClass: 'BRASIL_10', strategy: ['BUY_HOLD', 'X'] }, user: { plan: 'GUEST' } };
+    const res = mockRes();
+    await getLatestReport(req, res, (e) => { throw e; });
+    expect(res.statusCode).toBe(400);
+  });
+});

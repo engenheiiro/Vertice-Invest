@@ -153,6 +153,17 @@ const FUNDO_DI_ADMIN = 0.25;
 const LCI_PCT = 0.85;
 const FUNDO_CDI_PCT = 0.9817;
 
+/** Taxas do macro — ou null se QUALQUER uma faltar (nunca um número inventado). */
+export function macroRates(macro: Record<string, unknown> | null | undefined) {
+  const read = (k: string) => (macro?.[k] as { value?: number } | undefined)?.value;
+  const selic = read('selic');
+  const cdi = read('cdi');
+  const ipca = read('ipca');
+  const ntnbLong = read('ntnbLong');
+  const ok = [selic, cdi, ipca, ntnbLong].every((v) => typeof v === 'number' && Number.isFinite(v));
+  return ok ? { selic: selic as number, cdi: cdi as number, ipca: ipca as number, ntnbLong: ntnbLong as number } : null;
+}
+
 function calcAll(
   initial: number,
   monthly: number,
@@ -165,10 +176,12 @@ function calcAll(
 ): InstrumentResult[] {
   if (months === 0 || (initial <= 0 && monthly <= 0)) return [];
 
-  const selic = (macro?.selic as { value?: number })?.value ?? 14.40;
-  const cdi = (macro?.cdi as { value?: number })?.value ?? 14.40;
-  const ipca = (macro?.ipca as { value?: number })?.value ?? 4.62;
-  const ntnbLong = (macro?.ntnbLong as { value?: number })?.value ?? 6.50;
+  // Sem taxa real não há simulação: o fallback antigo (14,40 / 4,62 / 6,50)
+  // calculava todos os resultados e o "melhor investimento" com números fixos,
+  // sob o selo AO VIVO. Fail-closed — a tela mostra que as taxas não chegaram.
+  const rates = macroRates(macro);
+  if (!rates) return [];
+  const { selic, cdi, ipca, ntnbLong } = rates;
 
   const bonds = (macro?.bonds as MacroBond[]) ?? [];
   const prefixado = pickPrefixadoRate(bonds) ?? Math.max(selic - 0.5, 8);
@@ -756,6 +769,8 @@ export const Calculator: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  const ratesAvailable = macroRates(macro) !== null;
+
   const stockDy: number | null = stockQuote?.dy > 0 ? stockQuote.dy : null;
   const fiiDy: number | null = fiiQuote?.dy > 0 ? fiiQuote.dy : null;
 
@@ -960,6 +975,11 @@ export const Calculator: React.FC = () => {
                   <SectionTitle>PARÂMETROS HOJE</SectionTitle>
                   {macroLoading ? (
                     <div className="w-3 h-3 rounded-full border border-slate-600 border-t-emerald-400 animate-spin" />
+                  ) : !ratesAvailable ? (
+                    <div className="flex items-center gap-1.5 text-[10.5px] text-yellow-400 font-semibold">
+                      <span className="w-[5px] h-[5px] rounded-full bg-yellow-400" />
+                      INDISPONÍVEL
+                    </div>
                   ) : (
                     <div className="flex items-center gap-1.5 text-[10.5px] text-emerald-400 font-semibold">
                       <span className="w-[5px] h-[5px] rounded-full bg-emerald-400 shadow-[0_0_7px_#34d399]" />
@@ -1104,7 +1124,9 @@ export const Calculator: React.FC = () => {
               {!hasResults || !best ? (
                 <section className="rounded-[20px] border border-white/[0.08] bg-card p-10 text-center">
                   <p className="text-sm text-slate-400">
-                    {isMeta
+                    {!macroLoading && !ratesAvailable
+                      ? 'As taxas de mercado (Selic, CDI, IPCA, NTN-B) não chegaram agora. Tente novamente em instantes.'
+                      : isMeta
                       ? 'Informe quanto você quer ter no fim do período para ver o aporte necessário.'
                       : 'Informe o investimento inicial ou o aporte mensal para simular.'}
                   </p>

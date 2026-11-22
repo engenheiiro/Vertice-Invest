@@ -5,7 +5,6 @@ import MarketAsset from '../models/MarketAsset.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
-import { externalMarketService } from './externalMarketService.js';
 import { marketDataService } from './marketDataService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
@@ -26,6 +25,16 @@ const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'rip
 const LTM_BATCH_SIZE = 10;
 const LTM_BATCH_DELAY_MS = 400;
 const LTM_TICKER_TIMEOUT_MS = 8000;
+// Backoff do enriquecimento LTM. Medido em 11/2026: ~116 ações BR voltavam do
+// Yahoo sem nenhum campo aproveitável TODO DIA (~11s de chamadas por run, sem
+// resultado). Quem respondeu "nada" fica 30 dias sem ser perguntado de novo;
+// demonstrativo trimestral não muda em menos que isso.
+export const LTM_ENRICH_BACKOFF_DAYS = 30;
+
+// Erro que é RESPOSTA da fonte ("não tenho esse papel"), não falha de transporte.
+// Só resposta conta como tentativa: timeout/429/conexão derrubada não dizem nada
+// sobre o ativo, e carimbar o backoff por eles calaria um papel bom por 30 dias.
+const LTM_DEFINITIVE_ERROR = /not\s*found|no fundamentals|no data/i;
 
 async function fetchYahooLTM(ticker) {
     try {
@@ -46,42 +55,74 @@ async function fetchYahooLTM(ticker) {
             netDebt: (fd.totalDebt && fd.totalCash != null) ? (fd.totalDebt - fd.totalCash) : null,
             patrimLiq: (ks.bookValue && shares) ? ks.bookValue * shares : null,
         };
-    } catch {
-        return null;
+    } catch (err) {
+        // Resposta definitiva vira leitura vazia (conta como tentativa); o resto é
+        // transitório e devolve null (não conta).
+        return LTM_DEFINITIVE_ERROR.test(String(err?.message || '')) ? {} : null;
     }
+}
+
+/**
+ * Filtro dos candidatos ao enriquecimento LTM: ação BR com receita ou lucro
+ * zerado/ausente e que NÃO tenha sido tentada sem resultado nos últimos
+ * LTM_ENRICH_BACKOFF_DAYS dias.
+ */
+export function buildLtmCandidateFilter(now = new Date()) {
+    const cutoff = new Date(now.getTime() - LTM_ENRICH_BACKOFF_DAYS * 24 * 60 * 60 * 1000);
+    return {
+        type: 'STOCK',
+        $and: [
+            { $or: [{ netRevenue: { $in: [0, null] } }, { netIncome: { $in: [0, null] } }] },
+            { $or: [{ ltmEnrichAttemptedAt: null }, { ltmEnrichAttemptedAt: { $lt: cutoff } }] },
+        ],
+    };
+}
+
+/**
+ * Operação de gravação para um ativo, dado o que o Yahoo devolveu.
+ *  - `ltm === null` (falha transitória): nada — nem dado, nem carimbo.
+ *  - algum campo novo: grava só os campos que estavam zerados/ausentes.
+ *  - nada aproveitável: grava SÓ o carimbo de tentativa (inicia o backoff).
+ */
+export function buildLtmEnrichOp(asset, ltm, now = new Date()) {
+    if (!ltm) return null;
+    const $set = {};
+    // Só atualiza o campo se ainda estava zerado/ausente E o Yahoo retornou valor
+    if ((!asset.marketCap) && ltm.marketCap) $set.marketCap = ltm.marketCap;
+    if ((!asset.netRevenue) && ltm.netRevenue) $set.netRevenue = ltm.netRevenue;
+    if ((!asset.netIncome) && ltm.netIncome) $set.netIncome = ltm.netIncome;
+    if ((!asset.netDebt && asset.netDebt !== 0) && ltm.netDebt != null) $set.netDebt = ltm.netDebt;
+    if ((!asset.patrimLiq) && ltm.patrimLiq) $set.patrimLiq = ltm.patrimLiq;
+    if (Object.keys($set).length === 0) {
+        return { updateOne: { filter: { ticker: asset.ticker }, update: { $set: { ltmEnrichAttemptedAt: now } } }, enriched: false };
+    }
+    return { updateOne: { filter: { ticker: asset.ticker }, update: { $set } }, enriched: true };
 }
 
 async function enrichBRStocksLTM() {
     // Só enriquece ativos STOCK BR (sem sufixo .SA no banco, mas com sufixo na busca)
-    // onde algum campo LTM ainda é zero ou ausente.
-    const candidates = await MarketAsset.find({
-        type: 'STOCK',
-        $or: [{ netRevenue: { $in: [0, null] } }, { netIncome: { $in: [0, null] } }]
-    }).select('ticker netRevenue netIncome netDebt patrimLiq marketCap').lean();
+    // onde algum campo LTM ainda é zero ou ausente — e fora do backoff.
+    const now = new Date();
+    const candidates = await MarketAsset.find(buildLtmCandidateFilter(now))
+        .select('ticker netRevenue netIncome netDebt patrimLiq marketCap').lean();
 
     if (candidates.length === 0) return;
 
     logger.info(`ℹ️ [Sync] Etapa 4.5: Enriquecendo LTM de ${candidates.length} ações BR via Yahoo Finance...`);
     const bulkOps = [];
+    let enrichedCount = 0;
+    let backedOff = 0;
 
     for (let i = 0; i < candidates.length; i += LTM_BATCH_SIZE) {
         const batch = candidates.slice(i, i + LTM_BATCH_SIZE);
         const results = await Promise.allSettled(batch.map(a => fetchYahooLTM(a.ticker)));
 
         for (let j = 0; j < results.length; j++) {
-            if (results[j].status !== 'fulfilled' || !results[j].value) continue;
-            const asset = batch[j];
-            const ltm = results[j].value;
-            const $set = {};
-            // Só atualiza o campo se ainda estava zerado/ausente E o Yahoo retornou valor
-            if ((!asset.marketCap) && ltm.marketCap) $set.marketCap = ltm.marketCap;
-            if ((!asset.netRevenue) && ltm.netRevenue) $set.netRevenue = ltm.netRevenue;
-            if ((!asset.netIncome) && ltm.netIncome) $set.netIncome = ltm.netIncome;
-            if ((!asset.netDebt && asset.netDebt !== 0) && ltm.netDebt != null) $set.netDebt = ltm.netDebt;
-            if ((!asset.patrimLiq) && ltm.patrimLiq) $set.patrimLiq = ltm.patrimLiq;
-            if (Object.keys($set).length > 0) {
-                bulkOps.push({ updateOne: { filter: { ticker: asset.ticker }, update: { $set } } });
-            }
+            if (results[j].status !== 'fulfilled') continue;
+            const op = buildLtmEnrichOp(batch[j], results[j].value, now);
+            if (!op) continue;
+            if (op.enriched) enrichedCount++; else backedOff++;
+            bulkOps.push({ updateOne: op.updateOne });
         }
 
         if (i + LTM_BATCH_SIZE < candidates.length) {
@@ -89,11 +130,14 @@ async function enrichBRStocksLTM() {
         }
     }
 
-    if (bulkOps.length > 0) {
-        await MarketAsset.bulkWrite(bulkOps);
-        logger.info(`✅ [Sync] Etapa 4.5: LTM enriquecido para ${bulkOps.length} ações BR.`);
+    if (bulkOps.length > 0) await MarketAsset.bulkWrite(bulkOps);
+    if (enrichedCount > 0) {
+        logger.info(`✅ [Sync] Etapa 4.5: LTM enriquecido para ${enrichedCount} ações BR.`);
     } else {
         logger.info(`ℹ️ [Sync] Etapa 4.5: Nenhum campo LTM novo encontrado via Yahoo Finance.`);
+    }
+    if (backedOff > 0) {
+        logger.info(`ℹ️ [Sync] Etapa 4.5: ${backedOff} ações sem LTM no Yahoo — fora da fila por ${LTM_ENRICH_BACKOFF_DAYS} dias.`);
     }
 }
 
@@ -456,49 +500,21 @@ export const syncService = {
                 }
             }
 
-            if (assetsForExternal.length > 0) {
-                const tickersToFetch = assetsForExternal
-                    .map(a => a.ticker)
-                    .filter(t => typeof t === 'string' && t.trim().length > 0);
-                const quotes = await externalMarketService.getQuotes(tickersToFetch, {
-                    typeByTicker: new Map(assetsForExternal.map((a) => [a.ticker, a.type || null])),
-                });
-
-                const successfulTickers = new Set(
-                    quotes.filter(q => q.price > 0).map(q => q.ticker)
-                );
-
-                // Blacklist dinâmica no path Exterior/Cripto: tickers que falharam em
-                // Yahoo E Google ganham failCount (1/dia) e são desativados ao atingir o
-                // teto. Reusa a mesma regra de marketDataService — tickers throttlados
-                // se recuperam (reset no sucesso), delistados acumulam e somem do sync.
-                const failureOps = marketDataService.buildQuoteFailureOps(assetsForExternal, successfulTickers);
-                if (failureOps.length > 0) operations.push(...failureOps);
-
-                quotes.forEach(quote => {
-                    const updateData = {
-                        lastPrice: quote.price,
-                        change: quote.change,
-                        // Assinatura do preço — ver `priceSource` em models/MarketAsset.
-                        priceSource: quote.source || 'YAHOO',
-                        updatedAt: timestamp,
-                        isActive: true,
-                        failCount: 0
-                    };
-                    
-                    if (quote.marketCap) updateData.marketCap = quote.marketCap;
-                    if (quote.volume) updateData.liquidity = quote.volume;
-
-                    operations.push({
-                        updateOne: {
-                            filter: { ticker: quote.ticker },
-                            update: {
-                                $set: updateData
-                            }
-                        }
-                    });
-                });
-            }
+            // EXTERIOR/CRIPTO SÃO COTADOS UMA VEZ SÓ, pelo `refreshQuotesBatch` da Etapa 3.
+            //
+            // Até 22/11/2026 este trecho cotava a mesma lista e gravava por conta
+            // própria `lastPrice`, `isActive: true` e `failCount: 0` — sem nenhum dos
+            // juízes do caminho oficial (eco, sessão velha, barra sem negócio). Três
+            // estragos: (1) o `isActive: true` desfazia a desativação que a própria
+            // blacklist dinâmica acabara de fazer, e o ticker morto voltava todo dia;
+            // (2) preço ecoado era gravado como sucesso, renovando `updatedAt`; (3) a
+            // `liquidity` saía como VOLUME EM AÇÕES, enquanto o `refreshQuotesBatch`
+            // grava volume × preço para STOCK_US — o mesmo campo em duas unidades,
+            // conforme quem escreveu por último. Agora o seed continua aqui e a lista
+            // segue para a segunda passada, que é o único escritor de preço.
+            const externalTickers = assetsForExternal
+                .map(a => a.ticker)
+                .filter(t => typeof t === 'string' && t.trim().length > 0);
 
             // Etapa 3.5: Seed inicial S&P 500 + ETFs nacionais (cria registros se não existirem)
             logger.info("ℹ️ [Sync] Etapa 3.5: Seed S&P 500 + ETFs nacionais (se necessário)");
@@ -603,6 +619,10 @@ export const syncService = {
                         }
                     }
                 });
+                // Exterior/cripto entram direto: a escrita de cotação deles saiu da
+                // Etapa 2 (ver `externalTickers`), e o filtro de liquidez acima lia
+                // justamente a `liquidity` que aquela escrita punha em `operations`.
+                validTickers.push(...externalTickers);
                 
                 // Batch
                 const BATCH_SIZE = 50;

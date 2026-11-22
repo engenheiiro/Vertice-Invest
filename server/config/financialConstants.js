@@ -50,7 +50,12 @@ export const V2_SIGNAL_START_DATE = new Date('2026-05-09T00:00:00.000Z');
 
 // Regra de Negócio Inviolável #1 (CLAUDE.md): score ≥ 70 → BUY; < 70 → WAIT.
 // Vale em todo o sistema (portfolioEngine, aiResearchService).
-export const BUY_THRESHOLD = Number(process.env.BUY_THRESHOLD) || 70;
+// FIXO, sem override por env: o cliente desenha o semáforo com 70 cravado
+// (client/src/services/research.ts → BUY_THRESHOLD). Um BUY_THRESHOLD no .env
+// mudava a `action` gravada no servidor sem mudar a tela, e o mesmo score
+// aparecia COMPRAR numa ponta e AGUARDAR na outra. Mudar o limiar é mudar a
+// regra de negócio — exige deploy dos dois lados, não uma variável de ambiente.
+export const BUY_THRESHOLD = 70;
 
 // Máximo de criptos por perfil no draft competitivo (portfolioEngine).
 export const MAX_CRYPTO_PER_PROFILE = Number(process.env.MAX_CRYPTO_PER_PROFILE) || 3;

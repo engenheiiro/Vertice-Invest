@@ -112,8 +112,8 @@ describe('getMacroContext — detecção de pânico', () => {
   it('marca isCrashDay/isUSCrashDay quando os índices despencam', async () => {
     externalMarketService.getQuotes.mockResolvedValue([
       { ticker: 'BZ=F', change: -3 },
-      { ticker: 'BVSP', change: -3.5 },
-      { ticker: 'GSPC', change: -4.1 },
+      { ticker: '^BVSP', change: -3.5 },
+      { ticker: '^GSPC', change: -4.1 },
     ]);
     const ctx = await signalEngine.getMacroContext();
     expect(ctx.oilChange).toBe(-3);
@@ -126,8 +126,8 @@ describe('getMacroContext — detecção de pânico', () => {
   it('dia calmo: nenhum flag de crash ativado', async () => {
     externalMarketService.getQuotes.mockResolvedValue([
       { ticker: 'BZ=F', change: 0.5 },
-      { ticker: 'BVSP', change: 1.2 },
-      { ticker: 'GSPC', change: -1.0 }, // queda leve, acima de -2.5
+      { ticker: '^BVSP', change: 1.2 },
+      { ticker: '^GSPC', change: -1.0 }, // queda leve, acima de -2.5
     ]);
     const ctx = await signalEngine.getMacroContext();
     expect(ctx.isCrashDay).toBe(false);
@@ -136,8 +136,8 @@ describe('getMacroContext — detecção de pânico', () => {
 
   it('-2.5% exato NÃO é crash (limiar é estritamente menor)', async () => {
     externalMarketService.getQuotes.mockResolvedValue([
-      { ticker: 'BVSP', change: -2.5 },
-      { ticker: 'GSPC', change: -2.5 },
+      { ticker: '^BVSP', change: -2.5 },
+      { ticker: '^GSPC', change: -2.5 },
     ]);
     const ctx = await signalEngine.getMacroContext();
     expect(ctx.isCrashDay).toBe(false);

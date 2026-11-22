@@ -26,6 +26,7 @@ import logger from '../config/logger.js';
 import { getRequestId } from '../utils/requestContext.js';
 import { STATUS_CODE } from '../utils/AppError.js';
 import { recordError } from '../services/errorLogService.js';
+import { redactLogPath } from './accessLog.js';
 
 // Erros conhecidos de libs → status + code padronizados.
 const KNOWN_BY_NAME = {
@@ -95,7 +96,7 @@ export const errorHandler = (err, req, res, _next) => {
   if (status >= 500) {
     recordError({
       origin: 'HTTP',
-      source: `${req?.method || '?'} ${req?.path || '?'}`,
+      source: `${req?.method || '?'} ${req?.path ? redactLogPath(req.path) : '?'}`,
       code: body.error.code,
       message: err.message,
       stack: err.stack || null,

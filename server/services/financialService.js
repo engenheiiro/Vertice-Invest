@@ -14,7 +14,7 @@ import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { DERIVED_EXPIRY_MS, DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
-import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, addQty, subQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, safeValue, addQty, subQty, QUANTITY_EPSILON, resolveCurrentCdiRate } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
@@ -328,8 +328,14 @@ export const financialService = {
         let sinceTotal = 0;
 
         for (const day of days) {
-            // Mesma ordem do rebuild: transações do dia ANTES dos proventos do dia.
-            while (txIndex < txs.length && this.toDateKey(txs[txIndex].date) <= day) {
+            // Direito ao provento do dia-ex D = posição ao FIM do pregão anterior:
+            // só entram as transações com data ESTRITAMENTE anterior a D. Quem
+            // compra NO dia-ex já compra "ex" (não recebe) e quem vende NO dia-ex
+            // vendeu "com" (recebe). Aplicar as transações do dia antes (`<=`) dava
+            // o provento a quem não tinha direito e o tirava de quem tinha. Mesma
+            // regra do rebuild, do snapshot diário e de `calculateUserDividends`
+            // — divergir aqui reabre o vão KPI × snapshot.
+            while (txIndex < txs.length && this.toDateKey(txs[txIndex].date) < day) {
                 const tx = txs[txIndex];
                 const delta = tx.type === 'SELL' ? -tx.quantity : tx.quantity;
                 qty[tx.ticker] = addQty(qty[tx.ticker] || 0, delta);
@@ -680,16 +686,19 @@ export const financialService = {
             // `?? ` protege contra portfolio montado por chamador antigo (sem o
             // acumulado em BRL): melhor cair no cálculo legado do que injetar NaN
             // num snapshot, que só estouraria lá na frente na validação do schema.
-            totalInvested += pos.costBrl ?? (pos.cost * fxRate);
+            totalInvested = safeAdd(totalInvested, pos.costBrl ?? (pos.cost * fxRate));
 
             let markClose = 0;
             let markAdjClose = 0;
 
             if (fixedIncomeState[ticker]) {
+                // Renda fixa entra pelo TOTAL acumulado, com precisão integral —
+                // como no snapshot diário (`computeEquityAt`). Reconstruir via
+                // quantidade × (valor ÷ quantidade) só reintroduz resíduo de float.
                 const val = fixedIncomeState[ticker].currentValue;
-                const unitPrice = val / pos.qty;
-                markClose = unitPrice;
-                markAdjClose = unitPrice;
+                totalEquityNominal += val * fxRate;
+                totalEquityAdjusted += val * fxRate;
+                continue;
             } else {
                 const pMap = priceCacheMap.get(ticker);
                 const pData = this.findPriceInMap(pMap, cursorIso);
@@ -704,8 +713,12 @@ export const financialService = {
                 }
             }
 
-            totalEquityNominal += pos.qty * markClose * fxRate;
-            totalEquityAdjusted += pos.qty * markAdjClose * fxRate;
+            // Regra 7: mesma aritmética segura do snapshot diário (`computeEquityAt`:
+            // safeValue → câmbio → centavos, por ativo). Com `qty × preço × câmbio`
+            // em float cru o rebuild e o job diário divergiam no centavo, e todo
+            // rebuild reescrevia o patrimônio histórico por arredondamento.
+            totalEquityNominal = safeAdd(totalEquityNominal, safeCurrency(safeMult(safeValue(pos.qty, markClose), fxRate)));
+            totalEquityAdjusted = safeAdd(totalEquityAdjusted, safeCurrency(safeMult(safeValue(pos.qty, markAdjClose), fxRate)));
         }
 
         return { totalEquityNominal, totalEquityAdjusted, totalInvested, hasPosition };
@@ -753,7 +766,8 @@ export const financialService = {
             }
 
             const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            const currentCdiRate = sysConfig?.cdi || DEFAULT_SELIC_FALLBACK;
+            // Mesma cadeia do card e do snapshot (CDI → Selic → fallback).
+            const currentCdiRate = resolveCurrentCdiRate(sysConfig, DEFAULT_SELIC_FALLBACK);
             const currentIpcaRate = (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : 4.5;
             const currentSelicRate = (sysConfig?.selic && sysConfig.selic > 0) ? sysConfig.selic : undefined;
             const currentUsdRate = sysConfig?.dollar || 5.75;
@@ -841,20 +855,14 @@ export const financialService = {
                     cdiDailyFactor = cdiFactorsCacheFallback[cursor.getFullYear()] || 1.0003;
                 }
 
-                // 1) Movimentações do dia → posição + fluxo de caixa ajustado.
-                const dayTx = this._applyDayTransactions({
-                    txs, txIndex, cursorIso, portfolio, fixedIncomeState,
-                    assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
-                    treasuryPricing,
-                });
-                txIndex = dayTx.txIndex;
-                const dayFlowNominal = dayTx.dayFlowNominal;
-
-                // 2) Proventos do dia (sobre a posição já atualizada). Além de
-                //    acumular o total exibido, o caixa recebido HOJE é creditado na
-                //    cota como RENDA — senão a queda de preço do dia-ex vira
-                //    prejuízo-fantasma (vazamento de proventos: o adjClose da fonte
-                //    BR vem SEM ajuste, então a cota precisa do provento explícito).
+                // 1) Proventos do dia, sobre a posição de ANTES das movimentações
+                //    do dia: no dia-ex quem compra não tem direito e quem vende tem
+                //    (ver `accrueDividendsByTicker`). Por isso vem antes do passo 2 —
+                //    na ordem inversa, compra no dia-ex recebia e venda no dia-ex
+                //    perdia o provento. Além de acumular o total exibido, o caixa é
+                //    creditado na cota como RENDA — senão a queda de preço do dia-ex
+                //    vira prejuízo-fantasma (vazamento de proventos: o adjClose da
+                //    fonte BR vem SEM ajuste, então a cota precisa do provento explícito).
                 const dayDividends = dividendDateMap.get(cursorIso) || [];
                 let dayDividendCash = 0;
                 for (const div of dayDividends) {
@@ -864,6 +872,15 @@ export const financialService = {
                     }
                 }
                 accumulatedDividends += dayDividendCash;
+
+                // 2) Movimentações do dia → posição + fluxo de caixa ajustado.
+                const dayTx = this._applyDayTransactions({
+                    txs, txIndex, cursorIso, portfolio, fixedIncomeState,
+                    assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
+                    treasuryPricing,
+                });
+                txIndex = dayTx.txIndex;
+                const dayFlowNominal = dayTx.dayFlowNominal;
 
                 // 3) Juros da renda fixa do dia.
                 this._accrueDailyFixedIncome({
@@ -1208,8 +1225,11 @@ export const financialService = {
             { $group: { _id: "$ticker", firstBuyDate: { $first: "$date" } } }
         ]);
 
+        // Chave de dia UTC (`toDateKey`), a mesma régua do accrual: a ex-date é
+        // gravada à meia-noite UTC, e normalizá-la para a meia-noite LOCAL movia o
+        // provento para o dia anterior num servidor em Brasília.
         const acquisitionMap = new Map();
-        firstTransactions.forEach(tx => acquisitionMap.set(tx._id, this.normalizeDate(tx.firstBuyDate)));
+        firstTransactions.forEach(tx => acquisitionMap.set(tx._id, this.toDateKey(tx.firstBuyDate)));
 
         const dividendMap = new Map();
         const provisioned = [];
@@ -1235,8 +1255,11 @@ export const financialService = {
             const seenEvents = new Set();
 
             for (const event of assetEvents) {
-                const eventDateNormalized = this.normalizeDate(event.date);
-                if (!firstBuyDate || eventDateNormalized < firstBuyDate) continue;
+                // Compra NO dia-ex não dá direito ao provento (o papel já negocia
+                // "ex"): só conta ex-date ESTRITAMENTE posterior à primeira compra.
+                // Com `<` a compra no próprio dia-ex recebia — divergindo do accrual,
+                // do rebuild e do snapshot, que usam a posição da véspera.
+                if (!firstBuyDate || this.toDateKey(event.date) <= firstBuyDate) continue;
 
                 const dedupeKey = this.dividendIdentity(asset.ticker, event.date, event.type);
                 if (seenEvents.has(dedupeKey)) continue;
@@ -1394,20 +1417,32 @@ export const financialService = {
                 taxLots.push({ quantity: txQty, price: txPrice, date: tx.date, fxRate: txFx });
                 if (!firstBuyDate) firstBuyDate = tx.date;
             } else if (tx.type === 'SELL') {
+                // Venda que ZERA a posição baixa o custo inteiro, não qtd × médio.
+                // O médio é arredondado (safeUnitPrice, 4 casas acima de 1), e
+                // qtd × médio arredondado deixava um resíduo: COMPRA 1000@10 +
+                // COMPRA 2000@10,01 → médio 10,0067 → a venda de 3000 baixava
+                // 30.020,10 de um custo de 30.020,00. O lucro saía 0,10 menor e o
+                // custo ficava em −0,10, herdado pela próxima compra (999,90 em vez
+                // de 1.000). O zeramento do fim do laço não alcança esse caso porque
+                // a posição reabre antes dele.
+                const closesPosition = quantity > 0
+                    && Math.abs(subQty(quantity, txQty)) <= QUANTITY_EPSILON;
                 const currentAvg = quantity > 0 ? safeUnitPrice(totalCost / quantity) : 0;
-                const costOfSoldShares = safeCurrency(txQty * currentAvg);
+                const costOfSoldShares = closesPosition ? totalCost : safeCurrency(txQty * currentAvg);
                 const profit = safeSub(txTotal, costOfSoldShares);
                 // Baixa proporcional do custo em BRL — preserva o câmbio médio das
                 // compras remanescentes (a venda não reprecifica o que ficou).
-                const costOfSoldSharesBrl = quantity > 0
-                    ? safeCurrency(totalCostBrl * (txQty / quantity))
-                    : 0;
+                // Zerando, sai o espelho inteiro pelo mesmo motivo acima.
+                let costOfSoldSharesBrl = 0;
+                if (closesPosition) costOfSoldSharesBrl = totalCostBrl;
+                else if (quantity > 0) costOfSoldSharesBrl = safeCurrency(totalCostBrl * (txQty / quantity));
 
                 realizedProfit = safeAdd(realizedProfit, profit);
                 realizedProfitBrl = safeAdd(realizedProfitBrl, safeSub(txTotalBrl, costOfSoldSharesBrl));
                 quantity = subQty(quantity, txQty);
                 totalCost = safeSub(totalCost, costOfSoldShares);
                 totalCostBrl = safeSub(totalCostBrl, costOfSoldSharesBrl);
+                if (closesPosition) { quantity = 0; totalCost = 0; totalCostBrl = 0; }
 
                 let remainingToSell = txQty;
                 let fifoCostOfSoldShares = 0; // NOVO

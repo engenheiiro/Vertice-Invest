@@ -7,6 +7,8 @@ import {
 import { Modal } from '../ui/Modal';
 import { useToast } from '../../contexts/ToastContext';
 import { useWallet } from '../../contexts/WalletContext';
+import { useDemo } from '../../contexts/DemoContext';
+import { useDemoGuard } from '../../hooks/useDemoGuard';
 import { useConfirm } from '../../hooks/useConfirm';
 import { goalsService, type Goal } from '../../services/goals';
 import { formatCurrency, formatCompact } from '../../utils/format';
@@ -59,6 +61,8 @@ const MILESTONES = [25, 50, 75, 100];
 export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClose, goalId, privacy }) => {
   const { addToast } = useToast();
   const { activeWalletId } = useWallet();
+  const { isDemoMode } = useDemo();
+  const blockInDemo = useDemoGuard();
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [contribOpen, setContribOpen] = useState(false);
@@ -109,7 +113,8 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
     if (crossed) {
       celebratedRef.current = crossed;
       addToast(crossed >= 100 ? '🏆 Meta conquistada!' : `🎉 Você cruzou ${crossed}% da meta!`, 'success');
-      updateMutation.mutate({ lastCelebratedMilestone: crossed });
+      // Demo: comemora na tela, mas não grava o marco na meta real.
+      if (!isDemoMode) updateMutation.mutate({ lastCelebratedMilestone: crossed });
     }
     // Deps propositalmente curtas: `updateMutation.mutate` invalida ['goal', id],
     // o refetch devolve um objeto `goal` novo e, com `goal`/`updateMutation` nas
@@ -167,12 +172,14 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
   }, [goal, whatIfPmt]);
 
   const handleDeleteGoal = async () => {
+    if (blockInDemo()) return;
     if (await confirm({ title: 'Excluir meta?', message: 'Isso remove a meta e seus aportes manuais. Sua carteira não é afetada.', isDestructive: true, confirmText: 'Excluir' })) {
       deleteGoalMutation.mutate();
     }
   };
 
   const handleDeleteContrib = async (cid: string) => {
+    if (blockInDemo()) return;
     if (await confirm({ title: 'Remover aporte?', message: 'O saldo manual da meta será ajustado.', isDestructive: true, confirmText: 'Remover' })) {
       deleteContribMutation.mutate(cid);
     }
@@ -288,7 +295,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
                       </p>
                       <button
                         type="button"
-                        onClick={() => updateMutation.mutate({ expectedAnnualRate: data.rateContext.suggested })}
+                        onClick={() => { if (blockInDemo()) return; updateMutation.mutate({ expectedAnnualRate: data.rateContext.suggested }); }}
                         disabled={updateMutation.isPending}
                         className="mt-1.5 text-[11px] font-semibold text-yellow-300 hover:text-yellow-200 transition-colors"
                       >
@@ -361,7 +368,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
                   )}
                   {whatIf.pmt !== goal.monthlyTarget && (
                     <button
-                      onClick={() => updateMutation.mutate({ monthlyTarget: whatIf.pmt })}
+                      onClick={() => { if (blockInDemo()) return; updateMutation.mutate({ monthlyTarget: whatIf.pmt }); }}
                       disabled={updateMutation.isPending}
                       className="text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 transition-colors disabled:opacity-60"
                     >

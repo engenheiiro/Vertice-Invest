@@ -22,6 +22,8 @@ import { useToast } from '../contexts/ToastContext';
 
 vi.mock('../contexts/WalletContext', () => ({ useWallet: vi.fn() }));
 vi.mock('../contexts/ToastContext', () => ({ useToast: vi.fn() }));
+const demo = { on: false };
+vi.mock('../contexts/DemoContext', () => ({ useDemo: () => ({ isDemoMode: demo.on }) }));
 vi.mock('../components/dashboard/Header', () => ({ Header: () => null }));
 vi.mock('../components/goals/CreateGoalModal', () => ({ CreateGoalModal: () => null }));
 vi.mock('../components/goals/GoalDetailModal', () => ({ GoalDetailModal: () => null }));
@@ -34,9 +36,11 @@ vi.mock('../components/goals/AchievedTrail', () => ({
 vi.mock('../services/goals', () => ({ goalsService: { getGoals: vi.fn(), renameJourney: vi.fn(), clearAllGoals: vi.fn() } }));
 
 const mockGoals: { current: Goal[] } = { current: [] };
+const mockMutate = vi.fn();
+const mockAddToast = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: { goals: mockGoals.current }, isLoading: false }),
-  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useMutation: () => ({ mutate: mockMutate, isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
@@ -60,7 +64,30 @@ beforeEach(() => {
   (useWallet as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
     isPrivacyMode: false, activeWalletId: 'w1', isWalletScopeReady: true,
   });
-  (useToast as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ addToast: vi.fn() });
+  (useToast as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ addToast: mockAddToast });
+  mockMutate.mockClear();
+  mockAddToast.mockClear();
+  demo.on = false;
+});
+
+describe('modo demo', () => {
+  it('"Excluir tudo" confirmado não apaga as metas reais — só avisa', () => {
+    demo.on = true;
+    mockGoals.current = [goal({ _id: 'viva', name: 'Reserva' })];
+    render(<Goals />);
+    fireEvent.click(screen.getByLabelText('Limpar todas as metas'));
+    fireEvent.click(screen.getByText('Sim, Excluir Tudo'));
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith(expect.stringMatching(/demonstração/i), 'info');
+  });
+
+  it('fora do demo, o mesmo clique dispara a exclusão', () => {
+    mockGoals.current = [goal({ _id: 'viva', name: 'Reserva' })];
+    render(<Goals />);
+    fireEvent.click(screen.getByLabelText('Limpar todas as metas'));
+    fireEvent.click(screen.getByText('Sim, Excluir Tudo'));
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('seção "Concluídas"', () => {

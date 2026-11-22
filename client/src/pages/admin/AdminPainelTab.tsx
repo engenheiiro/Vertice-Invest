@@ -37,6 +37,10 @@ interface Props {
 
 const Skel = () => <span className="block h-7 w-12 bg-slate-800 rounded animate-pulse mt-1" />;
 
+// Cotação ausente vira "—", nunca "R$ 0.000": zero na tela parece dado de verdade.
+const macroOrDash = (value: unknown, format: (v: number) => string): string =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? format(value) : '—';
+
 const MacroCard = ({ label, value, change, sub, color }: { label: string; value: string; change?: number; sub: string; color?: string }) => (
     <div className="bg-panel border border-slate-800 p-3 rounded-xl flex flex-col justify-between h-full">
         <div>
@@ -292,10 +296,10 @@ export const AdminPainelTab: React.FC<Props> = ({
                         <MacroCard label="Selic" value={`${macroData?.selic?.value}%`} sub="BCB Meta" color="text-yellow-400" />
                         <MacroCard label="CDI" value={`${macroData?.cdi?.value?.toFixed(2)}%`} sub="Est. Cetip" color="text-yellow-400" />
                         <MacroCard label="IPCA" value={`${macroData?.ipca?.value}%`} sub="12 meses" color="text-red-400" />
-                        <MacroCard label="Ibovespa" value={Math.round(macroData?.ibov?.value || 0).toLocaleString()} change={macroData?.ibov?.change} sub="Pts" />
-                        <MacroCard label="Dólar" value={`R$ ${macroData?.usd?.value?.toFixed(3) || '0.000'}`} change={macroData?.usd?.change} sub="PTAX" />
-                        <MacroCard label="S&P 500" value={Math.round(macroData?.spx?.value || 0).toLocaleString()} change={macroData?.spx?.change} sub="US Pts" />
-                        <MacroCard label="Bitcoin" value={`$${Math.round(macroData?.btc?.value || 0).toLocaleString()}`} change={macroData?.btc?.change} sub="USD" color="text-purple-400" />
+                        <MacroCard label="Ibovespa" value={macroOrDash(macroData?.ibov?.value, (v) => Math.round(v).toLocaleString())} change={macroData?.ibov?.change} sub="Pts" />
+                        <MacroCard label="Dólar" value={macroOrDash(macroData?.usd?.value, (v) => `R$ ${v.toFixed(3)}`)} change={macroData?.usd?.change} sub="PTAX" />
+                        <MacroCard label="S&P 500" value={macroOrDash(macroData?.spx?.value, (v) => Math.round(v).toLocaleString())} change={macroData?.spx?.change} sub="US Pts" />
+                        <MacroCard label="Bitcoin" value={macroOrDash(macroData?.btc?.value, (v) => `$${Math.round(v).toLocaleString()}`)} change={macroData?.btc?.change} sub="USD" color="text-purple-400" />
                     </div>
                 ) : (
                     <div className="text-center text-xs text-slate-500 py-4 flex flex-col items-center">

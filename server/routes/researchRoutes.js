@@ -42,7 +42,15 @@ import {
 } from '../controllers/healthController.js';
 import validate from '../middleware/validateResource.js';
 import { tunablesPatchSchema } from '../schemas/configSchemas.js';
-import { anchorPublishSchema, enhanceResearchSchema, publishResearchSchema } from '../schemas/researchSchemas.js';
+import {
+  anchorPublishSchema,
+  backtestConfigSchema,
+  enhanceResearchSchema,
+  errorIdParamSchema,
+  explainableSchema,
+  narrativeSchema,
+  publishResearchSchema,
+} from '../schemas/researchSchemas.js';
 
 const router = express.Router();
 
@@ -62,7 +70,7 @@ router.get('/radar-stats', researchReadLimiter, getRadarStats);
 router.post('/crunch', researchHeavyLimiter, requireAdmin, crunchNumbers);
 router.post('/full-pipeline', researchHeavyLimiter, requireAdmin, runFullPipeline);
 router.post('/enhance', researchHeavyLimiter, requireAdmin, validate(enhanceResearchSchema), enhanceWithAI);
-router.post('/narrative', researchHeavyLimiter, requireAdmin, generateNarrative);
+router.post('/narrative', researchHeavyLimiter, requireAdmin, validate(narrativeSchema), generateNarrative);
 router.post('/publish', adminLimiter, requireAdmin, validate(publishResearchSchema), publishContent);
 router.get('/history', adminLimiter, requireAdmin, listReports);
 router.get('/details/:id', adminLimiter, requireAdmin, getReportDetails);
@@ -80,7 +88,7 @@ router.post('/sync-market', researchHeavyLimiter, requireAdmin, triggerMarketSyn
 router.post('/backfill-sectors', researchHeavyLimiter, requireAdmin, backfillSectorsHandler);
 router.post('/sync-macro', researchHeavyLimiter, requireAdmin, triggerMacroSync);
 router.post('/sync-time-series', researchHeavyLimiter, requireAdmin, syncTimeSeries);
-router.post('/config/backtest', adminLimiter, requireAdmin, updateBacktestConfig);
+router.post('/config/backtest', adminLimiter, requireAdmin, validate(backtestConfigSchema), updateBacktestConfig);
 
 // (I13) Tunables operacionais editáveis pelo admin (sem deploy).
 router.get('/config/tunables', adminLimiter, requireAdmin, getTunablesHandler);
@@ -104,13 +112,15 @@ router.post('/reset-health', adminLimiter, requireAdmin, resetAssetHealth);
 router.get('/data-health', adminLimiter, requireAdmin, getDataHealth);
 router.post('/data-health/run', researchHeavyLimiter, requireAdmin, runDataHealth);
 router.get('/errors', adminLimiter, requireAdmin, listErrors);
-router.post('/errors/:id/resolve', adminLimiter, requireAdmin, resolveError);
+router.post('/errors/:id/resolve', adminLimiter, requireAdmin, validate(errorIdParamSchema), resolveError);
 router.get('/accuracy', adminLimiter, requireAdmin, getAlgorithmAccuracy);
 // Motivos internos de descarte — só admin (único consumidor é o AdminPanel).
 router.get('/discard-logs', adminLimiter, requireAdmin, getDiscardLogs);
 
 // Publicação & Explainable AI
 router.get('/publish-status', adminLimiter, requireAdmin, getPublishStatus);
-router.post('/generate-explainable', adminLimiter, requireAdmin, generateExplainableAI);
+// Chama o Gemini (exceto com customText): mesmo balde das outras rotas de IA
+// (/narrative, /enhance), não o de leitura do painel (300/15min).
+router.post('/generate-explainable', researchHeavyLimiter, requireAdmin, validate(explainableSchema), generateExplainableAI);
 
 export default router;

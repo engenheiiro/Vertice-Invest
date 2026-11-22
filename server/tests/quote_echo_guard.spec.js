@@ -162,8 +162,20 @@ describe('sem negócio: alerta ou estado normal do mundo', () => {
         expect(isExpectedNoTrade('2026-09-06', naHora('2026-09-06', '11:00'))).toBe(true);
     });
 
-    it('sessão de um dia útil passado é achado a qualquer hora', () => {
-        expect(isExpectedNoTrade('2026-09-04', naHora('2026-09-08', '06:08'))).toBe(false);
+    it('sessão passada é achado quando um pregão seguinte já abriu', () => {
+        // 04/09 (sexta) → 08/09 (terça, depois do feriado de 07/09) às 15:30.
+        expect(isExpectedNoTrade('2026-09-04', naHora('2026-09-08', '15:30'))).toBe(false);
+        expect(isExpectedNoTrade('2026-11-17', naHora('2026-11-19', '11:00'))).toBe(false);
+    });
+
+    it('última sessão, antes do pregão seguinte abrir, não é achado', () => {
+        // Fora do pregão o Yahoo zera o volume da última sessão: em 22/11/2026
+        // (domingo) PETR4 veio datado de 19/11 com volume 0. Vivo e morto
+        // respondem igual até o pregão seguinte abrir.
+        expect(isExpectedNoTrade('2026-11-19', naHora('2026-11-22', '15:49'))).toBe(true);
+        expect(isExpectedNoTrade('2026-09-04', naHora('2026-09-08', '06:08'))).toBe(true);
+        expect(isExpectedNoTrade('2026-11-18', naHora('2026-11-18', '23:00'))).toBe(false);
+        expect(isExpectedNoTrade('2026-11-18', naHora('2026-11-19', '08:00'))).toBe(true);
     });
 
     it('sem data de sessão não há o que classificar', () => {

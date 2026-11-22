@@ -28,19 +28,19 @@ beforeEach(() => vi.clearAllMocks());
 describe('resolveWallet — walletId explícito', () => {
   it('aceita e anexa req.walletId quando a carteira pertence ao usuário (query)', async () => {
     Wallet.exists.mockResolvedValue(true);
-    const req = { user: { id: 'u1' }, query: { walletId: 'w1' }, body: {} };
+    const req = { user: { id: 'u1' }, query: { walletId: 'aaaaaaaaaaaaaaaaaaaaaaa1' }, body: {} };
     const next = vi.fn();
 
     await resolveWallet(req, {}, next);
 
-    expect(Wallet.exists).toHaveBeenCalledWith({ _id: 'w1', user: 'u1' });
-    expect(req.walletId).toBe('w1');
+    expect(Wallet.exists).toHaveBeenCalledWith({ _id: 'aaaaaaaaaaaaaaaaaaaaaaa1', user: 'u1' });
+    expect(req.walletId).toBe('aaaaaaaaaaaaaaaaaaaaaaa1');
     expect(next).toHaveBeenCalledWith(); // sem erro
   });
 
   it('403 quando o walletId explícito (body) não pertence ao usuário', async () => {
     Wallet.exists.mockResolvedValue(false);
-    const req = { user: { id: 'u1' }, query: {}, body: { walletId: 'w-outro-user' } };
+    const req = { user: { id: 'u1' }, query: {}, body: { walletId: 'bbbbbbbbbbbbbbbbbbbbbbbb' } };
     const next = vi.fn();
 
     await resolveWallet(req, {}, next);
@@ -99,6 +99,26 @@ describe('resolveWallet — fallback sem walletId explícito', () => {
 
     await resolveWallet(req, {}, next);
 
+    expect(req.walletId).toBeUndefined();
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+  });
+});
+
+describe('resolveWallet — walletId malformado', () => {
+  // `?walletId=a&walletId=b` vira array e o Mongoose traduz em $in: bastava UMA
+  // das carteiras ser do usuário para a posse "conferir".
+  it.each([
+    ['array (parâmetro repetido)', ['aaaaaaaaaaaaaaaaaaaaaaa1', 'bbbbbbbbbbbbbbbbbbbbbbbb']],
+    ['objeto (operador)', { $ne: null }],
+    ['string que não é ObjectId', 'w1'],
+    ['número', 42],
+  ])('400 sem consultar o banco: %s', async (_label, walletId) => {
+    const req = { user: { id: 'u1' }, query: { walletId }, body: {} };
+    const next = vi.fn();
+
+    await resolveWallet(req, {}, next);
+
+    expect(Wallet.exists).not.toHaveBeenCalled();
     expect(req.walletId).toBeUndefined();
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
   });

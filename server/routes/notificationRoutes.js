@@ -1,7 +1,9 @@
 
 import express from 'express';
 import { authenticateToken } from '../middleware/authMiddleware.js';
-import { researchReadLimiter } from '../middleware/rateLimiters.js';
+import { researchReadLimiter, notificationWriteLimiter } from '../middleware/rateLimiters.js';
+import validate from '../middleware/validateResource.js';
+import { notificationIdParamSchema, readAllNotificationsSchema } from '../schemas/notificationSchemas.js';
 import Notification from '../models/Notification.js';
 
 const router = express.Router();
@@ -53,7 +55,9 @@ router.get('/', researchReadLimiter, async (req, res, next) => {
  *   - Pessoal: seta isRead = true
  *   - Broadcast: adiciona userId em readBy
  */
-router.put('/:id/read', researchReadLimiter, async (req, res, next) => {
+// Escrita: limiter de escrita (não o de leitura) e :id validado como ObjectId
+// — id malformado era CastError → 500.
+router.put('/:id/read', notificationWriteLimiter, validate(notificationIdParamSchema), async (req, res, next) => {
   try {
     const userId = req.user.id;
     const notification = await Notification.findById(req.params.id);
@@ -86,7 +90,7 @@ router.put('/:id/read', researchReadLimiter, async (req, res, next) => {
  * POST /api/notifications/read-all
  * Marca todas as notificações não lidas do usuário como lidas de uma vez.
  */
-router.post('/read-all', researchReadLimiter, async (req, res, next) => {
+router.post('/read-all', notificationWriteLimiter, validate(readAllNotificationsSchema), async (req, res, next) => {
   try {
     const userId = req.user.id;
     const now = new Date();

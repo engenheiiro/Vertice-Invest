@@ -102,6 +102,15 @@ const UserSchema = new mongoose.Schema({
   mfaSecret: { type: String, select: false },          // segredo TOTP confirmado
   mfaPendingSecret: { type: String, select: false },   // durante o setup, antes de confirmar
   mfaBackupCodes: { type: [String], select: false, default: [] }, // códigos de recuperação (hash)
+  // Anti-replay do TOTP: o último passo de 30s já aceito. Um código vale ~90s
+  // (janela ±1); sem isto, quem o visse (ombro, print, proxy) entrava de novo
+  // com o MESMO código enquanto ele não expirasse.
+  mfaLastUsedStep: { type: Number, select: false },
+  // Bloqueio do 2º fator por conta: o limiter é por usuário/IP da sessão, mas o
+  // login não tem sessão — sem um contador na CONTA, 10^6 códigos eram varríveis
+  // trocando de IP. 5 erros → 15 min (ver utils/mfa.js).
+  mfaFailedAttempts: { type: Number, default: 0, select: false },
+  mfaLockedUntil: { type: Date, select: false },
 
   createdAt: { type: Date, default: Date.now },
 

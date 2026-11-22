@@ -101,15 +101,61 @@ const anchorImportDate = (value) => {
     return key ? new Date(`${key}T12:00:00.000Z`) : null;
 };
 
-/** Chave de dedup de um lançamento — o que torna dois lançamentos "o mesmo". */
+/**
+ * Chave de dedup de um lançamento — o que torna dois lançamentos "o mesmo".
+ *
+ * Preço pela régua de PREÇO UNITÁRIO (`safeUnitPrice`, regra 7), não de dinheiro:
+ * com `safeCurrency` duas compras de SHIB no mesmo dia e quantidade, a
+ * US$ 0,00001234 e a US$ 0,00001567, viravam ambas `0` na chave — a segunda
+ * era marcada como duplicata e ficava fora do import.
+ */
 const dedupKey = ({ ticker, date, side, quantity, price }) =>
     [
         String(ticker).toUpperCase(),
         toDateKey(date),
         side,
         safeQuantity(quantity),
-        safeCurrency(price),
+        safeUnitPrice(price),
     ].join('|');
+
+/**
+ * Primeiro (ticker, dia) em que o saldo fica NEGATIVO, varrendo em ordem de data
+ * os lançamentos já gravados mais os do arquivo. `null` se não houver.
+ *
+ * A régua é a mesma de `recalculatePosition`: o saldo é checado na VIRADA DE DIA
+ * (dentro do mesmo dia a ordem de digitação não importa — day trade com a venda
+ * lançada primeiro continua aceito). A checagem antiga somava compras e vendas
+ * sem olhar a data: VENDA em janeiro + COMPRA em fevereiro fechava em zero,
+ * passava, era inserida, e só então o recálculo recusava — deixando o lote
+ * gravado e a posição sem recalcular.
+ */
+export const findChronologicalShortfall = (existingTransactions, rows) => {
+    const byTicker = new Map();
+    const push = (ticker, date, side, quantity) => {
+        const dayKey = toDateKey(date);
+        if (!ticker || !dayKey) return;
+        if (!byTicker.has(ticker)) byTicker.set(ticker, []);
+        byTicker.get(ticker).push({ dayKey, delta: side === 'SELL' ? -Math.abs(Number(quantity)) : Math.abs(Number(quantity)) });
+    };
+    for (const tx of existingTransactions || []) push(tx.ticker, tx.date, tx.type, tx.quantity);
+    for (const row of rows || []) push(row.ticker, anchorImportDate(row.date), row.side, row.quantity);
+
+    for (const [ticker, moves] of byTicker) {
+        moves.sort((a, b) => (a.dayKey < b.dayKey ? -1 : a.dayKey > b.dayKey ? 1 : 0));
+        let balance = 0;
+        for (let i = 0; i < moves.length; i++) {
+            balance = addQty(balance, moves[i].delta);
+            const endOfDay = i === moves.length - 1 || moves[i + 1].dayKey !== moves[i].dayKey;
+            if (endOfDay && balance < -QUANTITY_EPSILON) {
+                return { ticker, dayKey: moves[i].dayKey, shortfall: safeQuantity(-balance) };
+            }
+        }
+    }
+    return null;
+};
+
+/** `YYYY-MM-DD` → `DD/MM/YYYY`, para a mensagem ao usuário. */
+const formatDayBr = (dayKey) => dayKey.split('-').reverse().join('/');
 
 /**
  * Resolve um lote de linhas contra o catálogo e contra a carteira do usuário,
@@ -147,13 +193,6 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
         existingTransactions.map((tx) =>
             dedupKey({ ticker: tx.ticker, date: tx.date, side: tx.type, quantity: tx.quantity, price: tx.price })
         )
-    );
-
-    // Saldo corrente por ticker, partindo da posição já existente na carteira.
-    // Serve para detectar venda sem lastro — o erro que faria a posição ficar
-    // negativa e contaminar preço médio, TWRR e IR de uma vez só.
-    const runningQty = new Map(
-        tickers.map((t) => [t, safeQuantity(positionByTicker.get(t)?.quantity || 0)])
     );
 
     // Duplicata DENTRO do próprio arquivo (usuário colou o mesmo bloco duas vezes).
@@ -206,23 +245,28 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
         // entrar, então conta no saldo e no resumo.
         const soFaltaClasse = status === ROW_STATUS.NAO_RECONHECIDO && !!row.ticker && !!row.date;
 
-        // Simulação de saldo: só conta o que de fato entraria.
-        if (status === ROW_STATUS.OK || status === ROW_STATUS.ATENCAO || soFaltaClasse) {
-            const current = runningQty.get(row.ticker) ?? 0;
-            // Sem o `soFaltaClasse` aqui, o aviso de venda sem lastro sobrescreveria
-            // o "escolha a classe" — e a classe é o que destrava a linha.
-            if (row.side === 'SELL' && row.quantity > current + QUANTITY_EPSILON && !soFaltaClasse) {
-                status = ROW_STATUS.ATENCAO;
-                reason = 'Venda maior que a posição acumulada até esta data — falta a compra correspondente.';
-            }
-            runningQty.set(
-                row.ticker,
-                row.side === 'BUY' ? addQty(current, row.quantity) : subQty(current, row.quantity)
-            );
-        }
-
-        resolvedByIndex[index] = { ...row, type, currency, name, status, reason };
+        resolvedByIndex[index] = { ...row, type, currency, name, status, reason, soFaltaClasse };
     }
+
+    // Venda sem lastro — a MESMA régua do commit (`findChronologicalShortfall`):
+    // cronológica, na virada de cada dia, partindo dos lançamentos JÁ GRAVADOS do
+    // ticker. A simulação antiga partia da posição de HOJE: uma venda antiga podia
+    // passar na prévia como OK e o commit recusar o arquivo inteiro (ou o inverso).
+    // Só conta o que de fato entraria, e o aviso não sobrescreve o "escolha a
+    // classe" — é a classe que destrava a linha.
+    for (const ticker of tickers) {
+        const entram = resolvedByIndex.filter((r) => r.ticker === ticker
+            && (r.status === ROW_STATUS.OK || r.status === ROW_STATUS.ATENCAO || r.soFaltaClasse));
+        const furo = findChronologicalShortfall(existingTransactions.filter((t) => t.ticker === ticker), entram);
+        if (!furo) continue;
+        for (const r of entram) {
+            if (r.side === 'SELL' && !r.soFaltaClasse && toDateKey(r.date) === furo.dayKey) {
+                r.status = ROW_STATUS.ATENCAO;
+                r.reason = 'Venda maior que a posição acumulada até esta data — falta a compra correspondente.';
+            }
+        }
+    }
+    for (const r of resolvedByIndex) delete r.soFaltaClasse;
 
     // Posição resultante por ticker — o material da conferência contra a origem.
     //
@@ -290,23 +334,21 @@ export const applyImport = async ({ userId, walletId, rows, source }) => {
         })
     );
 
-    // --- Pré-voo: nenhum ticker pode terminar com saldo negativo ---
-    // `recalculatePosition` LANÇA "Saldo insuficiente" quando a quantidade final
-    // fica negativa (financialService.js:1076). Descobrir isso depois do
-    // insertMany deixaria o lote gravado com a posição quebrada, então a checagem
-    // vem antes de qualquer escrita e derruba o commit inteiro.
-    const existing = await UserAsset.find({ user: userId, wallet: walletId, ticker: { $in: tickers } })
-        .select('ticker quantity')
+    // --- Pré-voo: nenhum ticker pode ficar com saldo negativo em NENHUM dia ---
+    // `recalculatePosition` LANÇA "Saldo insuficiente" quando o saldo fica negativo
+    // na virada de qualquer dia. Descobrir isso depois do insertMany deixaria o
+    // lote gravado com a posição quebrada, então a checagem vem antes de qualquer
+    // escrita e derruba o commit inteiro. Por isso a simulação é CRONOLÓGICA e
+    // parte dos lançamentos já gravados do ticker (não da posição final de hoje):
+    // uma venda importada pode cair antes de compras que já estão na carteira.
+    const existing = await AssetTransaction.find({ user: userId, wallet: walletId, ticker: { $in: tickers } })
+        .select('ticker date type quantity')
         .lean();
-    const saldo = new Map(existing.map((a) => [a.ticker, safeQuantity(a.quantity)]));
-    for (const row of normalized) {
-        const atual = saldo.get(row.ticker) ?? 0;
-        saldo.set(row.ticker, row.side === 'BUY' ? addQty(atual, row.quantity) : subQty(atual, row.quantity));
-    }
-    const negativo = [...saldo.entries()].find(([, qty]) => qty < -QUANTITY_EPSILON);
-    if (negativo) {
+    const furo = findChronologicalShortfall(existing, normalized);
+    if (furo) {
         throw AppError.badRequest(
-            `As vendas de ${negativo[0]} somam mais do que as compras. Inclua as compras que faltam ou remova essas vendas antes de importar.`
+            `As vendas de ${furo.ticker} ficam maiores que as compras em ${formatDayBr(furo.dayKey)} `
+            + `(faltam ${furo.shortfall} até essa data). Inclua as compras anteriores que faltam ou remova essas vendas antes de importar.`
         );
     }
 

@@ -17,7 +17,6 @@ export const SecuritySection = () => {
     const [setupData, setSetupData] = useState<{ secret: string; qr: string } | null>(null);
     const [setupPassword, setSetupPassword] = useState('');
     const [mfaCode, setMfaCode] = useState('');
-    const [disablePwd, setDisablePwd] = useState('');
     const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
     const [mfaBusy, setMfaBusy] = useState(false);
     const [mfaMsg, setMfaMsg] = useState<Msg>(null);
@@ -37,7 +36,6 @@ export const SecuritySection = () => {
         setSetupData(null);
         setSetupPassword('');
         setMfaCode('');
-        setDisablePwd('');
         setMfaMsg(null);
     };
 
@@ -82,8 +80,7 @@ export const SecuritySection = () => {
         setMfaMsg(null);
         try {
             await authService.disableMfa({
-                token: mfaCode.trim() || undefined,
-                password: disablePwd || undefined,
+                token: mfaCode.trim(),
             });
             setMfaEnabled(false);
             resetMfaFlow();
@@ -248,10 +245,12 @@ export const SecuritySection = () => {
                     {/* Painel de DISABLE (confirmar com código ou senha) */}
                     {mode === 'disable' && (
                         <div className="mt-5 pt-4 border-t border-slate-800/50 animate-fade-in">
-                            <p className="text-xs text-slate-400 mb-3">Confirme com um código do app <span className="text-slate-500">ou</span> sua senha para desativar.</p>
+                            {/* O servidor exige o SEGUNDO FATOR para desativar: só a senha não basta —
+                                quem roubou a senha não pode tirar a proteção que existe contra isso. */}
+                            <p className="text-xs text-slate-400 mb-3">Confirme com um código do app autenticador <span className="text-slate-500">ou</span> um código de recuperação para desativar.</p>
                             <div className="space-y-3">
                                 <Input
-                                    label="Código do app (opcional)"
+                                    label="Código do app ou de recuperação"
                                     type="text"
                                     inputMode="numeric"
                                     maxLength={11}
@@ -260,20 +259,13 @@ export const SecuritySection = () => {
                                     containerClassName="mb-0"
                                     className="text-center tracking-widest"
                                 />
-                                <Input
-                                    label="Senha da conta (opcional)"
-                                    type="password"
-                                    value={disablePwd}
-                                    onChange={(e) => { setDisablePwd(e.target.value); setMfaMsg(null); }}
-                                    containerClassName="mb-0"
-                                />
                             </div>
                             {mfaMsg && (
                                 <div className="mt-3 p-2 text-xs font-bold text-center rounded-lg text-red-400 bg-red-900/20">{mfaMsg.text}</div>
                             )}
                             <div className="mt-4 flex justify-end gap-3">
                                 <Button type="button" variant="ghost" onClick={resetMfaFlow} className="w-auto px-4 py-2 text-xs">Cancelar</Button>
-                                <Button type="button" status={mfaBusy ? 'loading' : 'idle'} onClick={confirmDisable} className="w-auto px-6 py-2 text-xs">Desativar</Button>
+                                <Button type="button" status={mfaBusy ? 'loading' : 'idle'} onClick={confirmDisable} disabled={!mfaCode.trim()} className="w-auto px-6 py-2 text-xs">Desativar</Button>
                             </div>
                         </div>
                     )}

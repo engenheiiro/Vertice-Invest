@@ -171,7 +171,7 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                             <Info size={12} className="text-slate-600 cursor-help hover:text-blue-400 transition-colors" />
                             <div className="absolute left-0 top-6 w-64 p-4 bg-elevated border border-slate-700 rounded-xl shadow-2xl z-50 opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none text-left">
                                 <p className="text-[10px] text-slate-300 leading-relaxed mb-2">
-                                    Scanner quantitativo que detecta anomalias técnicas a cada <strong>15 minutos</strong>. Apenas sinais <strong className="text-gold">GOLD</strong>. Saída automática em +5% (alvo) ou -3% (stop).
+                                    Scanner quantitativo que detecta anomalias técnicas a cada <strong>15 minutos</strong>. Apenas sinais <strong className="text-gold">GOLD</strong>. Saída automática em +3,5% (alvo) ou -3,5% (stop).
                                 </p>
                                 <div className="space-y-1.5">
                                     <div className="flex items-center gap-2 text-[10px]">

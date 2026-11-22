@@ -23,7 +23,7 @@ const canPersist = () => mongoose.connection?.readyState === 1;
 
 // Identidade da instância que grava a execução. Resolvida uma vez: hostname não
 // muda em runtime e a chamada é síncrona.
-const INSTANCE_ID = `${os.hostname()}#${process.pid}`;
+export const INSTANCE_ID = `${os.hostname()}#${process.pid}`;
 
 const safeCreate = async (doc) => {
     if (!canPersist()) return null;

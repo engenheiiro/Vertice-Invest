@@ -17,6 +17,7 @@
 import mongoose from 'mongoose';
 import { CircuitBreaker } from '../utils/resilience.js';
 import logger from '../config/logger.js';
+import { redactLogPath } from './accessLog.js';
 
 const breaker = new CircuitBreaker({ name: 'mongodb', failureThreshold: 3, cooldownMs: 15_000 });
 
@@ -59,7 +60,7 @@ export const mongoCircuitBreaker = (req, res, next) => {
     logger.warn('🔌 [MongoCB] Request rejeitada (fail-fast): banco indisponível', {
         source: 'mongoCircuitBreaker',
         // req.path, nunca originalUrl: a query string crua vazaria segredo (?token=) no log.
-        path: req.path,
+        path: redactLogPath(req.path),
         circuit: breaker.state,
         readyState: mongoose.connection.readyState,
     });

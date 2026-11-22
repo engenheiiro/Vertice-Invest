@@ -12,7 +12,7 @@ process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
 
 vi.mock('bcryptjs', () => ({ default: { compare: vi.fn(), hash: vi.fn(), genSalt: vi.fn() } }));
 vi.mock('jsonwebtoken', () => ({ default: { sign: vi.fn(() => 'signed.jwt.token'), verify: vi.fn() } }));
-vi.mock('../models/User.js', () => ({ default: { findOne: vi.fn() } }));
+vi.mock('../models/User.js', () => ({ default: { findOne: vi.fn(), updateOne: vi.fn(), findOneAndUpdate: vi.fn() } }));
 vi.mock('../models/RefreshToken.js', () => ({ default: { create: vi.fn().mockResolvedValue({}) } }));
 vi.mock('../models/AuditLog.js', () => ({ default: { create: vi.fn(() => Promise.resolve()) } }));
 vi.mock('../services/emailService.js', () => ({ sendResetPasswordEmail: vi.fn() }));
@@ -43,6 +43,9 @@ const baseUser = (over = {}) => ({
 beforeEach(() => {
   vi.clearAllMocks();
   bcrypt.compare.mockResolvedValue(true); // senha sempre correta nestes testes
+  // TOTP: o passo é aceito; backup: nenhum hash casa (códigos de teste são aleatórios).
+  User.updateOne.mockImplementation(async (filter) => ({ modifiedCount: filter.mfaBackupCodes ? 0 : 1 }));
+  User.findOneAndUpdate.mockResolvedValue({ mfaFailedAttempts: 1 });
 });
 
 describe('login — gate de MFA (I14)', () => {

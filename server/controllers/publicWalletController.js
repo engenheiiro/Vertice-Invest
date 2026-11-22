@@ -58,7 +58,11 @@ const publicRoute = (build) => async (req, res, next) => {
         const walletId = String(wallet._id);
         const payload = await build({ req, wallet, userId, walletId });
 
-        res.set('Cache-Control', 'public, max-age=60'); // teaser: cache de 1min
+        // private, no-store: com 'public, max-age=60' um CDN/proxy compartilhado
+        // podia seguir servindo a carteira depois de o titular DESPUBLICAR o link
+        // (ou trocar 'mostrar valores'). A memoização de patrimônio abaixo é no
+        // servidor e continua valendo; o que não pode é cópia fora do nosso controle.
+        res.set('Cache-Control', 'private, no-store');
         res.json(payload);
     } catch (error) {
         // (E5) Erros da rota pública ganham tag própria no Sentry — além do
@@ -82,7 +86,7 @@ const publicRoute = (build) => async (req, res, next) => {
  * abas precisam do MESMO fator, senão cada uma normalizaria por uma base
  * diferente e os números não conversariam entre si.
  *
- * O patrimônio fica memoizado por carteira pelo mesmo minuto do Cache-Control:
+ * O patrimônio fica memoizado por carteira por um minuto, no servidor:
  * sem isso cada aba do link refaria o payload inteiro (cotações, snapshots,
  * métricas de risco) só para descobrir o divisor.
  */

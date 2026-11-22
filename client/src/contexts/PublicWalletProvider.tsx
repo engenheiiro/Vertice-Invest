@@ -1,7 +1,7 @@
 import React, { ReactNode, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-    WalletContext, DEFAULT_SUB_ALLOCATION,
+    WalletContext, DEFAULT_SUB_ALLOCATION, toUsdRate,
     type WalletContextType, type WalletDataSource, type HistoryPoint,
 } from './WalletContext';
 import { publicWalletService, publicWalletQueryOptions, type PublicWalletData } from '../services/publicWallet';
@@ -68,7 +68,7 @@ export const PublicWalletProvider: React.FC<PublicWalletProviderProps> = ({ toke
         targetReserve: 0,
         targetMonthlyDividendIncome: 0,
         targetSubAllocation: DEFAULT_SUB_ALLOCATION,
-        usdRate: walletQuery.data?.meta?.usdRate || 5.75,
+        usdRate: toUsdRate(walletQuery.data?.meta?.usdRate),
         isLoading: walletQuery.isLoading || historyQuery.isLoading,
         isRefreshing: walletQuery.isFetching && !walletQuery.isLoading,
         isPrivacyMode: showValues ? isPrivacyMode : true,

@@ -71,7 +71,8 @@ Veja [`.env.example`](.env.example) para a lista completa. As principais:
 | `CLIENT_URL` | Origem do app no CORS (apex e www entram juntos) |
 | `CORS_EXTRA_ORIGINS` | Origens extras no CORS, separadas por vírgula (opcional) |
 
-Tunáveis opcionais (têm default): `PLAN_CACHE_TTL_MS`, `BUY_THRESHOLD`, `MAX_CRYPTO_PER_PROFILE`, `MARKET_CACHE_MINUTES`, `DEFAULT_SELIC_FALLBACK`.
+Tunáveis opcionais (têm default): `PLAN_CACHE_TTL_MS`, `MAX_CRYPTO_PER_PROFILE`, `MARKET_CACHE_MINUTES`, `DEFAULT_SELIC_FALLBACK`.
+O threshold de recomendação (score ≥ 70 → BUY) é fixo no código — regra inviolável, não tunável por ambiente.
 Para upload de sourcemaps ao Sentry no build do client: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`.
 
 > **Nunca** versione segredos. O `.env` é ignorado pelo git; o pre-commit bloqueia commits de `.env` e roda secret-scan.

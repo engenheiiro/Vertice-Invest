@@ -33,23 +33,103 @@ const describeSignatureAge = (signature) => {
     return Math.floor(Date.now() / 1000) - ts;
 };
 
-export const isValidSignature = (req) => {
+// O `sanitizeInput` global apaga de req.query toda chave com ponto (defesa contra
+// dotted-path no Mongo) — e `data.id`, o nome oficial do parâmetro no webhook
+// moderno, tem ponto. Resultado: `req.query['data.id']` era SEMPRE undefined em
+// produção, e o id que o MP assina nunca chegava à verificação. Aqui lemos a
+// query crua da URL original, só neste controller e só para estas chaves, sem
+// reabrir a chave pontuada para o resto da aplicação. Valor repetido
+// (`?data.id=a&data.id=b`) é ambíguo e vira "ausente" — fail-closed.
+const readRawQueryParam = (req, name) => {
+    const url = typeof req.originalUrl === 'string' ? req.originalUrl : null;
+    if (url) {
+        try {
+            const values = new URL(url, 'http://webhook.local').searchParams.getAll(name);
+            return values.length === 1 && values[0] !== '' ? values[0] : null;
+        } catch {
+            return null;
+        }
+    }
+    // Sem URL original (chamada direta em teste): usa a query já parseada, mas só
+    // se for escalar — array/objeto vindo de query nunca é um id válido.
+    const value = req.query?.[name];
+    return typeof value === 'string' && value !== '' ? value : null;
+};
+
+const asIdString = (value) => (
+    (typeof value === 'string' && value !== '') || (typeof value === 'number' && Number.isFinite(value))
+        ? String(value)
+        : null
+);
+
+/**
+ * Id do recurso que a notificação pede para processar. Todas as fontes presentes
+ * (body `data.id`, query `data.id`, query `id`) precisam concordar: se divergem,
+ * não há um id único que a assinatura possa cobrir e a notificação é recusada.
+ */
+export const resolveNotificationId = (req) => {
+    const bodyId = asIdString(req.body?.data?.id);
+    const queryDataId = readRawQueryParam(req, 'data.id');
+    const queryId = readRawQueryParam(req, 'id');
+    const present = [bodyId, queryDataId, queryId].filter(Boolean);
+    const normalized = new Set(present.map((id) => id.toLowerCase()));
+    return {
+        id: present[0] ?? null,
+        conflict: normalized.size > 1,
+        hasDataId: Boolean(bodyId || queryDataId),
+    };
+};
+
+// Assinaturas no formato legado (manifesto SEM o trecho "id:...;") não amarram o
+// recurso: o mesmo par (request-id, ts, v1) capturado poderia ser reenviado
+// dentro da janela de 5 min com QUALQUER id. Para fechar esse replay, cada
+// assinatura sem id fica presa ao primeiro id com que foi usada; reentregas do
+// MP com o mesmo id continuam passando, troca de id é recusada. Memória do
+// processo, limpa pela própria janela.
+const unboundSignatureUse = new Map();
+
+const bindUnboundSignature = (key, id) => {
+    const nowMs = Date.now();
+    for (const [k, entry] of unboundSignatureUse) {
+        if (entry.expiresAt <= nowMs) unboundSignatureUse.delete(k);
+    }
+    const normalizedId = String(id).toLowerCase();
+    const existing = unboundSignatureUse.get(key);
+    if (existing) return existing.id === normalizedId;
+    unboundSignatureUse.set(key, { id: normalizedId, expiresAt: nowMs + (WEBHOOK_MAX_AGE_SECONDS * 2 * 1000) });
+    return true;
+};
+
+/**
+ * Verifica o HMAC e devolve QUAL id ele autoriza. O handler só processa esse id:
+ * antes, a verificação aceitava a assinatura e o handler escolhia o id por conta
+ * própria — com o manifesto sem id sempre entre as candidatas, uma assinatura
+ * legítima capturada servia para qualquer `data.id`.
+ *
+ * Retorno: `{ valid, resourceId }`; quando inválida, `resourceId` é null.
+ */
+export const verifyWebhookSignature = (req) => {
     const signature = req.headers['x-signature'];
     const requestId = req.headers['x-request-id'];
     const WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET;
+    const rejected = { valid: false, resourceId: null };
+
+    const { id: notificationId, conflict, hasDataId } = resolveNotificationId(req);
+    // Fontes de id que discordam entre si: nenhuma assinatura cobre as duas.
+    if (conflict) return rejected;
 
     // Sem secret: fail-CLOSED em produção (rejeita) para impedir spoof de pagamento.
     // Em dev/test, permite passar para não travar setups locais.
     if (!WEBHOOK_SECRET) {
         if (process.env.NODE_ENV === 'production') {
             logger.error("⛔ Webhook MP rejeitado: MP_WEBHOOK_SECRET não configurado em produção.");
-            return false;
+            return rejected;
         }
         logger.warn("⚠️ Webhook sem segredo (MP_WEBHOOK_SECRET) — liberado apenas em ambiente não-produção.");
-        return true;
+        return { valid: true, resourceId: notificationId };
     }
 
-    if (!signature || !requestId) return false;
+    if (typeof signature !== 'string' || typeof requestId !== 'string' || !signature || !requestId) return rejected;
 
     // Formato x-signature: "ts=123456789,v1=hash..."
     const parts = signature.split(',');
@@ -57,55 +137,57 @@ export const isValidSignature = (req) => {
     let v1 = null;
 
     parts.forEach(p => {
-        const [k, v] = p.split('=');
+        const [k, v] = p.split('=').map((piece) => piece?.trim());
         if (k === 'ts') ts = v;
         if (k === 'v1') v1 = v;
     });
 
-    if (!ts || !v1) return false;
+    if (!ts || !v1) return rejected;
 
     // A assinatura também precisa ser recente. Sem essa janela, uma requisição
     // legítima capturada poderia ser repetida indefinidamente.
     const timestamp = Number(ts);
     if (!Number.isSafeInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > WEBHOOK_MAX_AGE_SECONDS) {
-        return false;
+        return rejected;
     }
 
-    // Template assinado: "id:[data.id];request-id:[x-request-id];ts:[ts];" — mas a
-    // regra do Mercado Pago é OMITIR o trecho cujo valor não veio na notificação.
-    // A notificação IPN legada (?topic=payment&id=X) não traz `data.id`, então ela
-    // é assinada SEM o "id:...;". Montar um único manifesto rígido rejeitava essas
-    // entregas para sempre: o MP retentava em loop o mesmo pagamento (visto em
-    // produção) e uma cobrança cuja única entrega viesse nesse formato seria
-    // descartada em silêncio.
-    //
-    // Testar variantes não enfraquece a verificação: toda candidata continua
-    // exigindo um HMAC gerado com o mesmo segredo.
-    const rawIds = [req.query['data.id'], req.body?.data?.id, req.query.id]
-        .filter((value) => value !== undefined && value !== null && value !== '')
-        .map(String);
+    const received = Buffer.from(v1, 'hex');
 
-    const idVariants = [...new Set(rawIds.flatMap((id) => [id, id.toLowerCase()]))];
-
-    // `undefined` representa a variante sem o trecho de id (formato legado).
-    const manifests = [...idVariants, undefined].map((id) => (
-        `${id === undefined ? '' : `id:${id};`}request-id:${requestId};ts:${ts};`
-    ));
-
-    let received;
-    try {
-        received = Buffer.from(v1, 'hex');
-    } catch {
-        return false;
-    }
-
-    return manifests.some((manifest) => {
+    const matches = (manifest) => {
         const calculated = crypto.createHmac('sha256', WEBHOOK_SECRET).update(manifest).digest('hex');
         const expected = Buffer.from(calculated, 'hex');
         // Comparação constant-time (evita timing attack na verificação).
         return expected.length === received.length && crypto.timingSafeEqual(expected, received);
-    });
+    };
+
+    // Template assinado: "id:[data.id];request-id:[x-request-id];ts:[ts];". O MP
+    // assina ids alfanuméricos em minúsculas, então as duas grafias são testadas
+    // — ambas são o MESMO id que vai ser processado.
+    if (notificationId) {
+        const variants = [...new Set([notificationId, notificationId.toLowerCase()])];
+        if (variants.some((id) => matches(`id:${id};request-id:${requestId};ts:${ts};`))) {
+            return { valid: true, resourceId: notificationId };
+        }
+    }
+
+    // Formato legado: a regra do MP é OMITIR o trecho cujo valor não veio na
+    // notificação. O IPN legado (?topic=payment&id=X) não traz `data.id`, então é
+    // assinado SEM o "id:...;" — rejeitá-lo fazia o MP retentar em loop o mesmo
+    // pagamento (visto em produção). Mas só vale para quem de fato NÃO tem
+    // `data.id`: uma notificação moderna cujo HMAC só confere sem o id é uma
+    // assinatura reaproveitada com o id trocado. E, como esse manifesto não
+    // amarra o recurso, a assinatura fica presa ao primeiro id com que chegou.
+    if (!hasDataId && matches(`request-id:${requestId};ts:${ts};`)) {
+        if (!notificationId) return { valid: true, resourceId: null };
+        if (bindUnboundSignature(`${requestId}|${ts}|${v1.toLowerCase()}`, notificationId)) {
+            return { valid: true, resourceId: notificationId };
+        }
+    }
+
+    return rejected;
 };
+
+export const isValidSignature = (req) => verifyWebhookSignature(req).valid;
 
 // Meios que o Mercado Pago NÃO consegue cobrar de forma recorrente. Um pagamento
 // por aqui é sempre avulso, por definição.
@@ -122,7 +204,7 @@ const NON_RECURRING_PAYMENT_TYPES = new Set(['bank_transfer', 'ticket', 'atm']);
  * quem JÁ teve assinatura cairia no caminho recorrente e o período viria de um
  * preapproval velho — o cliente pagaria e não receberia dia nenhum.
  */
-const resolvePreapprovalId = (payment, user) => {
+export const resolvePreapprovalId = (payment, user) => {
     if (NON_RECURRING_PAYMENT_TYPES.has(payment?.payment_type_id)) return null;
 
     return payment?.metadata?.preapproval_id
@@ -319,19 +401,23 @@ const handlePaymentEvent = async (resourceId) => {
 
 export const handleMercadoPagoWebhook = async (req, res) => {
     try {
-        const { type, data } = req.body;
+        const { type } = req.body || {};
 
         // Toda variação de notificação (body ou query) precisa de assinatura.
         // Nunca processe um id de pagamento antes de validar o HMAC e o timestamp.
-        if (!isValidSignature(req)) {
+        // O id processado é o que a assinatura autorizou — nunca outro lido à parte.
+        const verification = verifyWebhookSignature(req);
+        if (!verification.valid) {
+            const rawDataId = readRawQueryParam(req, 'data.id');
+            const rawId = readRawQueryParam(req, 'id');
             // Detalha o formato recebido: notificações IPN legadas chegam sem
             // x-signature e são rejeitadas aqui, enquanto o webhook moderno da
             // MESMA cobrança chega assinado logo depois. Sem estes campos, os dois
             // casos ficam indistinguíveis no log e parecem perda de pagamento.
             logger.warn('⛔ Webhook MP rejeitado: assinatura inválida ou expirada.', {
                 ip: req.ip,
-                topic: req.body?.type || req.query.topic || null,
-                resourceId: req.body?.data?.id || req.query['data.id'] || req.query.id || null,
+                topic: req.body?.type || req.query?.topic || null,
+                resourceId: req.body?.data?.id || rawDataId || rawId || null,
                 hasSignature: Boolean(req.headers['x-signature']),
                 hasRequestId: Boolean(req.headers['x-request-id']),
                 // Discrimina as duas hipóteses restantes para a MESMA cobrança
@@ -341,16 +427,15 @@ export const handleMercadoPagoWebhook = async (req, res) => {
                 //   configurações de webhook no painel, cada uma com sua chave,
                 //   apontando para a mesma URL).
                 idSource: req.body?.data?.id ? 'body'
-                    : req.query['data.id'] ? 'query:data.id'
-                    : req.query.id ? 'query:id' : 'ausente',
+                    : rawDataId ? 'query:data.id'
+                    : rawId ? 'query:id' : 'ausente',
                 signatureAgeSeconds: describeSignatureAge(req.headers['x-signature']),
             });
             return res.status(401).send('Invalid signature');
         }
 
-        const topic = type || req.query.topic;
-        // `data.id` é o nome do parâmetro no formato moderno; `id`, no IPN legado.
-        const resourceId = (data && data.id) || req.query['data.id'] || req.query.id;
+        const topic = type || req.query?.topic;
+        const resourceId = verification.resourceId;
 
         if (!topic || !resourceId) {
             logger.warn(`Webhook MP rejeitado: tópico ou recurso ausente. IP: ${req.ip}`);

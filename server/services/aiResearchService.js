@@ -405,6 +405,31 @@ export const loadPublishedRankingBaseline = async (assetClass, strategy) => {
     }
 };
 
+// Ordem de preferência no EMPATE do melhor perfil da Auditoria Completa.
+const AUDIT_PROFILE_PRIORITY = ['DEFENSIVE', 'MODERATE', 'BOLD'];
+
+/**
+ * Melhor perfil de um ativo FORA do ranking, para a Auditoria Completa.
+ *
+ * O `reduce((a, b) => a[1] > b[1] ? a : b)` anterior devolvia o perfil que vinha
+ * DEPOIS no objeto quando havia empate — a escolha dependia da ordem de inserção
+ * das chaves. Agora o empate cai no mais conservador (DEFENSIVE > MODERATE > BOLD).
+ * Devolve `null` quando nenhum perfil tem score positivo: ativo sem perfil
+ * elegível não pode aparecer como "BOLD 0".
+ *
+ * Exportado para teste.
+ */
+export const pickBestAuditProfile = (scores) => {
+    let best = null;
+    for (const profile of AUDIT_PROFILE_PRIORITY) {
+        const value = Number(scores?.[profile]);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        // `>` estrito: no empate fica o que veio antes na ordem de prioridade.
+        if (!best || value > best[1]) best = [profile, value];
+    }
+    return best;
+};
+
 // Exportado para teste (baseline publicado — ver comentário interno).
 // `baseline` opcional evita a segunda leitura quando quem chama já o carregou.
 export const calculateRankingDelta = async (currentList, assetClass, strategy, baseline) => {
@@ -498,6 +523,10 @@ export const aiResearchService = {
                                     calibrationAsset,
                                     coverage,
                                     context.MACRO.RATES_STALE,
+                                    // Teto pela MENOR confiança (legado × calibração):
+                                    // sem isto, banco/seguradora/holding/O&G com dado
+                                    // stale e ausente publicava BUY acima do teto do legado.
+                                    result.dataConfidence,
                                 ),
                                 axes,
                                 currentScores: result.scores,
@@ -641,9 +670,23 @@ export const aiResearchService = {
                         thesis: `Audit: Score ${inRanking.score} em ${inRanking.riskProfile}`
                     };
                 }
-                // Ativos fora do ranking: usa o melhor perfil disponível
-                const entries = Object.entries(asset.scores);
-                const [bestProfile, bestScore] = entries.reduce((a, b) => a[1] > b[1] ? a : b);
+                // Ativos fora do ranking: usa o melhor perfil disponível.
+                const best = pickBestAuditProfile(asset.scores);
+                if (!best) {
+                    // Todos os scores zerados (ex.: STOCK reprovado na cobertura da
+                    // calibração). Antes o reduce devolvia o ÚLTIMO perfil empatado e a
+                    // Auditoria Completa exibia "BOLD 0" — um perfil que o ativo nunca
+                    // recebeu. Sem perfil elegível, ele sai marcado como excluído.
+                    return {
+                        ...asset,
+                        riskProfile: null,
+                        score: 0,
+                        action: 'WAIT',
+                        excluded: true,
+                        thesis: 'Audit: excluído — nenhum perfil elegível (scores zerados)'
+                    };
+                }
+                const [bestProfile, bestScore] = best;
                 return {
                     ...asset,
                     riskProfile: bestProfile,

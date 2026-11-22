@@ -61,11 +61,33 @@ const B3_OPEN_HOUR_BRT = 10;
  *
  * Dia sem pregão (fim de semana, feriado) cai no mesmo balde: a barra de
  * continuação do Yahoo data o dia, mas não houve sessão para negociar.
+ *
+ * E a sessão de um dia útil PASSADO também, enquanto nenhum pregão começou
+ * depois dela: fora do pregão o endpoint de cotação ZERA `regularMarketVolume`
+ * da última sessão. Medido em 22/11/2026 (domingo, depois do feriado de 20/11):
+ * PETR4, MGLU3 e CMIG4 vieram datados de 19/11 com volume 0, enquanto o candle
+ * do mesmo dia trazia 60 milhões de papéis negociados só em MGLU3 — e o sync de
+ * domingo recusou ~450 ativos vivos e somou uma falha a cada um. Nessa janela o
+ * vivo e o morto respondem igual; o volume só volta a separar os dois quando o
+ * pregão seguinte abre.
  */
 export const isExpectedNoTrade = (sessionKey, now = new Date()) => {
     if (!sessionKey) return false;
     if (!isBrBusinessDay(sessionKey)) return true;
-    return sessionKey === brazilDateKey(now) && brazilHour(now) < B3_OPEN_HOUR_BRT;
+    const todayKey = brazilDateKey(now);
+    if (sessionKey === todayKey) return brazilHour(now) < B3_OPEN_HOUR_BRT;
+    if (sessionKey > todayKey) return false;
+    // Primeiro pregão depois da sessão datada. Se ainda não começou, não houve
+    // como a fonte ter visto negócio novo — o zero não prova nada.
+    const next = new Date(`${sessionKey}T12:00:00Z`);
+    for (let i = 0; i < 15; i++) {
+        next.setUTCDate(next.getUTCDate() + 1);
+        const key = next.toISOString().slice(0, 10);
+        if (!isBrBusinessDay(key)) continue;
+        if (key > todayKey) return true;
+        return key === todayKey && brazilHour(now) < B3_OPEN_HOUR_BRT;
+    }
+    return false;
 };
 
 const MAX_FAILURES_BEFORE_BLACKLIST = 10;
@@ -916,8 +938,17 @@ export const marketDataService = {
             // Tickers solicitados que NÃO retornaram preço válido ganham failCount
             // (gate de 1/dia, teto de 999, blue chips protegidas). Regra única em
             // buildQuoteFailureOps — ver comentário lá.
+            //
+            // "Sem negócio" fora do pregão é INCONCLUSIVO (ver isExpectedNoTrade):
+            // nada é gravado, mas também não conta falha — senão todo fim de
+            // semana e feriado somava uma falha a cada papel vivo da B3.
+            const inconclusiveTickers = new Set(
+                noTradeTickers
+                    .filter((e) => isExpectedNoTrade(e.split('@')[1], now))
+                    .map((e) => e.split('@')[0]),
+            );
             const failedAssets = toUpdate
-                .filter(t => !successfulTickers.has(t))
+                .filter(t => !successfulTickers.has(t) && !inconclusiveTickers.has(t))
                 .map(t => assetMap.get(t));
             operations.push(...this.buildQuoteFailureOps(failedAssets, successfulTickers));
 

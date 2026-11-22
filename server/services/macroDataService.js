@@ -6,18 +6,25 @@ import https from 'https';
 import SystemConfig from '../models/SystemConfig.js';
 import TreasuryBond from '../models/TreasuryBond.js';
 import EconomicIndex from '../models/EconomicIndex.js';
-import { DEFAULT_SELIC_FALLBACK, DEFAULT_NTNB_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import AssetHistory from '../models/AssetHistory.js';
 import { resolveMinInvestment } from '../utils/fixedIncomeView.js';
 import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
-import { fetchTesouroCsv, fetchTesouroDiretoQuotes } from './treasuryPriceService.js';
-import { isBusinessDay, brazilDateKey } from '../utils/dateUtils.js';
+import { fetchTesouroCsv, fetchTesouroDiretoQuotes, expectedTreasuryDataBase } from './treasuryPriceService.js';
+import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
+import { brazilDateKey } from '../utils/dateUtils.js';
 import { trackSource, recordEscalation, recordSourceSkip } from '../utils/sourceHealth.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { brNow } from '../utils/sourceSchedule.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
+
+// 'DD/MM/AAAA' do SGS → Date à meia-noite UTC (a chave de dia da série).
+const parseBcbDate = (raw) => {
+    const [d, m, y] = String(raw || '').split('/');
+    const date = new Date(`${y}-${m}-${d}`);
+    return Number.isFinite(date.getTime()) ? date : null;
+};
 
 // --- Plausibilidade da taxa REAL da NTN-B (Tesouro IPCA+) longa ---
 // Yields reais brasileiros de longo prazo historicamente vivem em ~2%–9%.
@@ -262,18 +269,26 @@ export const macroDataService = {
             if (ipcaVal != null) ipcaSource = 'IBGE';
         }
 
-        // Fallback hardcoded apenas para o que ainda faltar
+        // Sem fonte nenhuma: NADA de constante nossa. Até 22/11/2026 a Selic caía
+        // em DEFAULT_SELIC_FALLBACK (14,25) e o IPCA em 4,50, e `performMacroSync`
+        // gravava os dois — mais CDI e riskFree derivados — POR CIMA do último
+        // valor real do banco, só com `ratesStale` de aviso. Uma queda do BCB e
+        // da BrasilAPI ao mesmo tempo bastava para a carteira inteira render por
+        // uma Selic que podia estar pontos percentuais longe da vigente.
+        //
+        // Agora a Selic sem fonte devolve a ÚLTIMA BOA (a âncora que o chamador
+        // já passa para o guard), e o IPCA sem fonte devolve null; as flags
+        // por indicador dizem ao gravador o que NÃO deve ser escrito.
         let selicIsFallback = false;
         let ipcaIsFallback = false;
         if (selicVal == null) {
-            selicVal = DEFAULT_SELIC_FALLBACK;
+            selicVal = lastGoodSelic > 0 ? lastGoodSelic : null;
             selicIsFallback = true;
-            logger.warn(`⚠️ [Macro] SELIC: BCB e fonte secundária falharam. Fallback hardcoded ${selicVal}%.`);
+            logger.warn(`⚠️ [Macro] SELIC: BCB e fonte secundária falharam. Mantendo o último valor gravado (${selicVal ?? 'nenhum'}%, ratesStale=true).`);
         }
         if (ipcaVal == null) {
-            ipcaVal = 4.50;
             ipcaIsFallback = true;
-            logger.warn(`⚠️ [Macro] IPCA: BCB e fonte secundária falharam. Fallback hardcoded ${ipcaVal}%.`);
+            logger.warn('⚠️ [Macro] IPCA: BCB, BrasilAPI e IBGE falharam. Mantendo o último valor gravado (ratesStale=true).');
         }
 
         // (Guard de autoridade) Só o BCB (meta COPOM, propagada no mesmo dia) MOVE a
@@ -313,12 +328,17 @@ export const macroDataService = {
         );
         registrarTaxa('IPCA', trilha.ipca, ipcaSource, 'O Banco Central não trouxe este indicador');
 
+        // Sem `cdi12m` aqui: "Selic de hoje − 0,10" é a taxa VIGENTE, não o
+        // retorno REALIZADO nos últimos 12 meses — num ciclo de corte ou de alta
+        // os dois divergem por pontos. O acumulado vem da série diária real
+        // (`computeCdiReturn12m`), ou não vem.
         return {
             selic: selicVal,
             ipca: ipcaVal,
-            cdi: Math.max(0, selicVal - 0.10),
-            cdi12m: Math.max(0, selicVal - 0.10),
+            cdi: selicVal != null ? Math.max(0, selicVal - 0.10) : null,
             isFallback: selicIsFallback || ipcaIsFallback,
+            selicIsFallback,
+            ipcaIsFallback,
             selicFrozen,
             sources: { selic: selicFrozen ? 'frozen' : (selicSource || 'fallback'), ipca: ipcaSource || 'fallback' }
         };
@@ -417,14 +437,23 @@ export const macroDataService = {
     async syncDailyEconomicIndexes() {
         let startDateObj = new Date('2023-01-01'); // Default fallback seguro
         let startDateStr = '01/01/2023';
+        // Início da janela de linhas sintéticas legadas, quando houver (ver abaixo).
+        let legacyStart = null;
 
         try {
             const lastEntry = await EconomicIndex.findOne({ series: 'SELIC' }).sort({ date: -1 });
             if (lastEntry) {
                 const d = new Date(lastEntry.date);
                 d.setDate(d.getDate() + 1);
-                startDateObj = d;
-                startDateStr = d.toLocaleDateString('pt-BR');
+                // Linha sintética legada (ver `generateSyntheticData`) não é ponto
+                // de retomada: retomar DEPOIS dela deixava o número inventado no
+                // banco para sempre, porque o BCB nunca mais era perguntado por
+                // aquele dia. Volta para a mais antiga e deixa o dado real
+                // sobrescrever (o upsert é por série+data).
+                const legacy = await this._oldestLegacySyntheticSelicDate();
+                if (legacy && legacy < d) legacyStart = legacy;
+                startDateObj = legacyStart || d;
+                startDateStr = startDateObj.toLocaleDateString('pt-BR');
             }
         } catch (e) {
             logger.debug(`[Macro] Falha ao ler última entrada SELIC, usando default ${startDateStr}: ${e.message}`);
@@ -447,6 +476,7 @@ export const macroDataService = {
                 if (res.data.length > 0) {
                     await this.processDailyData(res.data);
                     logger.info(`✅ [Macro] Sucesso via HTTPS: ${res.data.length} registros.`);
+                    if (legacyStart) await this._purgeLegacySyntheticRows(legacyStart, res.data);
                 } else {
                     logger.info(`✅ [Macro] HTTPS: Nenhum dado novo disponível no BCB.`);
                 }
@@ -467,57 +497,112 @@ export const macroDataService = {
             }
         }
 
-        // Se os endpoints HTTPS não entregarem a série, calculamos o CDI com base
-        // na meta atual para não quebrar os gráficos. Nunca há downgrade de TLS.
-        await this.generateSyntheticData(startDateObj);
+        // BCB fora: NADA é gravado. A série fica onde parou e o próximo sync que
+        // alcançar o BCB retoma do último dia real. Quem consome a curva (ver
+        // utils/cdiCurve.js) já cai no CDI médio do ano para os dias sem linha —
+        // degrada a precisão em memória, sem gravar número inventado.
+        logger.warn('⚠️ [Macro] Série diária da Selic indisponível no BCB; nada gravado — o próximo sync retoma do último dia real.');
     },
 
-    async generateSyntheticData(startDate) {
-        logger.warn("⚠️ [Macro] Ativando Fallback Sintético (Cálculo Local)...");
-        
+    /**
+     * Data da linha SINTÉTICA legada mais antiga da série SELIC (ou null).
+     *
+     * Até 22/11/2026, com o BCB fora, `generateSyntheticData` gravava dias úteis
+     * inteiros a partir da meta corrente — e o sync seguinte retomava DEPOIS
+     * deles, então o dado real nunca os substituía. Essas linhas não têm marca,
+     * mas têm assinatura: o BCB publica a taxa diária com 6 casas, e a conta
+     * `(1 + cdi)^(1/252) − 1` deixava a precisão binária inteira (~17 dígitos).
+     * Janela de 400 dias: é o que o CDI 12m e as carteiras recentes leem, e
+     * limita o custo de um falso positivo a uma releitura de ~1 ano ao BCB.
+     */
+    async _oldestLegacySyntheticSelicDate(now = new Date()) {
         try {
-            // Pega a meta atual salva no banco
-            const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            const currentSelic = config?.selic || DEFAULT_SELIC_FALLBACK;
-            const currentCdi = Math.max(0, currentSelic - 0.10); // Ex: 11.15
-            
-            // Fator diário = (1 + Taxa/100)^(1/252)
-            // Aproximação: Taxa/100/252 (Juros Simples diário para fator percentual do BCB)
-            // O BCB entrega o valor percentual diário (ex: 0.042356)
-            const dailyRateApprox = Math.pow(1 + (currentCdi / 100), 1/252) - 1;
-            const dailyPercentVal = dailyRateApprox * 100;
-
-            const operations = [];
-            let cursor = new Date(startDate);
-            const today = new Date();
-
-            while (cursor <= today) {
-                if (isBusinessDay(cursor)) {
-                    operations.push({
-                        updateOne: {
-                            filter: { series: 'SELIC', date: new Date(cursor) },
-                            update: { 
-                                $set: { 
-                                    value: dailyPercentVal, 
-                                    accumulatedFactor: 1 + dailyRateApprox // 1.0004...
-                                } 
-                            },
-                            upsert: true
-                        }
-                    });
-                }
-                cursor.setDate(cursor.getDate() + 1);
-            }
-
-            if (operations.length > 0) {
-                await EconomicIndex.bulkWrite(operations);
-                logger.info(`✅ [Macro] ${operations.length} registros sintéticos gerados com sucesso.`);
-            } else {
-                logger.info(`✅ [Macro] Base sintética já atualizada.`);
-            }
-
+            const since = new Date(now.getTime() - 400 * 24 * 60 * 60 * 1000);
+            const row = await EconomicIndex.findOne({
+                series: 'SELIC',
+                date: { $gte: since },
+                $expr: { $ne: ['$value', { $round: ['$value', 6] }] },
+            }).sort({ date: 1 }).select('date').lean();
+            return row?.date ? new Date(row.date) : null;
         } catch (e) {
-            logger.error(`❌ [Macro] Falha no Fallback Sintético: ${e.message}`);
+            logger.debug(`[Macro] Varredura de linhas sintéticas legadas falhou: ${e.message}`);
+            return null;
+        }
+    },
+
+    /**
+     * Depois que o BCB respondeu a janela desde `since`, apaga as linhas com
+     * assinatura sintética cuja data o BCB NÃO publicou (feriado nacional que o
+     * gerador antigo contava como dia útil, ou dia gravado com hora deslocada).
+     * O upsert real já sobrescreveu as demais. Sem isto, a linha inventada
+     * sobrevivia e a varredura acima reabria a mesma janela em todo sync.
+     */
+    async _purgeLegacySyntheticRows(since, bcbRows) {
+        try {
+            const realDates = (bcbRows || [])
+                .map((item) => parseBcbDate(item?.data))
+                .filter(Boolean);
+            const res = await EconomicIndex.deleteMany({
+                series: 'SELIC',
+                date: { $gte: since, $nin: realDates },
+                $expr: { $ne: ['$value', { $round: ['$value', 6] }] },
+            });
+            if (res?.deletedCount > 0) {
+                logger.warn(`🧹 [Macro] ${res.deletedCount} linhas sintéticas legadas da Selic diária removidas (dias sem publicação do BCB).`);
+            }
+        } catch (e) {
+            logger.debug(`[Macro] Limpeza de linhas sintéticas legadas falhou: ${e.message}`);
+        }
+    },
+
+    /**
+     * CDI ACUMULADO nos últimos 252 dias úteis, a partir da série diária real
+     * (`EconomicIndex`, série SELIC — a Selic over, que é o CDI a menos de
+     * centésimos e a mesma série que `utils/cdiCurve.js` usa como CDI).
+     *
+     * Substitui `selic − 0,10`, que punha a taxa DE HOJE no lugar do retorno
+     * REALIZADO no ano. Pura: recebe as linhas e devolve número ou null.
+     * Fail-closed — devolve null (e o chamador não grava) quando:
+     *  - há menos de 252 linhas utilizáveis;
+     *  - a linha mais recente tem mais de 10 dias (série parada);
+     *  - a mais antiga é anterior a ~13 meses (buraco no meio da janela);
+     *  - alguma linha traz fator não-finito ou fora de (1, 1,01).
+     *
+     * @param {Array<{date: Date, value?: number, accumulatedFactor?: number}>} rows
+     * @returns {number|null} retorno em % (ex.: 13,42)
+     */
+    cdiReturn12mFromDailyRows(rows, now = new Date()) {
+        const WINDOW = 252;
+        const usable = (rows || [])
+            .map((r) => {
+                const date = new Date(r?.date);
+                const f = Number(r?.accumulatedFactor ?? (1 + Number(r?.value) / 100));
+                return { date, f };
+            })
+            .filter((r) => Number.isFinite(r.date.getTime()))
+            .sort((a, b) => b.date - a.date)
+            .slice(0, WINDOW);
+        if (usable.length < WINDOW) return null;
+        if (usable.some((r) => !Number.isFinite(r.f) || r.f <= 1 || r.f >= 1.01)) return null;
+        const DAY = 24 * 60 * 60 * 1000;
+        const newest = usable[0].date;
+        const oldest = usable[usable.length - 1].date;
+        if (now - newest > 10 * DAY) return null;
+        if (now - oldest > 395 * DAY) return null;
+        const factor = usable.reduce((acc, r) => acc * r.f, 1);
+        const pct = (factor - 1) * 100;
+        return Number.isFinite(pct) && pct > 0 ? Math.round(pct * 10000) / 10000 : null;
+    },
+
+    async computeCdiReturn12m(now = new Date()) {
+        try {
+            const since = new Date(now.getTime() - 400 * 24 * 60 * 60 * 1000);
+            const rows = await EconomicIndex.find({ series: 'SELIC', date: { $gte: since } })
+                .sort({ date: -1 }).limit(252).select('date value accumulatedFactor').lean();
+            return this.cdiReturn12mFromDailyRows(rows, now);
+        } catch (e) {
+            logger.warn(`⚠️ [Macro] CDI 12m: série diária ilegível (${e.message}); valor gravado preservado.`);
+            return null;
         }
     },
 
@@ -525,8 +610,7 @@ export const macroDataService = {
         if (!Array.isArray(dataList)) return;
         
         const operations = dataList.map(item => {
-            const [d, m, y] = item.data.split('/');
-            const dateIso = new Date(`${y}-${m}-${d}`);
+            const dateIso = parseBcbDate(item.data);
             const val = parseFloat(item.valor);
             const dailyFactor = 1 + (val / 100);
 
@@ -606,11 +690,19 @@ export const macroDataService = {
         // quem ninguém chamou não é silêncio de quem falhou.
         const naoConsultadas = new Set();
 
-        for (const [i, { name, id, covers, fetch, skipWhen }] of CURRENCY_SOURCES.entries()) {
+        // Último elo efetivamente CONSULTADO — é dele a falha que o aviso relata.
+        let anterior = null;
+        for (const { name, id, covers, fetch, skipWhen } of CURRENCY_SOURCES) {
             if (reading.usd !== null && reading.btc !== null) break;
-            if (i > 0) {
-                logger.warn(`⚠️ [Câmbio] ${CURRENCY_SOURCES[i - 1].name} não cobriu ${missingLabel()}; tentando ${name}.`);
+            // Elo que não cobre NENHUMA das moedas que ainda faltam é pulado:
+            // com só o dólar faltando, a Coinbase (só BTC) era chamada mesmo
+            // assim — uma requisição jogada fora e um aviso "Yahoo não cobriu
+            // USD; tentando Coinbase" que descrevia uma tentativa sem sentido.
+            if (!covers.some((moeda) => reading[moeda] === null)) continue;
+            if (anterior) {
+                logger.warn(`⚠️ [Câmbio] ${anterior} não cobriu ${missingLabel()}; tentando ${name}.`);
             }
+            anterior = name;
             if (skipWhen?.()) naoConsultadas.add(id);
             for (const moeda of covers) {
                 if (reading[moeda] === null) trilha[moeda].push(id);
@@ -982,6 +1074,16 @@ export const macroDataService = {
             // rodando no mesmo job, macro e PU dividem um único download de ~14 MB.
             const hourKey = currentBrHourKey();
             if (ntnbOfficialMemo.hourKey === hourKey) return ntnbOfficialMemo.rate;
+            // A taxa JÁ ESTÁ no banco: a ingestão do PU (sync:treasury / cron)
+            // grava a mesma "Taxa Venda Manha" do mesmo CSV por título. Num
+            // processo novo (sync:prod) o memo nunca acerta, e baixar ~14 MB só
+            // para ler uma taxa custava ~30s de cada run. O download só acontece
+            // quando a série gravada ainda não chegou ao pregão esperado.
+            const stored = await this._ntnbFromStoredSeries(brazilDateKey());
+            if (isPlausibleNtnbRate(stored)) {
+                ntnbOfficialMemo = { hourKey, rate: stored };
+                return stored;
+            }
             const csv = await fetchTesouroCsv();
             let rate = csv ? this._parseNtnbFromCsv(csv) : null;
             // CSV fora (out/2026: download barrado): o JSON do Tesouro Direto é a
@@ -997,6 +1099,44 @@ export const macroDataService = {
             logger.debug(`[NTN-B] Fonte oficial indisponível (${error.message}). Usando Investidor10.`);
             return null;
         }
+    },
+
+    /**
+     * NTN-B longa a partir da série de PU gravada (TreasuryPriceHistory), com a
+     * MESMA escolha do CSV: IPCA+ (sem Educa+/Renda+), vencimento >= 2035, escada
+     * 2035→2060, taxa plausível. Só vale ponto no pregão esperado
+     * (`expectedTreasuryDataBase`) ou depois — série atrasada devolve null e o
+     * chamador baixa o arquivo. Falha de banco também devolve null.
+     */
+    async _ntnbFromStoredSeries(todayKey) {
+        try {
+            const expected = expectedTreasuryDataBase(todayKey);
+            if (!expected) return null;
+            const docs = await TreasuryPriceHistory.find({ family: { $in: ['IPCA', 'IPCA_JS'] } })
+                .select({ family: 1, maturity: 1, history: { $slice: -1 } })
+                .lean();
+            return this._pickNtnbFromStoredDocs(docs, expected);
+        } catch (error) {
+            logger.debug(`[NTN-B] Série gravada indisponível (${error.message}). Baixando o arquivo.`);
+            return null;
+        }
+    },
+
+    // Função pura da escolha acima — testável sem banco.
+    _pickNtnbFromStoredDocs(docs, expected) {
+        const rows = (docs || [])
+            .map((d) => ({ family: d.family, vencYear: Number(String(d.maturity || '').slice(0, 4)), last: d.history?.[0] }))
+            .filter((r) => r.vencYear >= 2035 && r.last && String(r.last.date) >= expected && isPlausibleNtnbRate(r.last.rate));
+        if (!rows.length) return null;
+        // Data Base mais recente entre os títulos, como no CSV.
+        const maxDate = rows.reduce((m, r) => (String(r.last.date) > m ? String(r.last.date) : m), '');
+        const latest = rows.filter((r) => String(r.last.date) === maxDate)
+            .sort((a, b) => (a.family === 'IPCA' ? 0 : 1) - (b.family === 'IPCA' ? 0 : 1));
+        for (const year of [2035, 2040, 2045, 2050, 2055, 2060]) {
+            const hit = latest.find((r) => r.vencYear === year);
+            if (hit) return hit.last.rate;
+        }
+        return latest.sort((a, b) => b.vencYear - a.vencYear)[0]?.last.rate ?? null;
     },
 
     // Extrai a taxa REAL da NTN-B longa (Tesouro IPCA+, venc. >= 2035) na Data Base
@@ -1186,7 +1326,7 @@ export const macroDataService = {
         // 1. Tesouro Transparente (API oficial gov.br)
         // 2. Investidor10 (scraping — fallback)
         // 3. Última taxa real plausível já persistida no banco
-        // 4. Hardcoded DEFAULT_NTNB_FALLBACK (emergência)
+        // 4. Nenhuma → null (o gravador preserva o valor do banco; nada inventado)
         let ntnbLongRate = null;
         let ntnbSource = null;
 
@@ -1272,10 +1412,16 @@ export const macroDataService = {
                 ntnbLongRate = lastKnown;
                 ntnbSource = 'último-conhecido';
             } else {
-                ntnbLongRate = DEFAULT_NTNB_FALLBACK;
-                ntnbSource = 'hardcoded';
+                // Sem fonte e sem histórico: null, e `performMacroSync` NÃO grava.
+                // O DEFAULT_NTNB_FALLBACK (6,3) que saía daqui era escrito por cima
+                // do `ntnbLong` real do banco — a âncora do Bazin e do spread de
+                // FIIs virava uma constante nossa sem que nada na tela dissesse.
+                // Quem precisa de uma taxa para calcular (scoring) já aplica o
+                // default em memória, sem persistir.
+                ntnbLongRate = null;
+                ntnbSource = null;
             }
-            const msg = `[NTN-B] Nenhuma fonte ao vivo com taxa real plausível; usando fallback (${ntnbSource}: ${ntnbLongRate}%)`;
+            const msg = `[NTN-B] Nenhuma fonte ao vivo com taxa real plausível; ${ntnbLongRate != null ? `usando ${ntnbSource}: ${ntnbLongRate}%` : 'valor gravado preservado'}`;
             logger.warn(`⚠️ ${msg}`);
             Sentry.captureMessage(msg, 'warning');
         }
@@ -1439,8 +1585,10 @@ export const macroDataService = {
         const prior = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).select('selic').lean();
         const official = await this.updateOfficialRates(prior?.selic ?? null);
         
-        // Esta função agora tem Try/Catch interno e Fallback Sintético, não deve quebrar
-        await this.syncDailyEconomicIndexes(); 
+        // Try/catch interno; com o BCB fora não grava nada (sem série sintética).
+        await this.syncDailyEconomicIndexes();
+        // Depois da série diária, para já enxergar os dias que acabaram de entrar.
+        const cdiReturn12m = await this.computeCdiReturn12m();
 
         const currencies = await this.updateCurrencies();
         
@@ -1454,19 +1602,26 @@ export const macroDataService = {
         if (!config) config = new SystemConfig({ key: 'MACRO_INDICATORS' });
 
         if (official) {
-            config.selic = official.selic;
-            config.ipca = official.ipca;
-            config.cdi = official.cdi;
-            if (official.cdi12m) {
-                config.cdiReturn12m = official.cdi12m;
+            // Gravação POR INDICADOR, e só do que alguma fonte trouxe. Indicador
+            // sem fonte mantém o valor do banco; `ratesStale` (abaixo) é o aviso.
+            // O congelado pelo guard é o último valor bom — regravar é idempotente.
+            if (!official.selicIsFallback && official.selic > 0) {
+                config.selic = official.selic;
+                config.cdi = official.cdi;
+                config.riskFree = official.selic;
             }
-            config.riskFree = official.selic;
+            if (!official.ipcaIsFallback && Number.isFinite(official.ipca)) {
+                config.ipca = official.ipca;
+            }
 
             // Observabilidade: marca a fonte efetiva de cada taxa e se houve fallback.
             // ratesUpdatedAt só é carimbado quando a Selic veio fresca e autoritativa —
             // nem fallback hardcoded nem valor congelado pelo guard contam como fresco.
             config.ratesStale = !!official.isFallback || !!official.selicFrozen;
-            config.ratesSources = official.sources || { selic: null, ipca: null };
+            // A fonte da NTN-B é do bloco do Tesouro (abaixo): sobrevive aqui para
+            // não sumir num run em que o Tesouro não trouxe taxa nova.
+            const priorNtnbSource = config.ratesSources?.ntnb ?? null;
+            config.ratesSources = { ...(official.sources || { selic: null, ipca: null }), ntnb: priorNtnbSource };
             if (!official.isFallback && !official.selicFrozen) {
                 config.ratesUpdatedAt = new Date();
             }
@@ -1515,8 +1670,11 @@ export const macroDataService = {
             config.indicesUpdatedAt = new Date();
         }
 
-        if (spxReturn12m) config.spxReturn12m = spxReturn12m;
-        if (ibovReturn12m) config.ibovReturn12m = ibovReturn12m;
+        // CDI 12m REALIZADO (série diária acumulada). null = série insuficiente ou
+        // parada: o valor gravado fica, em vez de virar a taxa de hoje.
+        if (Number.isFinite(cdiReturn12m)) config.cdiReturn12m = cdiReturn12m;
+        if (Number.isFinite(spxReturn12m)) config.spxReturn12m = spxReturn12m;
+        if (Number.isFinite(ibovReturn12m)) config.ibovReturn12m = ibovReturn12m;
 
         if (treasury && treasury.ntnbLong) {
             config.ntnbLong = treasury.ntnbLong;

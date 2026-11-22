@@ -6,6 +6,7 @@ import {
 import { Modal, Button, Alert } from '../../ui';
 import { useWallet, type AssetType } from '../../../contexts/WalletContext';
 import { useToast } from '../../../contexts/ToastContext';
+import { useDemoGuard } from '../../../hooks/useDemoGuard';
 import { walletService } from '../../../services/wallet';
 import { getErrorMessage } from '../../../utils/errorMessages';
 import { ImportReviewTable, type TickerDecision } from './ImportReviewTable';
@@ -90,6 +91,7 @@ interface Props {
 export const ImportWalletModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const { importCommit, importUndo, activeWalletId, activeWalletName } = useWallet();
     const { addToast } = useToast();
+    const blockInDemo = useDemoGuard();
 
     // --- Hooks primeiro; nenhum guard antes deles (CLAUDE.md) ---
     const [step, setStep] = useState<Step>('source');
@@ -127,6 +129,9 @@ export const ImportWalletModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
     /** Manda as linhas ao servidor para resolver ticker/classe e seguir à conferência. */
     const runPreview = useCallback(async (rows: ImportRow[], detectedSource: ImportSource, parseWarnings: string[]) => {
+        // Demo: a carteira na tela é fictícia, mas a conferência iria ao servidor
+        // com a sessão real. Nada sai daqui no tour.
+        if (blockInDemo('Modo demonstração: a importação fica disponível na sua carteira real.')) return;
         setBusy(true);
         setError(null);
         try {
@@ -146,7 +151,7 @@ export const ImportWalletModal: React.FC<Props> = ({ isOpen, onClose }) => {
         } finally {
             setBusy(false);
         }
-    }, [activeWalletId]);
+    }, [activeWalletId, blockInDemo]);
 
     const handleFile = useCallback(async (file: File | undefined, kind: 'B3' | 'SHEET') => {
         if (!file) return;
@@ -215,6 +220,7 @@ export const ImportWalletModal: React.FC<Props> = ({ isOpen, onClose }) => {
     );
 
     const handleCommit = useCallback(async () => {
+        if (blockInDemo()) return;
         setBusy(true);
         setError(null);
         try {
@@ -228,10 +234,10 @@ export const ImportWalletModal: React.FC<Props> = ({ isOpen, onClose }) => {
         } finally {
             setBusy(false);
         }
-    }, [importCommit, source, rowsToCommit]);
+    }, [importCommit, source, rowsToCommit, blockInDemo]);
 
     const handleUndo = useCallback(async () => {
-        if (!result) return;
+        if (!result || blockInDemo()) return;
         setBusy(true);
         try {
             await importUndo(result.batchId);
@@ -241,7 +247,7 @@ export const ImportWalletModal: React.FC<Props> = ({ isOpen, onClose }) => {
             setError(getErrorMessage(err, 'Não consegui desfazer a importação.'));
             setBusy(false);
         }
-    }, [result, importUndo, addToast, handleClose]);
+    }, [result, importUndo, addToast, handleClose, blockInDemo]);
 
     const downloadTemplate = useCallback(() => {
         const blob = new Blob([buildTemplateCsv()], { type: 'text/csv;charset=utf-8' });

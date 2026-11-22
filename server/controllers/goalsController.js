@@ -13,7 +13,7 @@ import { loadTreasuryPricing } from '../services/treasuryPriceService.js';
 import { monthsRemaining, requiredMonthly, decomposeProgress, fv, annualToMonthly, computeStreak, resolveGoalStatus, calendarMonthsBetween } from '../utils/goalMath.js';
 import { suggestExpectedRate, annualizedWalletReturn, rateDrift } from '../utils/goalRate.js';
 import { orderChainFrom } from '../utils/goalChain.js';
-import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON, resolveCurrentCdiRate } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { isDollarized } from '../utils/assetCurrency.js';
 import { LIMITS_CONFIG } from '../config/subscription.js';
@@ -97,7 +97,8 @@ const getLiveWalletEquity = async (userId, walletId) => {
         if (assets.length === 0) return { equity: 0, snapshot, composition: {}, macro: null };
 
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
-        const cdi = config?.cdi || DEFAULT_SELIC_FALLBACK;
+        // Mesma cadeia do card e do snapshot (CDI → Selic → padrão); ver resolveCurrentCdiRate.
+        const cdi = resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK);
         const usdRate = config?.dollar || 5.75;
         const calcDate = brazilToday();
 

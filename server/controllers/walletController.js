@@ -9,7 +9,7 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import SystemConfig from '../models/SystemConfig.js';
 import { marketDataService } from '../services/marketDataService.js';
 import { financialService } from '../services/financialService.js';
-import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, reconcileRoundedParts, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep } from '../utils/mathUtils.js';
+import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculatePercent, safeValue, safePrice, safeQuantity, percentOf, reconcileRoundedParts, QUANTITY_EPSILON, selectAnchorSnapshot, computeLiveQuota, benchmarkStep, resolveCurrentCdiRate } from '../utils/mathUtils.js';
 import { computeQuotaSharpe, computeQuotaBeta, snapshotDayKey, SHARPE_WINDOW_SNAPSHOTS } from '../utils/walletRisk.js';
 import { brazilDateKey, countBusinessDays, isBusinessDay, toDateKey, startOfDay, parseCalendarDate } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, brazilDateOnly, isMatured } from '../utils/fixedIncome.js';
@@ -56,7 +56,10 @@ export const getDailyFactorForDate = (date, currentConfigRate, cdiCurve = EMPTY_
 };
 
 // HELPER: Calcula KPIs em tempo real (versão leve do getWalletData)
-const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
+// `sinceDayKey` = dia do snapshot-âncora da cota live: devolve também os proventos
+// com ex-date DEPOIS dele (`dividendsSinceAnchor`), a renda que `computeLiveQuota`
+// credita — mesma janela e mesma conta que o card usa.
+export const calculateLiveKPIS = async (userId, currentCdi, walletId, { sinceDayKey = null } = {}) => {
     const activeAssets = await UserAsset.find({ user: userId, wallet: walletId, quantity: { $gt: QUANTITY_EPSILON } });
 
     if (activeAssets.length === 0) return null;
@@ -67,17 +70,23 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
 
     let totalEquity = 0;
     let totalInvested = 0;
-    let totalDividends = 0;
 
     // (5.4 + 5.8) Dividendos, macro e cotações em lote (sem N+1): em vez de um
     // findOne por ativo, getMarketDataMap resolve todos os tickers de uma vez.
+    //
+    // Proventos pelo ACCRUAL (ex-date × quantidade da época), a mesma definição do
+    // card, do snapshot diário e do rebuild. Aqui morava `calculateUserDividends()
+    // .totalAllTime` (data de PAGAMENTO × quantidade de HOJE): o ponto live do
+    // gráfico saltava em relação ao último snapshot sem nada ter acontecido.
+    const todayKey = toDateKey(brazilToday());
     const [divData, usdConfig, marketMap, treasuryPricing] = await Promise.all([
-        financialService.calculateUserDividends(userId, walletId),
+        financialService.accrueDividendsByTicker(userId, walletId, todayKey, { sinceDayKey }),
         SystemConfig.findOne({ key: 'MACRO_INDICATORS' }),
         marketDataService.getMarketDataMap(tickers),
         loadTreasuryPricing(activeAssets),
     ]);
-    totalDividends = divData.totalAllTime;
+    const totalDividends = divData?.total ?? 0;
+    const dividendsSinceAnchor = sinceDayKey ? (divData?.sinceTotal ?? 0) : 0;
 
     const usdRate = usdConfig?.dollar || 5.75;
     const selic = usdConfig?.selic;
@@ -98,7 +107,12 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
             }).value;
         } else {
             const mData = marketMap.get(asset.ticker);
-            val = safeValue(asset.quantity, mData?.price || 0);
+            // Sem cotação marca no CUSTO médio, como o rebuild e o snapshot diário
+            // (`computeEquityAt`) — zerar o saldo aqui e manter o custo fazia o
+            // ponto live despencar contra o snapshot de ontem.
+            val = mData?.price > 0
+                ? safeValue(asset.quantity, mData.price)
+                : safeFloat(asset.totalCost);
         }
 
         totalEquity += safeMult(val, multiplier);
@@ -110,7 +124,8 @@ const calculateLiveKPIS = async (userId, currentCdi, walletId) => {
     return {
         totalEquity,
         totalInvested,
-        totalDividends
+        totalDividends,
+        dividendsSinceAnchor,
     };
 };
 
@@ -210,6 +225,14 @@ const resolveAnchorDayKey = (snapshots, todayKey) => {
     return anchor ? (anchor.dayKey || snapshotDayKey(anchor)) : null;
 };
 
+/**
+ * Lucro realizado da carteira em BRL: TODAS as posições (encerradas e abertas
+ * com venda parcial), cada venda no câmbio do dia dela via positionRealizedProfitBRL
+ * (regra 8 do CLAUDE.md). Exportada para o teste travar a regra.
+ */
+export const sumRealizedProfitBRL = (userAssets, usdRate) =>
+    (userAssets || []).reduce((acc, a) => safeAdd(acc, safeFloat(positionRealizedProfitBRL(a, usdRate))), 0);
+
 const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAssets = []) => {
     const todayKey = toDateKey(brazilToday());
     // Os snapshots definem o dia-âncora, e o accrual precisa dele para recortar a
@@ -241,9 +264,15 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
         //
         // `sinceDayKey` abre o recorte da MESMA janela que a Variação Hoje mede —
         // é ele que explica a queda do dia-ex no detalhamento do dia.
-        snapshotsPromise.then((snaps) => financialService.accrueDividendsByTicker(
-            userId, walletId, todayKey, { sinceDayKey: resolveAnchorDayKey(snaps, todayKey) },
-        )),
+        snapshotsPromise.then(async (snaps) => {
+            const sinceDayKey = resolveAnchorDayKey(snaps, todayKey);
+            const accrued = await financialService.accrueDividendsByTicker(
+                userId, walletId, todayKey, { sinceDayKey },
+            );
+            // O dia do recorte viaja junto: a cota live só pode creditar estes
+            // proventos se o âncora DELA for este mesmo dia (ver computeWalletMetrics).
+            return { ...accrued, sinceDayKey };
+        }),
         snapshotsPromise,
         // Série de risco (Sharpe): janela própria, MAIOR e com o mesmo filtro de
         // patrimônio do /performance — é o que garante que os dois caminhos vejam
@@ -278,7 +307,7 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
     // Fail-open para a definição ANTIGA (caixa) se o accrual cair: um número um pouco
     // defasado é melhor que zerar os proventos do card. Nunca o contrário — o accrual
     // é a definição correta, e é dele que o snapshot vive.
-    const { total: accruedTotal, byTicker: accruedByTicker, sinceTotal, sinceByTicker } =
+    const { total: accruedTotal, byTicker: accruedByTicker, sinceTotal, sinceByTicker, sinceDayKey: dayDividendsSinceKey = null } =
         settled.or(accruedR, { total: null, byTicker: null }, 'dividendAccrual');
     const totalDividends = accruedTotal ?? totalAllTime;
     const receivedByTicker = accruedByTicker ?? paidByTicker;
@@ -326,7 +355,7 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
 
     return {
         assetMap, config, totalDividends, projectedMonthly, receivedByTicker,
-        dayDividendsTotal, dayDividendsByTicker, snapshots, riskSnapshots, treasuryPricing,
+        dayDividendsTotal, dayDividendsByTicker, dayDividendsSinceKey, snapshots, riskSnapshots, treasuryPricing,
     };
 };
 
@@ -564,7 +593,18 @@ export const processWalletAsset = (asset, { assetMap, usdRate, usdChange, macroR
                 }
             }
         } else {
-            currentPrice = 0;
+            // Sem cotação: marca no último fechamento GRAVADO do dia-âncora (o
+            // mesmo que compôs o snapshot) e, sem ele, no custo médio — a régua
+            // do rebuild (último preço conhecido → custo) e do snapshot diário.
+            // Com preço 0 o card zerava o saldo mas mantinha o custo, exibindo
+            // prejuízo de 100% numa posição que o gráfico mostrava pelo custo.
+            const anchorClose = safeUnitPrice(Number(anchorCloses?.get(historyStorageKey(asset.ticker, asset.type)) || 0));
+            if (anchorClose > 0) {
+                currentPrice = anchorClose;
+                anchorValueNative = safeValue(asset.quantity, anchorClose);
+            } else {
+                currentPrice = asset.quantity > 0 ? safePrice(asset.totalCost, asset.quantity) : 0;
+            }
             dayChangePct = 0;
             dayChangeReason = DAY_CHANGE_REASON.NO_QUOTE;
         }
@@ -776,7 +816,7 @@ const computePendingFlowBRL = async ({ userId, walletId, anchor, currentUsd, loa
     return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
 };
 
-const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd, pendingFlow = null }) => {
+const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd, pendingFlow = null, dividendsSinceAnchor = null }) => {
     const now = new Date();
     let weightedRentability = 0;
     let dataQuality = 'AUDITED'; // Default Audited
@@ -816,7 +856,14 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots
 
         // Fonte única da cota live (utils/mathUtils.computeLiveQuota) — mesmo
         // cálculo que getWalletPerformance usa no ponto live.
-        const liveQuotaPrice = computeLiveQuota(lastSnapshot, safeTotalEquity, periodFlow);
+        //
+        // Renda do período: proventos com ex-date depois do âncora. Só vale se foi
+        // recortada a partir DESTE âncora — depois das 23:59 o snapshot de hoje
+        // vira âncora e já contém os proventos do dia; somá-los de novo dobraria.
+        const periodIncome = dividendsSinceAnchor && dividendsSinceAnchor.dayKey === anchorDayKey
+            ? dividendsSinceAnchor.total
+            : 0;
+        const liveQuotaPrice = computeLiveQuota(lastSnapshot, safeTotalEquity, periodFlow, periodIncome);
         weightedRentability = ((liveQuotaPrice / 100) - 1) * 100;
     } else {
         weightedRentability = totalResultPercent;
@@ -850,7 +897,7 @@ const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots
  * idênticos aos privados (a pública só projeta/mascara um subconjunto).
  */
 export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
-    const { userAssets, activeAssets, closedAssets, targets } = await loadWalletState(userId, walletId);
+    const { userAssets, activeAssets, targets } = await loadWalletState(userId, walletId);
 
     // Auto-Heal se não houver ativos mas houver transações (reconstrução forçada).
     if (activeAssets.length === 0) {
@@ -878,12 +925,12 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         }
 
         const { assetMap, config, totalDividends, projectedMonthly, receivedByTicker,
-            dayDividendsTotal, dayDividendsByTicker, snapshots, riskSnapshots, treasuryPricing } =
+            dayDividendsTotal, dayDividendsByTicker, dayDividendsSinceKey, snapshots, riskSnapshots, treasuryPricing } =
             await fetchWalletMarketContext(userId, liveTickers, walletId, activeAssets);
 
         const usdRate = safeFloat(config?.dollar || 5.75);
         const usdChange = safeFloat(config?.dollarChange || 0);
-        const currentCdi = (config?.cdi && config.cdi > 0) ? safeFloat(config.cdi) : ((config?.selic && config.selic > 0) ? safeFloat(config.selic) : DEFAULT_SELIC_FALLBACK);
+        const currentCdi = resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK);
         // Curva histórica do CDI junto do macro: `processWalletAsset` já repassa
         // `macroRates` inteiro a `valueFixedIncomeAsset`, então a renda fixa do card
         // rende pela taxa vigente em cada dia — a mesma régua do rebuild. Carteira
@@ -891,11 +938,12 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         const cdiCurve = await loadCdiCurveForAssets(activeAssets, { currentRate: currentCdi });
         const macroRates = { cdiRate: currentCdi, selic: config?.selic, ipca: config?.ipca, cdiCurve };
 
-        const totalRealizedProfit = closedAssets.reduce((acc, curr) => {
-            const mult = isDollarized(curr) ? usdRate : 1;
-            const profitInBrl = safeMult((curr.realizedProfit || 0), mult);
-            return safeAdd(acc, profitInBrl);
-        }, 0);
+        // Lucro realizado de TODAS as posições — encerradas e abertas com venda
+        // parcial — cada venda no câmbio do dia dela (regra 8). Antes só as
+        // encerradas entravam, e em moeda nativa × câmbio de HOJE: a venda
+        // parcial sumia do total (a linha do ativo mostrava, o card não) e o
+        // realizado de AAPL oscilava com o dólar mesmo com a posição já vendida.
+        const totalRealizedProfit = sumRealizedProfitBRL(userAssets, usdRate);
 
         const brazilTodayStr = brazilDateKey();
         const isTodayBusinessDay = isBusinessDay(new Date(brazilTodayStr + 'T00:00:00.000Z'));
@@ -1005,6 +1053,9 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
             await computeWalletMetrics({
                 userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi,
                 currentUsd: usdRate, pendingFlow,
+                dividendsSinceAnchor: dayDividendsSinceKey
+                    ? { dayKey: dayDividendsSinceKey, total: dayDividendsTotal }
+                    : null,
             });
 
         return {
@@ -1086,11 +1137,17 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         const lastSnapshotDate = toDateKey(brazilDateOnly(lastSnapshot.date));
 
         if (lastSnapshotDate !== todayStr) {
-            const liveData = await calculateLiveKPIS(userId, config?.cdi || DEFAULT_SELIC_FALLBACK, walletId);
+            // Mesma âncora do KPI (getWalletData): regra única compartilhada. Vem
+            // antes do KPI live porque o recorte de proventos da cota depende dela.
+            const anchor = selectAnchorSnapshot([...history].reverse());
+            const anchorDayKey = anchor ? (anchor.dayKey || snapshotDayKey(anchor)) : null;
+            // CDI pela mesma cadeia do card e do snapshot (CDI → Selic → fallback).
+            const liveData = await calculateLiveKPIS(
+                userId, resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK), walletId,
+                { sinceDayKey: anchorDayKey },
+            );
 
             if (liveData && liveData.totalEquity > 0) {
-                // Mesma âncora do KPI (getWalletData): regra única compartilhada.
-                const anchor = selectAnchorSnapshot([...history].reverse());
 
                 // Fluxo de caixa desde o âncora (aportes/resgates) — Modified Dietz.
                 const periodFlow = await computePendingFlowBRL({
@@ -1101,7 +1158,9 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
                 });
 
                 // Fonte única da cota live — idêntica ao KPI (weightedRentability).
-                const liveQuotaPrice = computeLiveQuota(anchor, liveData.totalEquity, periodFlow);
+                // Com a renda do período (proventos com ex-date desde o âncora),
+                // como o card — sem ela o ponto live afundava no dia-ex.
+                const liveQuotaPrice = computeLiveQuota(anchor, liveData.totalEquity, periodFlow, liveData.dividendsSinceAnchor);
 
                 history.push({
                     date: today,
@@ -1132,7 +1191,7 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         // a curva em R$ dava um salto artificial (fator = close/baseIbov).
         let lastKnownIbov = baseIbov;
 
-        const currentRate = config?.cdi || DEFAULT_SELIC_FALLBACK;
+        const currentRate = resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK);
         const benchmarkCdiCurve = await loadCdiCurve({ since: brazilDateOnly(history[0].date), currentRate });
         let accumulatedCDI = 1.0;
         let accumulatedIPCA = 1.0; // IPCA + 6%
@@ -1623,12 +1682,22 @@ export const searchAssets = async (req, res, next) => {
     } catch (error) { next(error); }
 };
 
+export const ASSET_TRANSACTIONS_MAX_LIMIT = 200;
+
 export const getAssetTransactions = async (req, res, next) => {
     try {
         const { ticker } = req.params;
-        const { page = 1, limit = 10 } = req.query;
+        // Paginação saneada: `limit` vinha direto da query (`?limit=1000000` puxava o
+        // extrato inteiro numa ida só) e `page` ≤ 0 virava skip negativo, que o
+        // Mongo rejeita com 500. Teto de 200 por página, página mínima 1.
+        const parsedPage = Number.parseInt(req.query.page, 10);
+        const parsedLimit = Number.parseInt(req.query.limit, 10);
+        const page = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : 1;
+        const limit = Number.isFinite(parsedLimit) && parsedLimit >= 1
+            ? Math.min(ASSET_TRANSACTIONS_MAX_LIMIT, parsedLimit)
+            : 10;
         const query = { user: req.user.id, wallet: req.walletId, ticker: ticker.toUpperCase() };
-        const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(parseInt(limit));
+        const transactions = await AssetTransaction.find(query).sort({ date: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit);
         const total = await AssetTransaction.countDocuments(query);
         // Mesma resolução do extrato global: a moeda acompanha o lançamento, para o
         // cliente não precisar reimplementar a regra de dolarização. A posição só é
@@ -1638,7 +1707,7 @@ export const getAssetTransactions = async (req, res, next) => {
             : null;
         res.json({
             transactions: transactions.map(t => ({ ...t.toObject(), currency: resolveTransactionCurrency(t, asset) })),
-            pagination: { total, page: parseInt(page), pages: Math.ceil(total / limit), hasMore: page * limit < total },
+            pagination: { total, page, pages: Math.ceil(total / limit), hasMore: page * limit < total },
         });
     } catch (error) { next(error); }
 };

@@ -8,8 +8,21 @@ export interface AuditEntry {
     category: string;
 }
 
+/**
+ * Regra de Negócio Inviolável #1: score ≥ 70 ⇔ COMPRAR. Espelho do
+ * `BUY_THRESHOLD` de server/config/financialConstants.js (fixo, sem env) —
+ * única constante do cliente; a tela não deve repetir o 70 cravado.
+ */
+export const BUY_THRESHOLD = 70;
+
 export interface RankingItem {
     position: number;
+    /**
+     * Posição GLOBAL no último ranking PUBLICADO da mesma classe (Regra #4);
+     * `null` quando o ativo não estava lá (entrada nova) ou não há publicação
+     * anterior. Calculado no servidor (calculateRankingDelta).
+     */
+    previousPosition?: number | null;
     ticker: string;
     name: string;
     sector?: string;

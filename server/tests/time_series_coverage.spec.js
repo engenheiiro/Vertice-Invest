@@ -306,7 +306,10 @@ describe('timeSeriesWorker.run — lote grande, fonte com a mesma pressão', () 
     });
 
     it('o run termina dizendo onde o tempo foi', async () => {
-        mocks.marketAssetFind.mockReturnValue(marketAssetQuery([{ ticker: 'AT0', type: 'STOCK' }]));
+        // Três ativos, os três buscados: a pausa é proporcional às buscas do lote
+        // (interBatchPauseMs) e só passa de zero acima de duas.
+        mocks.marketAssetFind.mockReturnValue(marketAssetQuery(
+            ['AT0', 'AT1', 'AT2'].map(ticker => ({ ticker, type: 'STOCK' }))));
         mocks.getFullHistory.mockResolvedValue(candles(40));
 
         await runWorker();

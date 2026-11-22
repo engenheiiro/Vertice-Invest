@@ -9,6 +9,7 @@ import { STALE_TIME } from '../config/queryConfig';
 import { DividendGoal } from '../types/dividends';
 import { useFeatureAccess } from './useFeatureAccess';
 import { useAuth } from '../contexts/AuthContext';
+import { useDemo } from '../contexts/DemoContext';
 
 export interface PortfolioItem {
     ticker: string;
@@ -113,6 +114,10 @@ export const useDashboardData = () => {
     const { hasPlan } = useFeatureAccess();
     const { user } = useAuth();
     const canSeeDividends = hasPlan('ESSENTIAL') || user?.role === 'ADMIN';
+    // No tour demo o escopo é sempre 'pronto' (WalletContext), mas a carteira é a
+    // DEMO: buscar aqui misturava os proventos e a meta REAIS da conta nos dados
+    // de demonstração do card `tour-dividends`.
+    const { isDemoMode } = useDemo();
 
     // 1. Dados Macro
     const macroQuery = useQuery({
@@ -125,7 +130,7 @@ export const useDashboardData = () => {
     const dividendsQuery = useQuery({
         queryKey: ['dividends', activeWalletId],
         queryFn: () => walletService.getDividends(activeWalletId),
-        enabled: isWalletScopeReady && canSeeDividends, // escopo resolvido + plano com acesso
+        enabled: isWalletScopeReady && canSeeDividends && !isDemoMode, // escopo resolvido + plano com acesso + fora do demo
         staleTime: STALE_TIME.SHORT,
     });
 
@@ -324,12 +329,13 @@ export const useDashboardData = () => {
     }, [kpis, marketIndices]);
 
     const totalDividends = useMemo(() => {
-        const prov = dividendsQuery.data?.provisioned;
+        // `enabled: false` não esconde o CACHE da mesma chave: em demo, ignora-o.
+        const prov = isDemoMode ? undefined : dividendsQuery.data?.provisioned;
         if (!Array.isArray(prov)) return 0;
         return prov.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
-    }, [dividendsQuery.data]);
+    }, [dividendsQuery.data, isDemoMode]);
 
-    const dividendGoal: DividendGoal | null = dividendsQuery.data?.goal ?? null;
+    const dividendGoal: DividendGoal | null = isDemoMode ? null : (dividendsQuery.data?.goal ?? null);
 
     return {
         portfolio,

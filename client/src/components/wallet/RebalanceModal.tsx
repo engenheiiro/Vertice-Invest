@@ -69,7 +69,10 @@ const PROFILE_LABEL: Record<RiskProfile, string> = {
 
 export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose }) => {
     const { addToast } = useToast();
-    const { activeWalletId } = useWallet();
+    const { activeWalletId, isPrivacyMode } = useWallet();
+    // Na tela, valores respeitam o modo privacidade; o texto copiado (ação explícita)
+    // continua com os números reais.
+    const money = (v: number | null | undefined) => formatCurrency(v, 'BRL', { privacy: isPrivacyMode });
     const [riskProfile, setRiskProfile] = useState<RiskProfile>('MODERATE');
     const [plan, setPlan] = useState<RebalancePlan | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -264,7 +267,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                                                     {g.currentPct.toFixed(0)}% → {g.targetPct.toFixed(0)}%
                                                                     {!onTarget && (
                                                                         <span className={`ml-2 font-bold ${overweight ? 'text-red-400' : 'text-emerald-400'}`}>
-                                                                            {overweight ? '−' : '+'}{formatCurrency(Math.abs(g.gapValue))}
+                                                                            {overweight ? '−' : '+'}{money(Math.abs(g.gapValue))}
                                                                         </span>
                                                                     )}
                                                                 </span>
@@ -296,7 +299,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                             </h4>
                                             <div className="space-y-2">
                                                 {plan.sells.map((s, i) => (
-                                                    <TradeCard key={`s-${i}`} trade={s} side="sell" />
+                                                    <TradeCard key={`s-${i}`} trade={s} side="sell" privacy={isPrivacyMode} />
                                                 ))}
                                             </div>
                                         </div>
@@ -310,7 +313,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                             </h4>
                                             <div className="space-y-2">
                                                 {plan.buys.map((b, i) => (
-                                                    <TradeCard key={`b-${i}`} trade={b} side="buy" />
+                                                    <TradeCard key={`b-${i}`} trade={b} side="buy" privacy={isPrivacyMode} />
                                                 ))}
                                             </div>
                                         </div>
@@ -329,9 +332,9 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                         <div className="p-4 border-t border-slate-800 bg-card shrink-0 rounded-b-2xl">
                             {plan && !isLoading && !error && (
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-[11px]">
-                                    <span className="text-slate-400">Vender <strong className="text-red-400">{formatCurrency(plan.summary.totalSell)}</strong></span>
-                                    <span className="text-slate-400">Comprar <strong className="text-emerald-400">{formatCurrency(plan.summary.totalBuy)}</strong></span>
-                                    <span className="text-slate-400">IR estimado <strong className="text-yellow-400">{formatCurrency(plan.summary.estTaxTotal)}</strong></span>
+                                    <span className="text-slate-400">Vender <strong className="text-red-400">{money(plan.summary.totalSell)}</strong></span>
+                                    <span className="text-slate-400">Comprar <strong className="text-emerald-400">{money(plan.summary.totalBuy)}</strong></span>
+                                    <span className="text-slate-400">IR estimado <strong className="text-yellow-400">{money(plan.summary.estTaxTotal)}</strong></span>
                                 </div>
                             )}
                             <p className="text-[10px] text-slate-500 mb-3 leading-relaxed">
@@ -353,7 +356,8 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
 };
 
 // Card individual de uma ordem sugerida.
-const TradeCard: React.FC<{ trade: Trade; side: 'buy' | 'sell' }> = ({ trade, side }) => {
+const TradeCard: React.FC<{ trade: Trade; side: 'buy' | 'sell'; privacy?: boolean }> = ({ trade, side, privacy = false }) => {
+    const money = (v: number | null | undefined) => formatCurrency(v, 'BRL', { privacy });
     const isSell = side === 'sell';
     const accent = isSell ? 'text-red-400' : 'text-emerald-400';
     const label = trade.ticker || trade.label || trade.class;
@@ -383,9 +387,9 @@ const TradeCard: React.FC<{ trade: Trade; side: 'buy' | 'sell' }> = ({ trade, si
                     )}
                 </div>
                 <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold ${accent}`}>{isSell ? '−' : '+'}{formatCurrency(trade.amount)}</p>
+                    <p className={`text-sm font-bold ${accent}`}>{isSell ? '−' : '+'}{money(trade.amount)}</p>
                     {trade.quantity != null && (
-                        <p className="text-[10px] text-slate-500">{formatQuantity(trade.quantity)} un.</p>
+                        <p className="text-[10px] text-slate-500">{formatQuantity(trade.quantity, { privacy })} un.</p>
                     )}
                 </div>
             </div>
@@ -400,14 +404,14 @@ const TradeCard: React.FC<{ trade: Trade; side: 'buy' | 'sell' }> = ({ trade, si
                     {trade.subBreakdown.map((c) => (
                         <div key={c.sub} className="flex items-center justify-between text-[10px]">
                             <span className="text-slate-400 flex items-center gap-1.5"><span className="text-slate-600">→</span> {c.label}</span>
-                            <span className="font-semibold text-emerald-400/90">{formatCurrency(c.amount)}</span>
+                            <span className="font-semibold text-emerald-400/90">{money(c.amount)}</span>
                         </div>
                     ))}
                 </div>
             )}
             {isSell && (trade.estTax ?? 0) > 0 && (
                 <p className="text-[10px] text-yellow-400/90 mt-1.5 flex items-center gap-1">
-                    ⚠ IR estimado: {formatCurrency(trade.estTax)}
+                    ⚠ IR estimado: {money(trade.estTax)}
                 </p>
             )}
         </div>

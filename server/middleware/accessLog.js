@@ -7,6 +7,19 @@ import { recordHttpMetric, fullRequestPath } from '../utils/performanceMetrics.j
 const isNoise = (path) => path === '/api/health' || path.startsWith('/api/docs');
 
 /**
+ * Caminho seguro para log: segmento opaco longo (token do link público de
+ * carteira, `/api/public/wallet/<token>`) ou com e-mail vira `:redacted`.
+ * O token é a ÚNICA credencial da carteira compartilhada — quem lê o log abria a
+ * carteira. ObjectId (24 hex) e ticker continuam legíveis: não são credencial e
+ * são o que se procura ao depurar.
+ */
+export const redactLogPath = (path) => String(path || '').split('/').map((seg) => {
+  if (!seg || /^[0-9a-f]{24}$/i.test(seg)) return seg;
+  if (seg.length >= 20 || seg.includes('@') || /%40/i.test(seg)) return ':redacted';
+  return seg;
+}).join('/');
+
+/**
  * (D12) Log de conclusão da requisição — método, rota, status e duração, no nível
  * `http`. Sai em desenvolvimento e fica silencioso em produção (o nível do logger
  * lá é `info`, que não alcança `http`).
@@ -37,7 +50,7 @@ export const accessLog = (req, res, next) => {
     recordHttpMetric(req, res.statusCode, durationMs);
     const meta = { ms: Math.round(durationMs) };
     if (req.walletId) meta.walletId = req.walletId;
-    logger.http(`${req.method} ${caminho} ${res.statusCode}`, meta);
+    logger.http(`${req.method} ${redactLogPath(caminho)} ${res.statusCode}`, meta);
   });
   next();
 };

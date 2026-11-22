@@ -174,10 +174,13 @@ describe('resolveRows — classificação contra o catálogo', () => {
   });
 
   it('considera a posição JÁ EXISTENTE ao julgar a venda', async () => {
-    // Quem já tem 100 PETR4 na carteira pode importar uma venda de 80 sem alarme.
+    // Quem já tem 100 PETR4 na carteira (compra gravada ANTES) pode importar uma
+    // venda de 80 sem alarme. A régua é a dos lançamentos gravados, a mesma do
+    // commit — não a quantidade de hoje.
     givenDb({
       catalog: [{ ticker: 'PETR4', name: 'Petrobras', type: 'STOCK', currency: 'BRL' }],
       positions: [{ ticker: 'PETR4', quantity: 100, type: 'STOCK', currency: 'BRL' }],
+      transactions: [{ ticker: 'PETR4', type: 'BUY', quantity: 100, price: 25, date: new Date('2024-01-10T00:00:00.000Z') }],
     });
 
     const { rows } = await resolveRows({
@@ -185,6 +188,23 @@ describe('resolveRows — classificação contra o catálogo', () => {
     });
 
     expect(rows[0].status).toBe(ROW_STATUS.OK);
+  });
+
+  it('venda importada ANTES da compra já gravada é acusada na prévia (como no commit)', async () => {
+    // A simulação antiga partia da posição de HOJE (100) e dizia OK; o commit,
+    // cronológico, recusava o arquivo inteiro. Prévia e commit têm de concordar.
+    givenDb({
+      catalog: [{ ticker: 'PETR4', name: 'Petrobras', type: 'STOCK', currency: 'BRL' }],
+      positions: [{ ticker: 'PETR4', quantity: 100, type: 'STOCK', currency: 'BRL' }],
+      transactions: [{ ticker: 'PETR4', type: 'BUY', quantity: 100, price: 25, date: new Date('2024-06-10T00:00:00.000Z') }],
+    });
+
+    const { rows } = await resolveRows({
+      userId: 'u1', walletId: 'w1', rows: [row({ side: 'SELL', quantity: 80 })], // 15/03, antes da compra de 10/06
+    });
+
+    expect(rows[0].status).toBe(ROW_STATUS.ATENCAO);
+    expect(rows[0].reason).toMatch(/Venda maior/);
   });
 
   it('julga o saldo em ordem CRONOLÓGICA, não na ordem do arquivo', async () => {

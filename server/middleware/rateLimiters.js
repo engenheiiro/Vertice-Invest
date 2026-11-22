@@ -169,4 +169,24 @@ export const supportReadLimiter = createUserLimiter({
   message: 'Muitas requisições. Aguarde alguns minutos.',
 });
 
+// Escrita de notificação (marcar uma / todas como lidas): 120/15min por usuário.
+// Antes estas rotas usavam o researchReadLimiter — balde de LEITURA — e uma
+// escrita barata dividia orçamento com o ranking; pior, quem martelava
+// /read-all (dois updateMany sobre a coleção) tinha 300 por janela.
+export const notificationWriteLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: 'Muitas atualizações de notificação. Aguarde alguns minutos.',
+});
+
+// Escrita administrativa pontual sem balde próprio (hoje: seed da Academy, que
+// antes só tinha o apiLimiter global por IP). 30/15min por admin:
+// separado do adminLimiter (300, leituras do painel) para um clique repetido
+// não gastar o orçamento de navegação — nem o contrário.
+export const adminWriteLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: 'Muitas operações administrativas seguidas. Aguarde alguns minutos.',
+});
+
 export { createUserLimiter };

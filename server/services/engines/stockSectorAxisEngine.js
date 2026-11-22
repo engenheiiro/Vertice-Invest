@@ -74,7 +74,14 @@ const oilGasEntry = asset => {
  * fundamentos. Arquétipos setoriais usam documentos com data própria e, por
  * isso, não herdam o stale genérico do Fundamentus.
  */
-export const calculateStockCalibrationConfidence = (asset, coverage, ratesStale = false) => {
+// `legacyConfidence` (opcional) é a confiança do scorer legado
+// (`processAsset().dataConfidence`). O ranking PUBLICADO de ações mistura o score
+// legado com estes eixos e era capado só por esta função — que dá 100 a
+// BANK/INSURER/holdings/OIL_GAS mesmo com fundamentos de 200 dias e
+// crescimento/ROE ausentes. Resultado: ação com dado velho e faltando chegava a
+// 74 (BUY), furando o teto de 70 que o legado já tinha imposto. Com o parâmetro,
+// o teto é o da MENOR confiança (mesma escada 70/85/100 do legado).
+export const calculateStockCalibrationConfidence = (asset, coverage, ratesStale = false, legacyConfidence = null) => {
   let confidence = 100;
   const isOperational = coverage?.archetype === STOCK_ARCHETYPES.OPERATIONAL;
 
@@ -93,7 +100,11 @@ export const calculateStockCalibrationConfidence = (asset, coverage, ratesStale 
   const coverageCap = Number.isFinite(coverage?.requiredCoverage)
     ? coverage.requiredCoverage
     : 0;
-  return Math.max(0, Math.min(coverageCap, confidence));
+  const legacy = Number(legacyConfidence);
+  const legacyCap = legacyConfidence !== null && legacyConfidence !== undefined && Number.isFinite(legacy)
+    ? legacy
+    : 100;
+  return Math.max(0, Math.min(coverageCap, confidence, legacyCap));
 };
 
 export const calculateStockShadowAxes = asset => {

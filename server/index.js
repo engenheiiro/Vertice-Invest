@@ -70,7 +70,12 @@ const panicLog = (message) => {
         const msg = `🔥 UNCAUGHT EXCEPTION!\nErro: ${error.message}\nStack: ${error.stack}`;
         if (logger) logger.error(msg);
         panicLog(msg);
-        process.exit(1); 
+        // `process.exit` síncrono descartava o evento do Sentry ainda na fila —
+        // justo o do crash. Esvazia com teto curto e sai de qualquer jeito.
+        import('@sentry/node')
+            .then((S) => S.close?.(2000))
+            .catch(() => {})
+            .finally(() => process.exit(1));
     });
 
     process.on('unhandledRejection', (reason, _promise) => {
@@ -130,6 +135,22 @@ const panicLog = (message) => {
     server.on('error', (e) => {
         logger.error(`❌ Erro no servidor: ${e.message}`);
     });
+
+    // Desligamento gracioso: sem ele, cada deploy deixava JobRun órfão e lease
+    // preso por 30 min. Ver utils/gracefulShutdown.js.
+    const { createShutdownHandler } = await import('./utils/gracefulShutdown.js');
+    const { INSTANCE_ID } = await import('./utils/jobRun.js');
+    const { JOB_LEASE_OWNER } = await import('./utils/jobLease.js');
+    const { default: JobRun } = await import('./models/JobRun.js');
+    const { default: JobLease } = await import('./models/JobLease.js');
+    const { default: mongoose } = await import('mongoose');
+    const Sentry = await import('@sentry/node');
+    const onShutdown = createShutdownHandler({
+        server, logger, instanceId: INSTANCE_ID, leaseOwner: JOB_LEASE_OWNER,
+        JobRun, JobLease, mongoose, Sentry,
+    });
+    process.once('SIGTERM', () => { onShutdown('SIGTERM'); });
+    process.once('SIGINT', () => { onShutdown('SIGINT'); });
 
   } catch (error) {
     console.error("\n❌ FALHA CRÍTICA NA INICIALIZAÇÃO:");

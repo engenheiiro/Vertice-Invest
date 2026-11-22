@@ -8,7 +8,7 @@ import { externalMarketService } from '../externalMarketService.js';
 import { B3_TIP_OUTCOME, collectB3CandlesDetailed, isB3Coverable, lastBusinessDayUpTo } from '../b3HistoryFallback.js';
 import { getEscalation, recordEscalation } from '../../utils/sourceHealth.js';
 import { brNow } from '../../utils/sourceSchedule.js';
-import { brazilDayKey } from '../../utils/walletSnapshot.js';
+import { brazilDayKey, isBrBusinessDay } from '../../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS, HISTORY_CAP_EXEMPT_TICKERS } from '../../config/financialConstants.js';
 import { isTransientMongoError, withMongoRetry } from '../../utils/mongoResilience.js';
 import { repairCryptoCandleGaps } from '../cryptoCandleRepairService.js';
@@ -61,8 +61,51 @@ const calculateVolatility = (prices) => {
 // "anteontem" ~2,8d (stale) → cada série re-busca a cada ~2 dias, defasagem máxima
 // de ~1 pregão para SMA/volatilidade/RSI. Exportada para teste.
 export const HISTORY_MAX_CANDLE_AGE_DAYS = 2;
-export const isCandleDateStale = (latest, now = new Date()) => {
+
+/**
+ * Quantos PREGÕES desta classe aconteceram depois do último candle (hoje conta).
+ *
+ * A régua em dias CORRIDOS acima não conhece calendário: medido em 22/11/2026
+ * (domingo, depois do feriado de 20/11), o worker re-baixou 1.216 de 1.254
+ * séries do Yahoo e 1.225 voltaram idênticas — 8 min de Yahoo e 3 min de
+ * gravação para nada. Toda segunda, fim de semana e feriado repetiam isso.
+ *
+ *  - STOCK/FII: pregões da B3 (feriado nacional incluído).
+ *  - CRYPTO: dias corridos — negocia todo dia.
+ *  - Resto (EUA, ETF, REIT, índices): dias de semana. NÃO usa o calendário da B3
+ *    de propósito: em 20/11 a B3 fechou e Nova York abriu; com a régua da B3 a
+ *    série americana ficaria sem esse pregão até terça.
+ */
+const B3_SESSION_TYPES = new Set(['STOCK', 'FII']);
+const SESSION_SCAN_DAYS = 15;
+export const sessionsSinceCandle = (latest, now, type) => {
+    if (!latest) return Infinity;
+    const t = String(type || '').toUpperCase();
+    const isSession = (key) => {
+        if (t === 'CRYPTO') return true;
+        if (B3_SESSION_TYPES.has(t)) return isBrBusinessDay(key);
+        const dow = new Date(`${key}T12:00:00Z`).getUTCDay();
+        return dow !== 0 && dow !== 6;
+    };
+    const d = new Date(`${brazilDayKey(now)}T12:00:00Z`);
+    let count = 0;
+    for (let i = 0; i <= SESSION_SCAN_DAYS; i++) {
+        const key = d.toISOString().slice(0, 10);
+        if (key <= latest) return count;
+        if (isSession(key)) count += 1;
+        d.setUTCDate(d.getUTCDate() - 1);
+    }
+    return Infinity; // mais velho que a janela: stale de qualquer jeito
+};
+
+/**
+ * Sem `type`: régua antiga em dias corridos (mantida para quem não sabe a classe).
+ * Com `type`: stale quando falta MAIS de um pregão — a mesma tolerância de ~1
+ * pregão de atraso, agora contada em pregões e não em horas.
+ */
+export const isCandleDateStale = (latest, now = new Date(), type = undefined) => {
     if (!latest) return true;
+    if (type !== undefined) return sessionsSinceCandle(latest, now, type) > 1;
     const ageMs = now.getTime() - new Date(`${latest}T00:00:00Z`).getTime();
     return ageMs > HISTORY_MAX_CANDLE_AGE_DAYS * 24 * 60 * 60 * 1000;
 };
@@ -258,6 +301,24 @@ export const METRICS_FLUSH_SIZE = 200;
 // externalMarketService). Exportados para teste.
 export const TIME_SERIES_BATCH_SIZE = 20;
 export const TIME_SERIES_ASSET_CONCURRENCY = 5;
+
+// (DESEMPENHO) Pausa entre lotes PROPORCIONAL ao que o lote pediu ao Yahoo.
+//
+// Era 1s fixo para todo lote que tivesse buscado QUALQUER coisa. Num run morno
+// (a maioria das séries fresca, um ou dois ativos atrasados por lote) isso dava
+// ~1s de sono por lote para proteger uma ou duas chamadas — o throttle custava
+// mais que o trabalho. A pausa existe pela RAJADA na fonte, e rajada é função de
+// quantas chamadas o lote fez: até 2 não há o que espaçar; acima disso a pausa
+// cresce linear até o 1s cheio no lote inteiro buscado (run frio), que é o
+// comportamento antigo onde ele importava. Exportada para teste.
+export const TIME_SERIES_PAUSE_FREE_FETCHES = 2;
+export const TIME_SERIES_MAX_PAUSE_MS = 1000;
+export const interBatchPauseMs = (yahooFetches, batchSize = TIME_SERIES_BATCH_SIZE) => {
+    const n = Number(yahooFetches);
+    if (!Number.isFinite(n) || n <= TIME_SERIES_PAUSE_FREE_FETCHES) return 0;
+    const ratio = Math.min(1, n / Math.max(1, batchSize));
+    return Math.round(TIME_SERIES_MAX_PAUSE_MS * ratio);
+};
 
 // As fases que correm em paralelo dentro do lote levam "Σ": a soma delas passa
 // do relógio, e ler "yahoo 9min" num run de 6min sem esse aviso confunde. Fase
@@ -741,7 +802,8 @@ export const timeSeriesWorker = {
                         { label: 'cabeçalho do lote' }));
                     const headerByTicker = new Map(headerDocs.map(d => [d.ticker, d]));
 
-                    let batchDidFetch = false;  // só dorme entre lotes que realmente bateram no Yahoo
+                    // Quantos ativos do lote foram ao Yahoo — dimensiona a pausa (ver interBatchPauseMs).
+                    let batchYahooFetches = 0;
                     const visitedTickers = [];  // frescos + falhos: renova lastCheckedAt em massa, sem .save() por doc
                     const pendingMetrics = [];  // série mudou e os candles não estão em memória: lê depois, de uma vez
 
@@ -803,7 +865,7 @@ export const timeSeriesWorker = {
 
                         // Staleness pela data do último candle (ver isHistoryStale) — nunca por
                         // lastUpdated, que o touch renovava sem dados novos.
-                        const isStale = isCandleDateStale(lastDate, now);
+                        const isStale = isCandleDateStale(lastDate, now, asset.type);
 
                         // A MESMA CONDIÇÃO que abre o ramo abaixo, nomeada — é ela
                         // que decide se o Yahoo chega a ser chamado por este ativo,
@@ -812,7 +874,7 @@ export const timeSeriesWorker = {
                         const yahooConsultado = !header || isStale || length < 20;
 
                         if (yahooConsultado) {
-                            batchDidFetch = true;
+                            batchYahooFetches += 1;
                             let fetched = false;
 
                             // O catch cobre SÓ a fonte externa. Antes ele envolvia
@@ -962,10 +1024,11 @@ export const timeSeriesWorker = {
                     // pode ser interrompido a qualquer lote (ver METRICS_FLUSH_SIZE).
                     if (operations.length >= METRICS_FLUSH_SIZE) await timed('métricas', flushMetrics);
 
-                    // Rate limit protection — só pausa entre lotes que dispararam busca externa no Yahoo.
-                    // Em runs "quentes" (tudo fresco) não há throttle a aplicar, eliminando o piso ocioso.
-                    if (batchDidFetch) {
-                        await timed('pausas', () => new Promise(r => setTimeout(r, 1000)));
+                    // Rate limit protection — pausa proporcional às buscas do lote no Yahoo
+                    // (0 em run quente ou com 1–2 buscas; 1s no lote inteiro buscado).
+                    const pauseMs = interBatchPauseMs(batchYahooFetches, batch.length);
+                    if (pauseMs > 0) {
+                        await timed('pausas', () => new Promise(r => setTimeout(r, pauseMs)));
                     }
                 } catch (error) {
                     // Erro que não é de transporte (bug de cálculo, schema) segue fatal:

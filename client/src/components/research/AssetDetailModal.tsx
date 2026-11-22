@@ -3,7 +3,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, Shield, Activity, Target, Zap, AlertTriangle, AlertOctagon, ThumbsUp, ThumbsDown, BarChart2, DollarSign, Database } from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { RankingItem } from '../../services/research';
+import { RankingItem, BUY_THRESHOLD } from '../../services/research';
 import { formatCompact as fmtCompact, type Currency } from '../../utils/format';
 import AssetLogo from '../common/AssetLogo';
 import type { AssetType } from '../../contexts/WalletContext';
@@ -137,7 +137,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                     <DetailRow label="Liquidez Est." value={formatMoneyShort(m.avgLiquidity)} status='neutral' />
                     <DetailRow label="SMA 200" value={m.sma200 ? formatCurrency(m.sma200, 'USD') : 'N/A'} status={m.sma200 && asset.currentPrice > m.sma200 ? 'good' : 'bad'} />
                     <DetailRow label="Volatilidade (a.a.)" value={m.volatility ? formatPercent(m.volatility) : 'N/A'} status={m.volatility && m.volatility > 100 ? 'bad' : 'neutral'} />
-                    <DetailRow label="Score Estrutural" value={asset.score.toString()} status={asset.score >= 70 ? 'good' : 'warning'} />
+                    <DetailRow label="Score Estrutural" value={asset.score.toString()} status={asset.score >= BUY_THRESHOLD ? 'good' : 'warning'} />
                 </div>
             );
         } else {
@@ -264,13 +264,13 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                     <div className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center font-black text-xl shadow-lg shadow-black/20 ${
                                         asset.score >= 90 ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' :
                                         asset.score >= 80 ? 'border-blue-500 text-blue-500 bg-blue-500/10' :
-                                        asset.score >= 70 ? 'border-slate-400 text-slate-400 bg-slate-400/10' :
+                                        asset.score >= BUY_THRESHOLD ? 'border-slate-400 text-slate-400 bg-slate-400/10' :
                                         'border-red-500 text-red-500 bg-red-500/10'
                                     }`}>
                                         {asset.score >= 95 ? 'A+' : 
                                          asset.score >= 90 ? 'A' :
                                          asset.score >= 80 ? 'B+' :
-                                         asset.score >= 70 ? 'B' :
+                                         asset.score >= BUY_THRESHOLD ? 'B' :
                                          asset.score >= 60 ? 'C' : 'F'}
                                     </div>
                                 </div>
@@ -404,7 +404,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
                                                 {asset.score >= 80 ? 'Ativo classe A com fundamentos excepcionais e valuation atrativo.' :
                                                  // Corte de compra é 70 (score ≥ 70 ⇔ COMPRAR): um 65–69 sai
                                                  // como AGUARDAR e não pode ler "recomendado" no boletim.
-                                                 asset.score >= 70 ? 'Ativo com fundamentos sólidos, recomendado para diversificação.' :
+                                                 asset.score >= BUY_THRESHOLD ? 'Ativo com fundamentos sólidos, recomendado para diversificação.' :
                                                  'Ativo apresenta riscos ou valuation esticado, requer cautela.'}
                                             </p>
                                         </div>

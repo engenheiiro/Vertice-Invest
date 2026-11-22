@@ -8,10 +8,12 @@ import { paymentService } from '../services/paymentService.js';
 import {
     grantOneTimePeriod,
     syncRecurringPeriod,
+    recordRecurringCharge,
     markSubscriptionCanceled,
     parseExternalReference,
 } from '../services/subscriptionService.js';
 import { sendSubscriptionCanceledEmail } from '../services/emailService.js';
+import { resolvePreapprovalId } from './webhookController.js';
 
 // Além deste teto, o saldo restante não é um período comprado e sim um acesso
 // concedido à mão (contas internas costumam ter validade em datas distantes).
@@ -378,6 +380,30 @@ export const syncPayment = async (req, res, next) => {
         if (payment.status === 'approved') {
             const user = await User.findById(userId);
             const planKey = parseExternalReference(payment.external_reference).planKey;
+
+            // Cobrança de assinatura: mesmo desvio do webhook. Antes esta rota
+            // tratava TODO pagamento como avulso — com o id de uma mensalidade da
+            // própria assinatura, grantOneTimePeriod somava 30 dias por cima do
+            // calendário do MP e stopRecurringAfterOneTime CANCELAVA a assinatura
+            // (o usuário perdia a renovação automática só por abrir a tela de
+            // sucesso). Aqui o período vem do preapproval, como no webhook.
+            const preapprovalId = resolvePreapprovalId(payment, user);
+            if (preapprovalId) {
+                const isNewCharge = await recordRecurringCharge(user, {
+                    gatewayId: paymentId,
+                    amount: payment.transaction_amount,
+                    plan: planKey || user.plan,
+                });
+                const preapproval = await paymentService.getPreapproval(preapprovalId);
+                if (preapproval) await syncRecurringPeriod(user, preapproval);
+                logger.info(`✅ [Sync] Cobrança recorrente ${paymentId} sincronizada para user ${user._id} (nova=${isNewCharge})`);
+                return res.json({
+                    success: true,
+                    plan: user.plan,
+                    validUntil: user.validUntil,
+                    ...(isNewCharge ? {} : { message: "Pagamento já processado." }),
+                });
+            }
 
             // Mesma barreira do webhook (Transaction antes do crédito, índice único
             // em gatewayId): esta rota e o webhook podem correr para o mesmo

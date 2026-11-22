@@ -80,3 +80,14 @@ describe('GET /public/wallet/:token/dividends — gate pelo plano do dono', () =
         expect(erro.message).not.toMatch(/GUEST|Free|plano/i);
     });
 });
+
+describe('link público — cabeçalho de cache', () => {
+    // 'public, max-age=60' deixava um CDN servir a carteira depois de o titular
+    // despublicar o link. Nenhuma resposta pública pode ser guardada fora daqui.
+    it('responde private, no-store', async () => {
+        const { res } = await fetchAsOwner('PRO');
+
+        expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, no-store');
+        expect(res.set).not.toHaveBeenCalledWith('Cache-Control', expect.stringMatching(/public/));
+    });
+});

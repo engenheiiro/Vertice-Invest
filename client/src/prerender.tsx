@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { StaticRouter } from 'react-router-dom/server';
+import { StaticRouter } from 'react-router-dom'; // v7: StaticRouter saiu de /server
 import React from 'react';
 import type { PrerenderArguments, PrerenderResult } from 'vite-prerender-plugin';
 import { Landing } from './pages/Landing';

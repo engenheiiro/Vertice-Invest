@@ -70,7 +70,11 @@ function extractFundamentals(ticker, data) {
     const ap = data.assetProfile || {};
     const pr = data.price || {};
 
-    const pl = sd.trailingPE || ks.forwardPE || null;
+    // P/L é o TRAILING, e só ele. O fallback para `forwardPE` misturava estimativa
+    // de analista com lucro realizado na mesma coluna: empresa com prejuízo nos
+    // últimos 12 meses (sem trailingPE) aparecia com o P/L projetado como se fosse
+    // o histórico, e o Graham/PEG a tratavam como lucrativa. Sem trailing → null.
+    const pl = Number.isFinite(sd.trailingPE) && sd.trailingPE !== 0 ? sd.trailingPE : null;
     const pvp = ks.priceToBook || null;
     // DY ciente de fundo: ETFs/REITs frequentemente NÃO expõem `summaryDetail.dividendYield`
     // (campo de ação) — o yield do fundo vem em `yield` ou `trailingAnnualDividendYield`.
@@ -79,10 +83,18 @@ function extractFundamentals(ticker, data) {
     // campos, e um NaN aqui quebrava o cast Mongoose do `dy` (abortava todo o sync).
     // safeFloat nas conversões fração→percentual: o *100 sobre floats binários do Yahoo
     // gera ruído (0.0845*100 = 8.450000000000001) que vazava até o ranking salvo.
+    //
+    // `null` quando NENHUM dos campos veio: resposta parcial do Yahoo (módulo
+    // `summaryDetail` ausente) não é "não paga dividendo". O `0` antigo gravava
+    // dy=0 por cima de um yield real toda vez que o módulo faltava. Não-pagador de
+    // verdade vem com `trailingAnnualDividendYield: 0`, que é finito e passa.
     const dyRaw = [sd.dividendYield, sd.yield, sd.trailingAnnualDividendYield].find(Number.isFinite);
-    const dy = Number.isFinite(dyRaw) ? safeFloat(dyRaw * 100) : 0;
+    const dy = Number.isFinite(dyRaw) ? safeFloat(dyRaw * 100) : null;
     const beta = ks.beta || sd.beta || null;
-    const marketCap = sd.marketCap || ks.enterpriseValue || null;
+    // Valor de mercado é o do equity. `enterpriseValue` (equity + dívida − caixa)
+    // NÃO é substituto: em empresa alavancada a diferença é de vezes, e o número
+    // caía no gate de porte e no ranking como se fosse market cap. Sem dado → null.
+    const marketCap = Number.isFinite(sd.marketCap) && sd.marketCap > 0 ? sd.marketCap : null;
     const roe = fd.returnOnEquity ? safeFloat(fd.returnOnEquity * 100) : null;
     const netMargin = fd.profitMargins ? safeFloat(fd.profitMargins * 100) : null;
     const revenueGrowth = fd.revenueGrowth ? safeFloat(fd.revenueGrowth * 100) : null;
@@ -98,7 +110,10 @@ function extractFundamentals(ticker, data) {
     const avgLiquidity = (avgVolumeShares && lastPrice) ? avgVolumeShares * lastPrice : null;
     const payoutRatio = sd.payoutRatio ? safeFloat(sd.payoutRatio * 100) : null;
     const vpa = ks.bookValue || null;
-    const lpa = ks.trailingEps || ks.forwardEps || null;
+    // Só o lucro REALIZADO (trailing). O forwardEps é projeção de analista: no
+    // Graham (√22,5 × LPA × VPA) ele virava preço justo de um lucro que não houve —
+    // mesmo motivo do P/L, que já deixou de cair no forwardPE.
+    const lpa = Number.isFinite(ks.trailingEps) ? ks.trailingEps : null;
     const sector = ap.sector || null;
     const industry = ap.industry || null;
     // Nome da empresa vem do módulo `price` (longName/shortName). NUNCA usar
@@ -139,22 +154,32 @@ async function sleep(ms) {
 function buildFundamentalsOp(ticker, data) {
     const fundamentals = extractFundamentals(ticker, data);
 
-    // Get sector/name from the curated universe if Yahoo didn't return it
+    // Setor/nome: Yahoo primeiro, lista curada depois — e NADA inventado. O
+    // default 'Technology' punha banco, REIT e ouro no setor de tecnologia sempre
+    // que o `assetProfile` faltava, e o teto de concentração por setor do draft
+    // passava a contar errado. Sem fonte, o campo não é tocado.
     const universeEntry = US_UNIVERSE.find(s => s.ticker === ticker);
-    const sector = fundamentals.sector || universeEntry?.sector || 'Technology';
-    const name = fundamentals.name || universeEntry?.name || ticker;
+    const sector = fundamentals.sector || universeEntry?.sector || null;
+    const name = fundamentals.name || universeEntry?.name || null;
 
     const updatePayload = {
         type: 'STOCK_US',
         currency: 'USD',
-        sector,
-        name,
-        isActive: true,
         lastFundamentalsDate: new Date(),
     };
+    if (sector) updatePayload.sector = sector;
+    if (name) updatePayload.name = name;
     if (fundamentals.industry) updatePayload.industry = fundamentals.industry;
 
-    if (fundamentals.lastPrice > 0) updatePayload.lastPrice = fundamentals.lastPrice;
+    // SEM `lastPrice` e SEM `isActive: true` aqui.
+    //  - Preço é do passo de cotação (`marketDataService.refreshQuotesBatch`),
+    //    que grava `lastPrice` junto de `priceSource`/`priceDate` e passa pelos
+    //    juízes de eco/sessão velha/sem negócio. Este caminho gravava o
+    //    `currentPrice` do quoteSummary sem assinatura nem data — preço anônimo
+    //    que o juiz de magnitude não tinha como julgar.
+    //  - `isActive: true` em todo ticker do universo desfazia, uma vez por dia, a
+    //    desativação feita pela blacklist dinâmica de cotação. Só nasce ativo
+    //    (`$setOnInsert` abaixo); depois, quem decide é o caminho de cotação.
     if (fundamentals.pl !== null) updatePayload.pl = fundamentals.pl;
     if (fundamentals.pvp !== null) updatePayload.pvp = fundamentals.pvp;
     if (fundamentals.dy !== null) updatePayload.dy = fundamentals.dy;
@@ -171,14 +196,22 @@ function buildFundamentalsOp(ticker, data) {
     if (fundamentals.lpa !== null) updatePayload.lpa = fundamentals.lpa;
     if (fundamentals.peg !== null) updatePayload.peg = fundamentals.peg;
 
+    // Linha nova (upsert) precisa de nome — o schema exige. Sem nome de fonte,
+    // a sigla serve de rótulo provisório, e só na criação: nunca sobrescreve.
+    const setOnInsert = { isActive: true };
+    if (!name) setOnInsert.name = ticker;
+
     return {
         updateOne: {
             filter: { ticker },
-            update: { $set: updatePayload },
+            update: { $set: updatePayload, $setOnInsert: setOnInsert },
             upsert: true
         }
     };
 }
+
+// Exposto para os testes (mapeamento puro Yahoo → MarketAsset).
+export const _internals = { extractFundamentals, buildFundamentalsOp };
 
 export const usStocksFundamentalsService = {
 
@@ -353,15 +386,15 @@ export const usStocksFundamentalsService = {
                 if (!ok) { failed++; logger.debug(`[BR ETF Fundamentals] Falhou ${etf.ticker}: ${error}`); continue; }
 
                 const f = extractFundamentals(etf.ticker, data);
+                // Mesma regra do caminho US: preço é do passo de cotação e
+                // `isActive` não é reafirmado aqui (só nasce ativo, via $setOnInsert).
                 const updatePayload = {
                     type: 'ETF',
                     currency: 'BRL',
                     sector: etf.sector,
                     allocationClass: etf.allocationClass || null,
-                    isActive: true,
                     lastFundamentalsDate: new Date(),
                 };
-                if (f.lastPrice > 0) updatePayload.lastPrice = f.lastPrice;
                 if (f.beta != null) updatePayload.beta = f.beta;
                 if (f.marketCap) updatePayload.marketCap = f.marketCap;
 
@@ -402,7 +435,7 @@ export const usStocksFundamentalsService = {
                 }
                 if (dyKnown) updatePayload.dy = dy;
 
-                bulkOps.push({ updateOne: { filter: { ticker: etf.ticker }, update: { $set: updatePayload }, upsert: true } });
+                bulkOps.push({ updateOne: { filter: { ticker: etf.ticker }, update: { $set: updatePayload, $setOnInsert: { isActive: true, name: etf.name } }, upsert: true } });
                 processed++;
             }
 

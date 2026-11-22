@@ -6,6 +6,7 @@ import {
     academyLessonParamSchema,
     academyProgressSchema,
     academyQuizSubmitSchema,
+    academySeedSchema,
 } from '../schemas/academySchemas.js';
 import {
     getCourses,
@@ -18,7 +19,7 @@ import {
     getQuizByCourseId,
     submitQuiz
 } from '../controllers/academyController.js';
-import { academyQuizLimiter } from '../middleware/rateLimiters.js';
+import { academyQuizLimiter, adminWriteLimiter } from '../middleware/rateLimiters.js';
 
 const router = express.Router();
 
@@ -37,7 +38,10 @@ router.get('/quiz/:courseId', validate(academyCourseParamSchema), getQuizByCours
 router.post('/quiz/submit', academyQuizLimiter, validate(academyQuizSubmitSchema), submitQuiz);
 
 // Rota de seed: apenas admins, apenas fora de produção
-router.post('/seed', requireAdmin, (req, res, next) => {
+// Antes só tinha o apiLimiter global (3000/15min por IP) — o seed reescreve o
+// catálogo inteiro. Limiter por usuário (depois do authenticateToken acima) e
+// corpo validado.
+router.post('/seed', adminWriteLimiter, requireAdmin, validate(academySeedSchema), (req, res, next) => {
     if (process.env.NODE_ENV === 'production') {
         return res.status(403).json({ message: 'Não disponível em produção.' });
     }

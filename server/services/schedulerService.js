@@ -24,7 +24,8 @@ import { loadClosesForDay } from '../utils/dayCloses.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
-import { calculateDailyDietz, safeAdd, safeCurrency, safeMult, safeValue } from '../utils/mathUtils.js';
+import { calculateDailyDietz, safeAdd, safeCurrency, safeMult, safeValue, addQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { toDateKey } from '../utils/dateUtils.js';
 import { valueFixedIncomeAsset } from '../utils/fixedIncome.js';
 import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
@@ -225,8 +226,17 @@ export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRat
             if (price > 0) {
                 const nativeValue = safeValue(asset.quantity, price);
                 totalEquity = safeAdd(totalEquity, safeCurrency(safeMult(nativeValue, multiplier)));
-                // Custo com o câmbio das compras (mesma base do fluxo de aportes,
-                // que já usava o câmbio por data em sumTransactionFlowBRL).
+            } else if (asset.quantity > 0) {
+                // Sem fechamento e sem cotação: marca no CUSTO, como o rebuild faz
+                // (último preço conhecido → custo médio). Antes a posição sumia do
+                // patrimônio E do custo, enquanto o card seguia contando o custo —
+                // o snapshot gravava uma carteira menor que a da tela e o rebuild
+                // seguinte reescrevia o dia com a posição de volta.
+                totalEquity = safeAdd(totalEquity, safeCurrency(safeMult(Number(asset.totalCost) || 0, multiplier)));
+            }
+            // Custo SEMPRE conta (posição existe com ou sem cotação), com o câmbio
+            // das compras (mesma base do fluxo de aportes em sumTransactionFlowBRL).
+            if (asset.quantity > 0) {
                 totalInvested = safeAdd(totalInvested, positionCostBRL(asset, usdRate));
             }
         }
@@ -271,17 +281,32 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
     // no dia-ex; sem somar o provento recebido à cota, essa queda vira prejuízo-
     // fantasma e a cota vaza ~1%/mês em FIIs distribuidores. DividendEvent.date é
     // a ex-date normalizada à meia-noite UTC do dia-calendário — casa 1:1 com dayStr.
+    //
+    // Direito ao provento = posição de ANTES das movimentações do próprio dia-ex:
+    // quem compra no dia-ex não recebe, quem vende no dia-ex recebe. A posição
+    // gravada é a do FIM do dia, então os lançamentos do dia são desfeitos aqui —
+    // mesma regra do accrual (`accrueDividendsByTicker`) e do rebuild.
     let dayDividendIncome = 0;
     const qtyByTicker = new Map();
     // Provento em dólar entra em reais pelo câmbio do dia-ex (o amount é da fonte).
     const divFxByTicker = new Map();
     const dayUsdRate = getUsdRateForDate ? getUsdRateForDate(dayStr) : usdRate;
     positions.forEach(p => {
-        if (!(p.quantity > 0)) return;
         const t = String(p.ticker).toUpperCase();
-        qtyByTicker.set(t, p.quantity);
+        qtyByTicker.set(t, Number(p.quantity) > 0 ? Number(p.quantity) : 0);
         divFxByTicker.set(t, isDollarized(p) ? dayUsdRate : 1);
     });
+    // Dia do lançamento pela chave UTC — a mesma do accrual e do rebuild.
+    for (const tx of transactions) {
+        if (toDateKey(tx.date) !== dayStr) continue;
+        const t = String(tx.ticker).toUpperCase();
+        const delta = tx.type === 'SELL' ? Number(tx.quantity) : -Number(tx.quantity);
+        qtyByTicker.set(t, addQty(qtyByTicker.get(t) || 0, delta));
+        if (!divFxByTicker.has(t)) divFxByTicker.set(t, tx.currency === 'USD' ? dayUsdRate : 1);
+    }
+    for (const [t, qty] of qtyByTicker) {
+        if (!(qty > QUANTITY_EPSILON)) qtyByTicker.delete(t);
+    }
     if (qtyByTicker.size > 0) {
         const [dy, dm, dd] = dayStr.split('-').map(Number);
         const exDateUtc = new Date(Date.UTC(dy, dm - 1, dd));
@@ -622,8 +647,12 @@ export const initScheduler = () => {
     // (RESILIÊNCIA) Recuperação de snapshots perdidos no BOOT. Um deploy/reinício
     // que caia sobre 23:59 BRT não reexecuta o tick do cron — este catch-up fecha
     // o buraco no próximo start. Fire-and-forget após 15s (deixa o boot assentar).
-    setTimeout(async () => {
-        await withJobLease('snapshot-boot-recovery', async () => {
+    //
+    // Rodava sem trackJob, sem watchdog e com lease PRÓPRIO ('snapshot-boot-recovery'):
+    // podia travar para sempre com o heartbeat renovando o lease, e reconstruir a
+    // MESMA carteira ao mesmo tempo que o daily-snapshot. Agora divide o lease do
+    // snapshot (um exclui o outro) e tem teto e registro como qualquer cron.
+    setTimeout(() => trackJobSafe('snapshot-boot-recovery', () => withJobLease(SNAPSHOT_JOB_ID, () => withJobWatchdog('snapshot-boot-recovery', async () => {
             try {
                 await backfillMissedSnapshots();
             } catch (e) {
@@ -637,8 +666,7 @@ export const initScheduler = () => {
             } catch (e) {
                 logger.error(`Reconciliação candle boot: ${e.message}`);
             }
-        });
-    }, 15000);
+        }))), 15000);
 
     // 1. Sync Leve: Macroeconomia (A cada 15 minutos)
     schedule('5,20,35,50 * * * *', 'macro-sync', async () => {
@@ -710,6 +738,13 @@ export const initScheduler = () => {
             // publicação do arquivo oficial da B3 não tem hora garantida e uma
             // única tentativa às 09:00 chegava cedo demais (02/09/2026).
             const syncResult = await syncService.performFullSync();
+            // Outro full-sync (sync:prod manual, botão do Admin) segura o lease e
+            // já roda o pipeline inteiro: isto é SKIP, não falha — antes caía no
+            // ramo de erro como 'erro desconhecido' e ainda disparava Sentry.
+            if (syncResult?.skipped && syncResult.reason === 'LEASE_HELD') {
+                logger.info('⏭️ full-sync já em andamento em outro processo — rotina ignorada.');
+                return { skipped: true, reason: 'FULL_SYNC_LEASE_HELD' };
+            }
             // Resiliência: 403/IP no Fundamentus não deve abortar o research.
             // Fundamentos são trimestrais (já no banco) e preços seguem frescos
             // via crons leves — então roda o ranking com os dados em cache.
@@ -749,6 +784,14 @@ export const initScheduler = () => {
         if (resultado.recovered > 0 || resultado.healed > 0) {
             logger.info('⏰ Recuperação de candle: fechamento oficial entrou e o snapshot foi refeito', resultado);
         }
+        // PARTIAL (carteira que falhou ao ser refeita) era gravado como SUCCESS:
+        // o resultado nem voltava ao trackJob.
+        const { tickers: _tickers, ...jobMeta } = resultado || {};
+        if (resultado?.status === 'SKIPPED') return { skipped: true, reason: 'NADA_A_RECUPERAR' };
+        if (resultado?.status === 'PARTIAL') {
+            return { success: false, error: `${resultado.failed} carteira(s) não refeita(s) em ${resultado.day}`, jobMeta };
+        }
+        return { success: true, jobMeta };
     });
 
     // 5a-ter. Recuperação da PONTA DO UNIVERSO (de hora em hora, 07:45–21:45)
@@ -769,7 +812,10 @@ export const initScheduler = () => {
     // duas consultas ao Mongo quando não há lacuna — o caso normal. Em :45 e não
     // :25 para que uma lentidão longa da B3 não segure as duas no mesmo minuto.
     schedule('45 7-21 * * *', 'universe-candle-recovery', async () => {
-        await recoverUniverseTipWithB3();
+        // O resultado (alvos, gravados, ausentes) vira meta do JobRun — antes era descartado.
+        const r = await recoverUniverseTipWithB3();
+        if (r?.status === 'SKIPPED') return { skipped: true, reason: 'NADA_A_RECUPERAR' };
+        return { success: true, jobMeta: r ?? null };
     });
 
     // 5b. Sync Tarde/Pós-Mercado (18:30) — B3 fecha às 17:30, dados completos do dia
@@ -777,6 +823,13 @@ export const initScheduler = () => {
         logger.info("⏰ Rotina Diária V3 — Pós-Mercado (18:30)");
         try {
             const syncResult = await syncService.performFullSync();
+            // Outro full-sync (sync:prod manual, botão do Admin) segura o lease e
+            // já roda o pipeline inteiro: isto é SKIP, não falha — antes caía no
+            // ramo de erro como 'erro desconhecido' e ainda disparava Sentry.
+            if (syncResult?.skipped && syncResult.reason === 'LEASE_HELD') {
+                logger.info('⏭️ full-sync já em andamento em outro processo — rotina ignorada.');
+                return { skipped: true, reason: 'FULL_SYNC_LEASE_HELD' };
+            }
             // Resiliência: 403/IP no Fundamentus não deve abortar o research
             // (fundamentos trimestrais em cache + preços frescos via crons leves).
             const scrapingBlocked = !syncResult.success && syncResult.error === 'Scraping blocked.';
@@ -866,7 +919,14 @@ export const initScheduler = () => {
 
     // 6. Snapshot Patrimonial Inteligente (23:59)
     schedule('59 23 * * *', 'daily-snapshot', async () => {
-        await runDailySnapshotCore(false); // o wrapper schedule já detém o lease
+        // O wrapper schedule já detém o lease. O resultado PRECISA voltar ao
+        // trackJob, e no formato dele: o core responde `{ status }`, e o trackJob
+        // só lê `success === false` / `skipped === true` — descartar o retorno
+        // gravava SUCCESS até com o snapshot inteiro em erro.
+        const r = await runDailySnapshotCore(false);
+        if (r?.status === 'ERROR') return { success: false, error: r.error };
+        if (r?.status === 'SKIPPED') return { skipped: true, reason: r.reason };
+        return { success: true, jobMeta: r?.stats ?? null };
     });
 
     // 7. Verificação de Assinaturas (Diário 03:00 AM)
@@ -928,7 +988,9 @@ export const initScheduler = () => {
 
     // 8. Sync Feriados (Anual)
     schedule('0 6 1 1 *', 'holidays-sync', async () => {
-        await holidayService.sync();
+        // sync() engolia a falha e o job anual gravava SUCCESS com o fallback local.
+        const ok = await holidayService.sync();
+        return ok === false ? { success: false, error: 'BrasilAPI indisponível — feriados do fallback local' } : { success: true };
     });
 
     // 9. Fundamentals S&P 500 (dias úteis 07:30 — antes do pipeline de análise)
@@ -1130,7 +1192,15 @@ export const initScheduler = () => {
     // Minuto 10 evita competir com os crons de :00 e com os de 15 min (:05/:15/:20…),
     // medindo o banco fora do pico de escrita.
     schedule('10 * * * *', 'data-health', async () => {
-        await runDataHealthCheck({ trigger: 'CRON' });
+        // Órfãs também aqui, não só no boot: depois de um deploy a instância nova
+        // sobe em minutos, e a execução que o processo velho deixou aberta ainda é
+        // mais nova que o teto do job — o boot a pulava e ela ficava aparecendo
+        // como "travada" até o próximo reinício. Na hora seguinte ela já passou
+        // do teto e é fechada com o motivo verdadeiro.
+        await closeOrphanRuns().catch((e) => logger.warn(`Varredura de execuções órfãs: ${e.message}`));
+        // null = "não avaliei" (sem banco ou erro contido): não é SUCCESS.
+        const report = await runDataHealthCheck({ trigger: 'CRON' });
+        return report ? { success: true } : { success: false, error: 'check de saúde não avaliado' };
     });
 
     // Primeira avaliação 45s após o boot: um deploy que quebrou ingestão não

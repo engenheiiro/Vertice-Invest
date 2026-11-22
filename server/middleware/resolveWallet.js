@@ -3,6 +3,8 @@ import Wallet from '../models/Wallet.js';
 import User from '../models/User.js';
 import AppError from '../utils/AppError.js';
 
+const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
+
 /**
  * Resolve qual carteira uma requisição autenticada opera sobre, e anexa o id
  * validado em `req.walletId`. Monta-se DEPOIS de `authenticateToken` (precisa
@@ -16,7 +18,8 @@ import AppError from '../utils/AppError.js';
  *   2. `User.activeWalletId` — se a carteira ainda existir (pode ter sido apagada).
  *   3. Primeira carteira do usuário (`sort({createdAt:1})`) — rede de segurança.
  *
- * 400 se o usuário não tiver nenhuma carteira (não deveria acontecer pós-migração).
+ * 400 se o usuário não tiver nenhuma carteira (não deveria acontecer pós-migração)
+ *     ou se o `walletId` explícito não for UM ObjectId em string (array/objeto).
  * 403 se o `walletId` explícito não pertencer ao usuário autenticado.
  */
 export const resolveWallet = async (req, res, next) => {
@@ -24,7 +27,14 @@ export const resolveWallet = async (req, res, next) => {
         const userId = req.user.id;
         const requested = req.query?.walletId || req.body?.walletId;
 
-        if (requested) {
+        if (requested !== undefined && requested !== null && requested !== '') {
+            // Só um ObjectId em string. `?walletId=a&walletId=b` chega como ARRAY,
+            // e o Mongoose traduz `_id: [a, b]` em `$in`: bastava UMA das duas ser
+            // do usuário para o exists() passar — e req.walletId virava "a,b", um
+            // escopo que ninguém validou. Objeto/array/número não é carteira.
+            if (typeof requested !== 'string' || !OBJECT_ID_RE.test(requested)) {
+                return next(AppError.badRequest('Carteira inválida.'));
+            }
             const owned = await Wallet.exists({ _id: requested, user: userId });
             if (!owned) return next(AppError.forbidden('Carteira não pertence a este usuário.'));
             req.walletId = String(requested);

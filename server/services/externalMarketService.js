@@ -862,6 +862,9 @@ export const externalMarketService = {
     },
 
     // CÁLCULO S&P 500 (12 MESES)
+    // Falha devolve null, nunca um número fixo: performMacroSync só grava valor
+    // finito (`Number.isFinite`), então null preserva o último retorno MEDIDO.
+    // O fallback antigo (32,50% / 15,50%) era gravado no banco como se fosse real.
     async getSpx12mReturn() {
         try {
             const endDate = new Date();
@@ -881,8 +884,8 @@ export const externalMarketService = {
                 }, comTeto(YAHOO_CHART_TIMEOUT_MS, { validateResult: false })));
 
             if (!result || !result.quotes || result.quotes.length < 10) {
-                logger.warn("⚠️ SPX Chart: Dados insuficientes (Length < 10). Usando Fallback 32.50%.");
-                return 32.50; 
+                logger.warn("⚠️ SPX Chart: Dados insuficientes (Length < 10). Valor anterior preservado.");
+                return null; 
             }
 
             // Validação de Range: Verifica se o primeiro dado é realmente antigo (> 300 dias)
@@ -893,8 +896,8 @@ export const externalMarketService = {
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 
                 if (diffDays < 300) {
-                    logger.warn(`⚠️ SPX Chart: Histórico curto detectado (${diffDays} dias). O Yahoo retornou dados parciais. Usando Fallback 32.50%.`);
-                    return 32.50;
+                    logger.warn(`⚠️ SPX Chart: Histórico curto detectado (${diffDays} dias). O Yahoo retornou dados parciais. Valor anterior preservado.`);
+                    return null;
                 }
             }
 
@@ -912,18 +915,18 @@ export const externalMarketService = {
                 const returnPct = ((endPrice / startPrice) - 1) * 100;
                 
                 if (returnPct < -60 || returnPct > 100) {
-                    logger.warn(`⚠️ SPX Calc: Valor anômalo (${returnPct.toFixed(2)}%). Usando Fallback.`);
-                    return 32.50;
+                    logger.warn(`⚠️ SPX Calc: Valor anômalo (${returnPct.toFixed(2)}%). Valor anterior preservado.`);
+                    return null;
                 }
 
                 logger.debug(`📈 SPX 12m [${startQuote.date.toISOString().split('T')[0]} -> ${result.quotes[result.quotes.length - 1].date.toISOString().split('T')[0]}]: ${startPrice.toFixed(2)} -> ${endPrice.toFixed(2)} = ${returnPct.toFixed(2)}%`);
                 return returnPct;
             }
             
-            return 32.50;
+            return null;
         } catch (e) {
             logger.error(`Erro ao calcular SPX 12m: ${e.message}`);
-            return 32.50; 
+            return null; 
         }
     },
 
@@ -946,8 +949,8 @@ export const externalMarketService = {
                 }, comTeto(YAHOO_CHART_TIMEOUT_MS, { validateResult: false })));
 
             if (!result || !result.quotes || result.quotes.length < 10) {
-                logger.warn("⚠️ IBOV Chart: Dados insuficientes. Usando Fallback 15.50%.");
-                return 15.50; 
+                logger.warn("⚠️ IBOV Chart: Dados insuficientes. Valor anterior preservado.");
+                return null; 
             }
 
             const firstQuote = result.quotes[0];
@@ -957,8 +960,8 @@ export const externalMarketService = {
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 
                 if (diffDays < 300) {
-                    logger.warn(`⚠️ IBOV Chart: Histórico curto (${diffDays} dias). Usando Fallback 15.50%.`);
-                    return 15.50;
+                    logger.warn(`⚠️ IBOV Chart: Histórico curto (${diffDays} dias). Valor anterior preservado.`);
+                    return null;
                 }
             }
 
@@ -977,10 +980,10 @@ export const externalMarketService = {
                 return returnPct;
             }
             
-            return 15.50;
+            return null;
         } catch (e) {
             logger.error(`Erro ao calcular IBOV 12m: ${e.message}`);
-            return 15.50; 
+            return null; 
         }
     },
 

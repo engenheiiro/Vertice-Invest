@@ -2136,33 +2136,9 @@ exports[`scoringEngine — parity snapshot (guarda M1) > saída estável: stock-
     },
     {
       "category": "Perfil Defensivo",
-      "factor": "Score Base (Setor Defensivo)",
-      "points": 40,
+      "factor": "Ineligível para Carteira Defensiva",
+      "points": 30,
       "type": "base",
-    },
-    {
-      "category": "Perfil Defensivo",
-      "factor": "Large Cap (>10B)",
-      "points": 10,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Defensivo",
-      "factor": "Dividend Yield > 6%",
-      "points": 10,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Defensivo",
-      "factor": "ROE Robusto (≥15%)",
-      "points": 10,
-      "type": "bonus",
-    },
-    {
-      "category": "Perfil Defensivo",
-      "factor": "Payout Saudável (55.0%)",
-      "points": 5,
-      "type": "bonus",
     },
     {
       "category": "Perfil Defensivo",

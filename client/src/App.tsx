@@ -20,16 +20,21 @@ import { InstallPrompt } from './components/pwa/InstallPrompt';
 import { ReloadPrompt } from './components/pwa/ReloadPrompt';
 import { homeRouteFor } from './config/homeRoute';
 
-import { Login } from './pages/Login';
-import { Register } from './pages/Register';
-import { Terms } from './pages/Terms';
-import { Privacy } from './pages/Privacy';
-import { ForgotPassword } from './pages/ForgotPassword';
-import { ResetPassword } from './pages/ResetPassword';
 import { Landing } from './pages/Landing';
-import { CheckoutSuccess } from './pages/CheckoutSuccess';
 import { CookieNotice } from './components/ui/CookieNotice';
 import { FunnelTracker } from './components/analytics/FunnelTracker';
+
+// Telas de entrada (auth, termos, retorno do checkout) fora do pacote inicial: o
+// visitante da landing — a única rota eager, porque é pré-renderizada — não paga
+// por elas. /terms também é pré-renderizada, mas o HTML estático já cobre o
+// primeiro paint enquanto o chunk chega.
+const Login = lazy(() => import('./pages/Login').then(module => ({ default: module.Login })));
+const Register = lazy(() => import('./pages/Register').then(module => ({ default: module.Register })));
+const Terms = lazy(() => import('./pages/Terms').then(module => ({ default: module.Terms })));
+const Privacy = lazy(() => import('./pages/Privacy').then(module => ({ default: module.Privacy })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(module => ({ default: module.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/ResetPassword').then(module => ({ default: module.ResetPassword })));
+const CheckoutSuccess = lazy(() => import('./pages/CheckoutSuccess').then(module => ({ default: module.CheckoutSuccess })));
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Profile = lazy(() => import('./pages/Profile').then(module => ({ default: module.Profile })));
@@ -64,6 +69,10 @@ const PageLoader = () => (
       <p className="mt-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] animate-fade-in">Carregando Terminal</p>
     </div>
   </div>
+);
+
+const Lazy: React.FC<PropsWithChildren> = ({ children }) => (
+  <Suspense fallback={<PageLoader />}>{children}</Suspense>
 );
 
 const PublicOnlyRoute: React.FC<PropsWithChildren> = ({ children }) => {
@@ -134,7 +143,8 @@ export default function App() {
         {/* future flags da v6: adotam desde já o comportamento da v7 (startTransition
             nos updates de rota e resolução de rota relativa dentro de splat), o que
             silencia os warnings de deprecação e evita surpresa no upgrade. */}
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        {/* v7: os comportamentos das flags v7_startTransition/v7_relativeSplatPath viraram o padrão. */}
+        <BrowserRouter>
           <CookieNotice />
           {/* Origem da visita + página vista por rota. Nada é enviado ao Google
               sem consentimento; a origem fica só na sessão até o cadastro. */}
@@ -157,12 +167,12 @@ export default function App() {
 
 
             <Route element={<AuthLayout />}>
-              <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-              <Route path="/register" element={<PublicOnlyRoute><Register /></PublicOnlyRoute>} />
-              <Route path="/terms" element={<Terms />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/login" element={<PublicOnlyRoute><Lazy><Login /></Lazy></PublicOnlyRoute>} />
+              <Route path="/register" element={<PublicOnlyRoute><Lazy><Register /></Lazy></PublicOnlyRoute>} />
+              <Route path="/terms" element={<Lazy><Terms /></Lazy>} />
+              <Route path="/privacy" element={<Lazy><Privacy /></Lazy>} />
+              <Route path="/forgot-password" element={<Lazy><ForgotPassword /></Lazy>} />
+              <Route path="/reset-password" element={<Lazy><ResetPassword /></Lazy>} />
             </Route>
 
             {/* Vitrine pública: mesma página, entorno conforme a audiência. */}
@@ -200,7 +210,7 @@ export default function App() {
             {/* Checkout ocorre exclusivamente no Mercado Pago. Mantemos esta rota
                 apenas para não quebrar links antigos para a antiga tela simulada. */}
             <Route path="/checkout" element={<Navigate to="/pricing" replace />} />
-            <Route path="/checkout/success" element={<ProtectedRoute><CheckoutSuccess /></ProtectedRoute>} />
+            <Route path="/checkout/success" element={<ProtectedRoute><Lazy><CheckoutSuccess /></Lazy></ProtectedRoute>} />
             
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

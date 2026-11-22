@@ -187,7 +187,7 @@ export const WalletView: React.FC<WalletViewProps> = ({ ownerFirstName }) => {
                                 ? `Carteira compartilhada${ownerFirstName ? ` por ${ownerFirstName}` : ''}. Os dados são os mesmos que o investidor acompanha.`
                                 : 'Gerencie seus ativos e acompanhe a evolução patrimonial.'}
                         </p>
-                        {usdRate > 0 && (
+                        {usdRate != null && usdRate > 0 && (
                             <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-900/20 border border-blue-900/40 rounded-full">
                                 <DollarSign size={10} className="text-blue-400" />
                                 <span className="text-[10px] text-blue-400 font-bold tabular-nums">

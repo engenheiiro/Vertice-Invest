@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Trophy, BarChart2, Layers, Target, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History } from 'lucide-react';
+import { Trophy, BarChart2, Layers, Target, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
 import { useWallet, AssetType } from '../../contexts/WalletContext';
@@ -24,6 +24,73 @@ interface TopPicksCardProps {
 }
 
 type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
+
+// Composite estrutural (Regra #2): desempate quando dois ativos têm o mesmo score.
+const structuralComposite = (item: RankingItem): number => {
+    const s = item.metrics?.structural;
+    return s ? (s.quality + s.valuation + s.risk) / 3 : 0;
+};
+
+/**
+ * Ordenação soberana da lista (Regra #2): score desc, desempate pelo composite
+ * estrutural. Devolve CÓPIA — nunca reordena o array recebido (que é o do cache
+ * do React Query). Antes era `.sort((a,b) => b.score - a.score)` in-place e sem
+ * desempate: empates ficavam na ordem que o cache tivesse no momento.
+ */
+export const sortPicksByScore = <T extends RankingItem>(items: T[]): T[] => (
+    [...items].sort((a, b) => (b.score - a.score) || (structuralComposite(b) - structuralComposite(a)))
+);
+
+export type PositionDelta =
+    | { kind: 'new' }
+    | { kind: 'up' | 'down'; steps: number }
+    | { kind: 'same' }
+    | null;
+
+/**
+ * Delta de posição (Regra #4) comparando a posição GLOBAL de hoje com a do último
+ * ranking publicado. Não usa `visualPosition` (que é a posição dentro do filtro
+ * de perfil) — as duas réguas não são comparáveis. `undefined` = documento antigo
+ * sem o campo: não desenha nada, em vez de chamar todo mundo de "novo".
+ */
+export const getPositionDelta = (position: number | undefined, previousPosition: number | null | undefined): PositionDelta => {
+    if (previousPosition === undefined || !Number.isFinite(position)) return null;
+    if (previousPosition === null) return { kind: 'new' };
+    const diff = previousPosition - (position as number);
+    if (diff > 0) return { kind: 'up', steps: diff };
+    if (diff < 0) return { kind: 'down', steps: -diff };
+    return { kind: 'same' };
+};
+
+const PositionDeltaBadge: React.FC<{ position?: number; previousPosition?: number | null }> = ({ position, previousPosition }) => {
+    const delta = getPositionDelta(position, previousPosition);
+    if (!delta) return null;
+    if (delta.kind === 'new') {
+        return (
+            <span title="Entrou no ranking nesta revisão" className="text-[7px] font-black uppercase tracking-wider text-blue-400 bg-blue-900/10 px-1 py-px rounded border border-blue-900/30 leading-none">
+                novo
+            </span>
+        );
+    }
+    if (delta.kind === 'same') {
+        return (
+            <span title={`Manteve a posição ${previousPosition}`} aria-label="Posição mantida" className="flex items-center text-slate-500 leading-none">
+                <Minus size={10} />
+            </span>
+        );
+    }
+    const isUp = delta.kind === 'up';
+    const Icon = isUp ? ArrowUp : ArrowDown;
+    return (
+        <span
+            title={`${isUp ? 'Subiu' : 'Caiu'} ${delta.steps} ${delta.steps === 1 ? 'posição' : 'posições'} (era ${previousPosition}º)`}
+            aria-label={`${isUp ? 'Subiu' : 'Caiu'} ${delta.steps}`}
+            className={`flex items-center gap-px text-[8px] font-black tabular-nums leading-none ${isUp ? 'text-emerald-400' : 'text-red-400'}`}
+        >
+            <Icon size={9} strokeWidth={3} />{delta.steps}
+        </span>
+    );
+};
 
 const RISK_LABELS: Record<RiskFilter, string> = {
     'DEFENSIVE': 'Defensiva',
@@ -103,8 +170,9 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
             });
         }
 
-        return filtered
-            .sort((a, b) => b.score - a.score)
+        // Cópia antes de ordenar: `picks` é o array do cache do React Query, e o
+        // `.sort()` in-place reordenava o cache por baixo de todos os outros leitores.
+        return sortPicksByScore(filtered)
             .slice(0, 10)
             .map((item, idx) => ({
                 ...item,
@@ -358,8 +426,11 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                                         
                                         {/* Ticker & Info */}
                                         <div className="lg:col-span-4 flex items-center gap-3">
-                                            <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
-                                                <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
+                                            <div className="flex flex-col items-center gap-1 shrink-0">
+                                                <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
+                                                    <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
+                                                </div>
+                                                <PositionDeltaBadge position={pick.position} previousPosition={pick.previousPosition} />
                                             </div>
                                             <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} sector={pick.sector} size={36} />
                                             <div className="min-w-0 flex-1">

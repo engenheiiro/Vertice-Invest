@@ -705,6 +705,14 @@ export const getLatestReport = async (req, res, next) => {
     try {
         const { assetClass, strategy } = req.query;
 
+        // Só string. O parser `qs` do Express transforma `?assetClass=STOCK&assetClass=STOCK`
+        // em array: o array virava a chave "STOCK,STOCK", sem feature no mapa, e
+        // pulava o gate — enquanto o Mongoose convertia o mesmo array em `$in` e
+        // devolvia o ranking STOCK a qualquer GUEST. Fail-closed aqui, antes do gate.
+        if (typeof assetClass !== 'string' || (strategy !== undefined && typeof strategy !== 'string')) {
+            return res.status(400).json({ message: 'Parâmetros inválidos.' });
+        }
+
         // Enforcement de plano no backend (autoritativo). O gate legado só cobria
         // STOCK_US/REIT; STOCK/FII/CRYPTO ficavam abertos a qualquer autenticado.
         const feature = RESEARCH_FEATURE_BY_CLASS[assetClass];

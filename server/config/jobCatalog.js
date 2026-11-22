@@ -122,6 +122,20 @@ export const JOB_CATALOG = {
         label: 'Snapshot patrimonial (23:59)',
         maxSilenceHours: 30,
         severity: 'CRITICAL',
+        // Caía no padrão de 15 min, mas o job percorre TODAS as carteiras e pode
+        // reconstruir histórico de cada uma — cresce com a base de usuários, e o
+        // watchdog o derrubaria sem nova chance no dia. Sem medição de produção
+        // disponível nesta auditoria (22/11/2026): teto folgado, a recalibrar pelo
+        // pior caso real dos JobRun.
+        maxRuntimeMinutes: 60,
+    },
+    'snapshot-boot-recovery': {
+        label: 'Recuperação de snapshots no boot',
+        // Dispara só no boot: silêncio é o normal, presença não é cobrada.
+        monitored: false,
+        severity: 'WARN',
+        // Mesmo trabalho do snapshot (backfill + reconciliação), mesmo teto.
+        maxRuntimeMinutes: 60,
     },
     'subscriptions-check': {
         label: 'Verificação de assinaturas (03:00)',

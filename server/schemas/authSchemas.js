@@ -128,11 +128,26 @@ export const mfaEnableSchema = z.object({
   body: z.object({ token: z.string().regex(/^\d{6}$/, 'Código MFA inválido.') }).strict(),
 });
 
+// Código do segundo fator: TOTP de 6 dígitos OU código de backup ("abcde-12345").
+const secondFactorCode = z.string(typeMessages({ required: 'Informe o código do app autenticador.', invalid: 'Código MFA inválido.' }))
+  .trim()
+  .regex(/^(\d{6}|[0-9a-fA-F]{5}-[0-9a-fA-F]{5})$/, 'Código MFA inválido.');
+
+// Desligar o MFA exige o SEGUNDO FATOR. Antes a senha sozinha bastava — o fator
+// que o MFA existe para não bastar. Senha continua aceita (e conferida) se vier.
 export const mfaDisableSchema = z.object({
   body: z.object({
-    token: z.string().regex(/^\d{6}$/, 'Código MFA inválido.').optional(),
+    token: secondFactorCode,
     password: currentPassword.optional(),
-  }).strict().refine((data) => data.token || data.password, {
-    message: 'Informe o código MFA ou a senha atual.',
-  }),
+  }).strict(),
+});
+
+// Exclusão definitiva (DELETE /me). Sem schema, `password` não-string chegava ao
+// bcrypt.compare, que LANÇA — a resposta virava 500 em vez de 400.
+export const deleteAccountSchema = z.object({
+  body: z.object({
+    password: currentPassword,
+    // '' é o campo vazio de quem não tem MFA: aceito e tratado como ausente.
+    mfaToken: z.union([z.literal(''), secondFactorCode]).optional(),
+  }).strict(),
 });

@@ -29,3 +29,9 @@ export const academyQuizSubmitSchema = z.object({
     answers: z.array(z.number().int().min(0).max(99)).min(1).max(100),
   }).strict(),
 });
+
+// Seed da Academy (admin, fora de produção): não recebe nada. Corpo extra é
+// recusado em vez de ignorado — nenhuma opção escondida chega ao seed.
+export const academySeedSchema = z.object({
+  body: z.object({}).strict().optional(),
+});

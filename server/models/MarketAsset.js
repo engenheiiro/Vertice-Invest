@@ -191,7 +191,11 @@ const MarketAssetSchema = new mongoose.Schema({
   // a série não mudou — sem isso, cada run baixava a série inteira de ~1.270
   // ativos para chegar aos mesmos números (ver services/workers/timeSeriesWorker.js).
   metricsSignature: { type: String, default: null },
-  
+  // Última vez que o enriquecimento LTM (syncService, Etapa 4.5) perguntou ao
+  // Yahoo por este ativo e voltou SEM nada aproveitável. Backoff de 30 dias:
+  // ~116 ações eram re-perguntadas todo dia sem resultado (~11s por run).
+  ltmEnrichAttemptedAt: { type: Date },
+
   // --- Controle de Saúde do Ativo ---
   isActive: { type: Boolean, default: true },
   failCount: { type: Number, default: 0 }, // Dias distintos com falha de cotação (não falhas por request)

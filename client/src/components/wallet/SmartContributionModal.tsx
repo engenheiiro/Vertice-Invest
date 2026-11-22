@@ -36,7 +36,7 @@ const FI_KEYS: FixedIncomeSubKey[] = ['IPCA', 'POS', 'PRE'];
 const US_KEYS: UsSubKey[] = ['STOCK', 'REIT', 'ETF', 'DOLLAR'];
 
 export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ isOpen, onClose }) => {
-    const { assets, targetAllocation, targetReserve, targetSubAllocation, usdRate } = useWallet();
+    const { assets, targetAllocation, targetReserve, targetSubAllocation, usdRate, isPrivacyMode } = useWallet();
     const { addToast } = useToast();
     const navigate = useNavigate();
     const [amount, setAmount] = useState('');
@@ -99,7 +99,10 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
 
         const currentValues: Record<string, number> = { STOCK: 0, FII: 0, STOCK_US: 0, ETF: 0, CRYPTO: 0, FIXED_INCOME: 0, OURO: 0, CASH: 0 };
         assets.forEach(asset => {
-            const val = asset.quantity * asset.currentPrice * (asset.currency === 'USD' ? (usdRate || 5.75) : 1);
+            // `totalValue` já vem em BRL do servidor (câmbio do dia e RF valorizada por
+            // valueFixedIncomeAsset) — mesma base do donut. Recalcular aqui com
+            // quantidade × preço × câmbio inventava uma cotação quando o dólar faltava.
+            const val = Number(asset.totalValue) || 0;
             // Bucketiza pelo BALDE DE ALOCAÇÃO (C1), coerente com o donut: ativos de
             // Reserva (CASH ou RF marcada) contam em CASH (reserva); RF não-reserva
             // fica em FIXED_INCOME (investimento). ETFs seguem sua exposição
@@ -180,7 +183,8 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         setSuggestions(finalSuggestions);
     };
 
-    const formatCurrency = (val: number) => fmtCurrency(val);
+    // Tela respeita o modo privacidade; o texto exportado (ação explícita) não.
+    const formatCurrency = (val: number) => fmtCurrency(val, 'BRL', { privacy: isPrivacyMode });
 
     // ---------------------------------------------------------------------
     // Exportação para texto. Colunas alinhadas com padding (o Bloco de Notas
@@ -236,7 +240,12 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
      * modal de Aporte de lá (convertido para a moeda da aba).
      */
     const openResearch = (target: ResearchTarget, lineAmount: number) => {
-        const converted = Math.round(amountForTarget(lineAmount, target, usdRate) * 100) / 100;
+        // Sem cotação do dólar não há conversão honesta para a aba em US$: abre sem
+        // valor pré-preenchido em vez de converter por uma taxa inventada.
+        const canConvert = target.currency !== 'USD' || (usdRate != null && usdRate > 0);
+        const converted = canConvert
+            ? Math.round(amountForTarget(lineAmount, target, usdRate ?? 0) * 100) / 100
+            : undefined;
         onClose();
         navigate('/research', {
             state: {
@@ -244,7 +253,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
                     assetClass: target.assetClass,
                     exteriorView: target.exteriorView,
                     etfOrigin: target.etfOrigin,
-                    amount: target.hasRanking ? converted : undefined,
+                    amount: target.hasRanking && converted !== undefined ? converted : undefined,
                     currency: target.currency,
                 },
             },

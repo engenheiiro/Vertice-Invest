@@ -5,6 +5,22 @@
  * Estratégia: Arredondamento seguro para 4 casas decimais em floats e 2 em moeda.
  */
 
+/**
+ * Taxa CDI corrente (% a.a.) a partir do documento MACRO_INDICATORS: CDI → Selic →
+ * fallback. Cadeia ÚNICA para card, snapshot, ponto live e rebuild — antes o card
+ * e o snapshot caíam na Selic quando o CDI faltava e o ponto live/rebuild pulavam
+ * direto para o fallback fixo, rendendo a renda fixa por taxas diferentes no mesmo
+ * dia (a divergência KPI × snapshot que a regra 9 proíbe).
+ * O fallback vem do chamador para este módulo continuar sem dependências.
+ */
+export const resolveCurrentCdiRate = (config, fallback) => {
+    const cdi = Number(config?.cdi);
+    if (Number.isFinite(cdi) && cdi > 0) return safeFloat(cdi);
+    const selic = Number(config?.selic);
+    if (Number.isFinite(selic) && selic > 0) return safeFloat(selic);
+    return fallback;
+};
+
 export const safeFloat = (value) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 0;
@@ -293,19 +309,27 @@ export const selectAnchorSnapshot = (snapshotsDesc) => {
  * @param {Object|null} baseSnapshot âncora com { quotaPrice, totalEquity }
  * @param {number} liveEquity patrimônio atual (V1)
  * @param {number} periodFlow fluxo líquido desde o âncora (BUY − SELL)
+ * @param {number} [periodIncome=0] proventos com EX-DATE depois do dia-âncora
+ *   (até hoje), na mesma régua do accrual (`accrueDividendsByTicker().sinceTotal`
+ *   com `sinceDayKey` = dia do âncora). Sem ele, no dia-ex o preço já caiu e a
+ *   cota live mostrava a queda como prejuízo até o snapshot das 23:59 creditar o
+ *   provento — o card e o ponto live do gráfico afundavam e "voltavam" à noite.
  */
-export const computeLiveQuota = (baseSnapshot, liveEquity, periodFlow) => {
+export const computeLiveQuota = (baseSnapshot, liveEquity, periodFlow, periodIncome = 0) => {
     const parsedQuota = Number(baseSnapshot?.quotaPrice);
     const prevQuota = Number.isFinite(parsedQuota) && parsedQuota > 0 ? parsedQuota : 100;
     const prevEquity = Number(baseSnapshot?.totalEquity || 0);
     const equity = Number(liveEquity);
     const flow = Number(periodFlow || 0);
+    // Renda inválida vira zero (como antes desta entrada existir), nunca NaN na cota.
+    const parsedIncome = Number(periodIncome || 0);
+    const income = Number.isFinite(parsedIncome) && parsedIncome > 0 ? parsedIncome : 0;
 
     if (![prevEquity, equity, flow].every(Number.isFinite) || equity < 0) return prevQuota;
 
     if (prevEquity <= 0 && flow <= 0) return prevQuota;
 
-    const periodReturn = calculateDailyDietz(prevEquity, equity, flow);
+    const periodReturn = calculateDailyDietz(prevEquity, equity, flow, income);
     // Circuit breaker: ignora variações absurdas (dados ruins) mantendo a cota.
     if (periodReturn > -0.8 && periodReturn < 1.0) {
         return prevQuota * (1 + periodReturn);

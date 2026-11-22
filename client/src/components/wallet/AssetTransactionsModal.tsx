@@ -1,5 +1,6 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import { X, Trash2, Calendar, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { walletService } from '../../services/wallet';
@@ -7,7 +8,7 @@ import { useWallet } from '../../contexts/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useDemo } from '../../contexts/DemoContext';
-import { formatCalendarDate, formatCurrency as fmtCurrency } from '../../utils/format';
+import { formatCalendarDate, formatCurrency as fmtCurrency, PRIVACY_MASK_SHORT } from '../../utils/format';
 import AssetLogo from '../common/AssetLogo';
 
 interface Transaction {
@@ -21,6 +22,11 @@ interface Transaction {
     currency?: 'BRL' | 'USD';
 }
 
+interface TransactionsPage {
+    transactions: Transaction[];
+    pagination: { hasMore: boolean };
+}
+
 interface AssetTransactionsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -28,13 +34,7 @@ interface AssetTransactionsModalProps {
 }
 
 export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ isOpen, onClose, ticker }) => {
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(false);
-    const [isLoadingMore, setIsLoadingMore] = useState(false);
-    
-    const { refreshWallet, assets, activeWalletId } = useWallet();
+    const { refreshWallet, assets, activeWalletId, isWalletScopeReady, isPrivacyMode } = useWallet();
     const asset = assets.find((a) => a.ticker === ticker);
     const assetType = asset?.type;
     // Cofrinhos (CASH) exibem o nome amigável; demais ativos, o próprio ticker.
@@ -42,14 +42,33 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     const { addToast } = useToast();
     const { isDemoMode } = useDemo();
     const confirm = useConfirm();
+    const queryClient = useQueryClient();
 
-    // Reset ao abrir
+    // Demo: os ativos são fictícios (DEMO_ASSETS) e não têm extrato. Buscar
+    // na API trazia as movimentações REAIS de um ticker homônimo para o tour.
+    const queryEnabled = isOpen && !!ticker && !isDemoMode && !!isWalletScopeReady;
+    // Extrato paginado em cache por carteira + ativo: reabrir o mesmo ativo mostra
+    // na hora o que já veio e revalida por trás (staleTime 0 — uma compra lançada
+    // em outro lugar precisa aparecer ao reabrir).
+    const transactionsQuery = useInfiniteQuery({
+        queryKey: ['walletTransactions', activeWalletId, ticker],
+        queryFn: ({ pageParam }): Promise<TransactionsPage> => walletService.getTransactions(ticker, pageParam, 10, activeWalletId),
+        initialPageParam: 1,
+        getNextPageParam: (last: TransactionsPage, _all: TransactionsPage[], lastPageParam: number) =>
+            last?.pagination?.hasMore ? lastPageParam + 1 : undefined,
+        enabled: queryEnabled,
+        staleTime: 0,
+    });
+    const transactions: Transaction[] = queryEnabled
+        ? (transactionsQuery.data?.pages ?? []).flatMap((p) => p?.transactions ?? [])
+        : [];
+    const isLoading = queryEnabled && transactionsQuery.isPending;
+    const hasMore = queryEnabled && !!transactionsQuery.hasNextPage;
+    const isLoadingMore = transactionsQuery.isFetchingNextPage;
+
+    // Trava o scroll da página enquanto o modal está aberto.
     useEffect(() => {
-        if (isOpen && ticker) {
-            setTransactions([]);
-            setPage(1);
-            setHasMore(false);
-            loadTransactions(1, true);
+        if (isOpen) {
             document.body.style.overflow = 'hidden';
             document.documentElement.style.overflow = 'hidden';
         } else {
@@ -57,49 +76,10 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
             document.documentElement.style.overflow = '';
         }
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
-        // Recarrega só ao ABRIR ou trocar de ativo. `loadTransactions` é recriada a
-        // cada render: incluí-la buscaria a primeira página em loop, e cada resposta
-        // muda o estado que dispara o render seguinte.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isOpen, ticker, isDemoMode]);
-
-    const loadTransactions = async (pageNum: number, isInitial = false) => {
-        // Demo: os ativos são fictícios (DEMO_ASSETS) e não têm extrato. Buscar
-        // na API trazia as movimentações REAIS de um ticker homônimo para o tour.
-        if (isDemoMode) {
-            setTransactions([]);
-            setHasMore(false);
-            setIsLoading(false);
-            setIsLoadingMore(false);
-            return;
-        }
-        if (isInitial) setIsLoading(true);
-        else setIsLoadingMore(true);
-
-        try {
-            const data = await walletService.getTransactions(ticker, pageNum, 10, activeWalletId);
-            
-            if (isInitial) {
-                setTransactions(data.transactions);
-            } else {
-                setTransactions(prev => [...prev, ...data.transactions]);
-            }
-            
-            setHasMore(data.pagination.hasMore);
-            setPage(pageNum);
-
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsLoading(false);
-            setIsLoadingMore(false);
-        }
-    };
+    }, [isOpen]);
 
     const handleLoadMore = () => {
-        if (!isLoadingMore && hasMore) {
-            loadTransactions(page + 1);
-        }
+        if (!isLoadingMore && hasMore) transactionsQuery.fetchNextPage();
     };
 
     const handleDelete = async (id: string) => {
@@ -119,8 +99,8 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
 
         try {
             await walletService.deleteTransaction(id, activeWalletId);
-            // Recarrega a primeira página para garantir consistência
-            loadTransactions(1, true);
+            // Recarrega o extrato para garantir consistência (preço médio recalculado)
+            queryClient.invalidateQueries({ queryKey: ['walletTransactions', activeWalletId, ticker] });
             refreshWallet(); // Invalida queries globais
             addToast('Movimentação excluída.', 'success');
         } catch {
@@ -134,7 +114,8 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
     // caso a resposta seja de uma versão anterior da API.
     const fallbackCurrency: 'BRL' | 'USD' =
         asset?.currency === 'USD' || assetType === 'STOCK_US' || assetType === 'CRYPTO' ? 'USD' : 'BRL';
-    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = fallbackCurrency) => fmtCurrency(val, currency);
+    const formatCurrency = (val: number, currency: 'BRL' | 'USD' = fallbackCurrency) =>
+        fmtCurrency(val, currency, { privacy: isPrivacyMode });
 
     if (!isOpen) return null;
 
@@ -190,7 +171,7 @@ export const AssetTransactionsModal: React.FC<AssetTransactionsModalProps> = ({ 
                                                         </span>
                                                     </div>
                                                     <div className="text-sm font-bold text-white mt-0.5">
-                                                        {tx.quantity} <span className="text-xs text-slate-500 font-normal">cotas a</span> {formatCurrency(tx.price, tx.currency)}
+                                                        {isPrivacyMode ? PRIVACY_MASK_SHORT : tx.quantity} <span className="text-xs text-slate-500 font-normal">cotas a</span> {formatCurrency(tx.price, tx.currency)}
                                                     </div>
                                                 </div>
                                             </div>

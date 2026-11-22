@@ -193,16 +193,45 @@ describe('refreshQuotesBatch — data da sessão', () => {
   // negociou. Gravar isso zera failCount e renova updatedAt — foi assim que
   // HGPO11 (liquidado em 25/05/2026) seguia sendo cotado a cada 15 minutos.
   it('sessão datada sem negócio (volume 0) não é gravada — vira falha, não sucesso', async () => {
-    mockFind([{ ticker: 'AERO11', updatedAt: minutesAgo(60), lastPrice: 100.01, isActive: true, failCount: 0, type: 'FII' }]);
-    externalMarketService.getQuotes.mockResolvedValue([
-      { ticker: 'AERO11', price: 100.01, change: 0, marketTime: new Date(), volume: 0, source: 'YAHOO' },
-    ]);
+    // Pregão em curso (quarta 18/11/2026, 15h BRT): aqui o zero acusa.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-18T15:00:00-03:00'));
+    try {
+      mockFind([{ ticker: 'AERO11', updatedAt: minutesAgo(60), lastPrice: 100.01, isActive: true, failCount: 0, type: 'FII' }]);
+      externalMarketService.getQuotes.mockResolvedValue([
+        { ticker: 'AERO11', price: 100.01, change: 0, marketTime: new Date(), volume: 0, source: 'YAHOO' },
+      ]);
 
-    await marketDataService.refreshQuotesBatch(['AERO11'], false);
+      await marketDataService.refreshQuotesBatch(['AERO11'], false);
 
-    const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
-    expect(set.lastPrice).toBeUndefined(); // nenhum preço gravado
-    expect(set.failCount).toBe(1); // caminho de falha: o ativo volta a envelhecer
+      const set = MarketAsset.bulkWrite.mock.calls[0][0][0].updateOne.update.$set;
+      expect(set.lastPrice).toBeUndefined(); // nenhum preço gravado
+      expect(set.failCount).toBe(1); // caminho de falha: o ativo volta a envelhecer
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Domingo 22/11/2026, depois do feriado de 20/11: o Yahoo devolveu PETR4,
+  // MGLU3, CMIG4… datados de 19/11 com volume 0 (o candle tinha 60M em MGLU3).
+  // Sem pregão novo, o zero não prova nada: nada gravado E nenhuma falha.
+  it('sem negócio fora do pregão é inconclusivo: não grava e não conta falha', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-22T15:49:00-03:00'));
+    try {
+      mockFind([{ ticker: 'MGLU3', updatedAt: minutesAgo(60), lastPrice: 8.2, isActive: true, failCount: 2, type: 'STOCK' }]);
+      externalMarketService.getQuotes.mockResolvedValue([
+        { ticker: 'MGLU3', price: 8.2, change: -1.44, marketTime: new Date('2026-11-19T21:05:49Z'), volume: 0, source: 'YAHOO' },
+      ]);
+
+      await marketDataService.refreshQuotesBatch(['MGLU3'], false);
+
+      const ops = MarketAsset.bulkWrite.mock.calls[0]?.[0] || [];
+      const mglu = ops.find((o) => o.updateOne?.filter?.ticker === 'MGLU3');
+      expect(mglu).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sessão datada COM negócio segue sendo gravada', async () => {

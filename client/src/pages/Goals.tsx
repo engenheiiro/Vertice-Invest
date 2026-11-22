@@ -4,6 +4,7 @@ import { Plus, Target, Sparkles, ArrowRight, ArrowDown, ChevronDown, ChevronUp, 
 import { Header } from '../components/dashboard/Header';
 import { useWallet } from '../contexts/WalletContext';
 import { useToast } from '../contexts/ToastContext';
+import { useDemoGuard } from '../hooks/useDemoGuard';
 import { goalsService, type Goal } from '../services/goals';
 import { STALE_TIME } from '../config/queryConfig';
 import { formatCurrency } from '../utils/format';
@@ -246,6 +247,7 @@ const GoalChain: React.FC<GoalChainProps> = ({ goals, privacy, onSelect, onRenam
 export const Goals: React.FC = () => {
   const { isPrivacyMode, activeWalletId, isWalletScopeReady } = useWallet();
   const { addToast } = useToast();
+  const blockInDemo = useDemoGuard();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -319,7 +321,7 @@ export const Goals: React.FC = () => {
             goals={item.goals}
             privacy={isPrivacyMode}
             onSelect={setSelectedId}
-            onRename={(goalId, name) => renameJourneyMutation.mutate({ goalId, name })}
+            onRename={(goalId, name) => { if (blockInDemo()) return; renameJourneyMutation.mutate({ goalId, name }); }}
             renaming={renameJourneyMutation.isPending}
           />
         ),
@@ -449,7 +451,7 @@ export const Goals: React.FC = () => {
       <ConfirmModal
         isOpen={clearOpen}
         onClose={() => setClearOpen(false)}
-        onConfirm={() => clearAllMutation.mutate()}
+        onConfirm={() => { if (blockInDemo()) return; clearAllMutation.mutate(); }}
         title="Excluir Todas as Metas?"
         message="ATENÇÃO: Esta ação é irreversível. Todas as metas e seus aportes manuais serão apagados."
         isDestructive

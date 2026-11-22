@@ -26,6 +26,11 @@ export const signalEngine = {
             else losses += Math.abs(change);
         }
 
+        // Série PLANA (sem alta nem queda): antes caía no `losses === 0` e devolvia
+        // 100 — "sobrecompra máxima" para um ativo que simplesmente não se mexeu
+        // (sem negócio, cotação congelada). Sem movimento não há força relativa:
+        // o RSI neutro é 50. Só alta e nenhuma queda continua sendo 100.
+        if (gains === 0 && losses === 0) return 50;
         if (losses === 0) return 100;
 
         const rs = gains / losses;
@@ -53,8 +58,12 @@ export const signalEngine = {
         try {
             const quotes = await externalMarketService.getQuotes(['BZ=F', '^BVSP', '^GSPC']);
             const oil = quotes.find(q => q.ticker === 'BZ=F');
-            const ibov = quotes.find(q => q.ticker === 'BVSP');
-            const spx = quotes.find(q => q.ticker === 'GSPC');
+            // getQuotes devolve o símbolo CANÔNICO ('^BVSP'). Comparar com 'BVSP' nunca
+            // casava: ibovChange/spxChange eram sempre 0 e o bloqueio de dia de pânico
+            // estava morto. Aceita as duas formas.
+            const bySym = (sym) => quotes.find(q => String(q.ticker || '').replace(/^\^/, '') === sym);
+            const ibov = bySym('BVSP');
+            const spx = bySym('GSPC');
 
             return {
                 oilChange: oil ? oil.change : 0,

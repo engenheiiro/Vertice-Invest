@@ -120,3 +120,6 @@ backup_*/
 
 # Scripts temporários de diagnóstico (nunca versionados)
 server/_tmp_*.mjs
+
+# Backups locais de coleções (scripts/backupCollections.js) — contêm dados de usuários
+server/backups/

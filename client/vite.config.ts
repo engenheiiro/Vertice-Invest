@@ -88,8 +88,15 @@ export default defineConfig({
         // Fora do precache: o que quase ninguém abre não deve pesar no 1º acesso
         // de todo visitante. O painel Admin (~170 KB) e a Chinelada continuam
         // carregando pela rede quando abertos; o chunk `prerender` só roda no
-        // build (gera o HTML estático) e nunca é pedido pelo navegador.
-        globIgnores: ['**/assets/AdminPanel-*.js', '**/assets/Chinelada-*.js', '**/assets/prerender-*.js'],
+        // build (gera o HTML estático) e nunca é pedido pelo navegador. Metas e
+        // Buy & Hold seguem a mesma régua: telas de nicho, baixadas sob demanda.
+        globIgnores: [
+          '**/assets/AdminPanel-*.js',
+          '**/assets/Chinelada-*.js',
+          '**/assets/prerender-*.js',
+          '**/assets/Goals-*.js',
+          '**/assets/BuyAndHold-*.js',
+        ],
         navigateFallback: '/index.html',
         // Nunca interceptar /api no fallback de navegação (são respostas de API, não páginas).
         navigateFallbackDenylist: [/^\/api\//],

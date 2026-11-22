@@ -176,7 +176,7 @@ export async function createTicket({ userId, category, subject, body, attachment
         code: ticket.code, category, plan: user.plan, priority: ticket.priority,
     });
 
-    return serializeTicketForUser(ticket);
+    return toUserView(ticket);
 }
 
 /**
@@ -243,7 +243,7 @@ export async function replyAsUser({ ticketId, userId, body, attachments = [] }) 
     await saveWithAttachmentRollback(ticket, attachmentIds);
     logger.info('[support] resposta do usuário', { code: ticket.code, reopened });
 
-    return { ticket: serializeTicketForUser(ticket), reopened };
+    return { ticket: toUserView(ticket), reopened };
 }
 
 // ─── Resposta do admin ───────────────────────────────────────────────────────
@@ -355,6 +355,18 @@ export async function updateTicket({ ticketId, status, priority, category, inter
     return ticket;
 }
 
+/**
+ * Visão do DONO do ticket. `serializeTicketForUser` tira as notas internas da
+ * thread, mas espalha o resto do documento — inclusive `messageCount`, que o
+ * modelo desnormaliza contando TODAS as mensagens. O número entregava quantas
+ * notas internas existiam ("5 mensagens" numa thread em que a pessoa vê 3).
+ * Regra 12: o corte é no servidor, então o contador é refeito sobre o que sai.
+ */
+const toUserView = (ticket) => {
+    const view = serializeTicketForUser(ticket);
+    return { ...view, messageCount: view.messages.length };
+};
+
 // ─── Leitura ─────────────────────────────────────────────────────────────────
 
 export async function listUserTickets(userId) {
@@ -364,7 +376,7 @@ export async function listUserTickets(userId) {
         .lean();
 
     return tickets.map((t) => {
-        const view = serializeTicketForUser(t);
+        const view = toUserView(t);
         return {
             _id: view._id,
             code: view.code,
@@ -397,7 +409,7 @@ export async function getTicketForUser(ticketId, userId) {
         ticket.hasUnreadForUser = false;
     }
 
-    return { ...serializeTicketForUser(ticket), canReopen: canReopen(ticket) };
+    return { ...toUserView(ticket), canReopen: canReopen(ticket) };
 }
 
 /** Contadores do badge do Admin. */

@@ -17,7 +17,7 @@ export interface PublicWalletData {
     showValues: boolean;
     assets: Asset[];
     kpis: WalletKPIs;
-    meta: { usdRate: number; lastUpdate: string };
+    meta: { usdRate: number | null; lastUpdate: string };
 }
 
 const base = (token: string) => `/api/public/wallet/${encodeURIComponent(token)}`;

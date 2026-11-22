@@ -25,7 +25,7 @@ import { sendResetPasswordEmail } from '../services/emailService.js';
 import logger from '../config/logger.js';
 import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
-import { verifyTotp, consumeBackupCode } from '../utils/mfa.js'; // (I14) MFA no login
+import { verifySecondFactor, MFA_GUARD_FIELDS } from '../utils/mfa.js'; // (I14) MFA no login
 import { encrypt, decrypt, blindIndex } from '../utils/encryption.js'; // (S) cripto em repouso: mfaSecret + CPF
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
 import { validateCpf } from '../utils/cpfUtils.js';
@@ -40,6 +40,13 @@ const maskEmail = (email) => {
   if (!domain) return '[masked]';
   return `${user.charAt(0)}***@${domain}`;
 };
+
+// Hash bcrypt (custo 10, o mesmo das senhas reais) de um valor que nenhuma
+// conta usa. Quando o e-mail não existe, o login comparava NADA e respondia em
+// ~1ms, contra ~70ms do bcrypt de uma conta real — a diferença de tempo dizia a
+// quem quisesse quais e-mails estão cadastrados, mesmo com a mensagem genérica.
+// Comparar contra este hash iguala o custo dos dois caminhos.
+const DUMMY_PASSWORD_HASH = '$2a$10$KybBDTS1VY/Ckc3DEozBu.bVymdtw6jlX4FJXbolZU5UBjzitOmQa';
 
 // Versão do consentimento — incrementar ao alterar Termos ou Política de Privacidade
 const CONSENT_VERSION = '1.0';
@@ -235,7 +242,7 @@ export const register = async (req, res, next) => {
     return next(error);
   }
 
-  logAudit(req, 'REGISTER_SUCCESS', 'Nova conta criada', newUserId, email);
+  logAudit(req, 'REGISTER_SUCCESS', 'Nova conta criada', newUserId, maskEmail(email));
   res.status(201).json({ message: "Conta criada com sucesso!" });
 };
 
@@ -244,10 +251,12 @@ export const login = async (req, res, next) => {
     const { email, password, mfaToken } = req.body;
 
     // Seleciona os campos de MFA (select:false por padrão) para o gate abaixo.
-    const user = await User.findOne({ email }).select('+mfaSecret +mfaBackupCodes');
+    const user = await User.findOne({ email }).select(`+mfaSecret +mfaBackupCodes ${MFA_GUARD_FIELDS}`);
     const invalidMsg = "Credenciais inválidas.";
 
     if (!user) {
+        // Mesmo custo de bcrypt do caminho com usuário (ver DUMMY_PASSWORD_HASH).
+        await bcrypt.compare(String(password ?? ''), DUMMY_PASSWORD_HASH);
         logAudit(req, 'LOGIN_FAILED', 'Usuário não encontrado', null, maskEmail(email));
         return res.status(401).json({ message: invalidMsg });
     }
@@ -273,24 +282,25 @@ export const login = async (req, res, next) => {
     if (user.mfaEnabled) {
         if (!mfaToken) {
             // Senha OK, mas falta o 2º fator — sinaliza ao cliente sem emitir tokens.
-            logAudit(req, 'LOGIN_MFA_REQUIRED', 'Aguardando segundo fator', user._id, email);
+            logAudit(req, 'LOGIN_MFA_REQUIRED', 'Aguardando segundo fator', user._id, maskEmail(email));
             return res.status(200).json({ mfaRequired: true });
         }
 
-        let mfaOk = verifyTotp(mfaToken, decrypt(user.mfaSecret));
-        if (!mfaOk) {
-            // Fallback: código de backup (consumo único).
-            const { ok, remaining } = consumeBackupCode(mfaToken, user.mfaBackupCodes);
-            if (ok) {
-                mfaOk = true;
-                user.mfaBackupCodes = remaining;
-                await user.save();
-                logAudit(req, 'LOGIN_MFA_BACKUP', 'Login via código de backup', user._id, email);
-            }
+        // TOTP com anti-replay + fallback de backup (consumo único), e contador
+        // de erros na CONTA: 5 falhas bloqueiam o 2º fator por 15 min.
+        const factor = await verifySecondFactor(User, user, mfaToken, { secret: decrypt(user.mfaSecret) });
+
+        if (factor.ok && factor.method === 'backup') {
+            logAudit(req, 'LOGIN_MFA_BACKUP', 'Login via código de backup', user._id, maskEmail(email));
         }
 
-        if (!mfaOk) {
-            logAudit(req, 'LOGIN_FAILED', 'Segundo fator inválido', user._id, maskEmail(email));
+        if (!factor.ok) {
+            logAudit(req, 'LOGIN_FAILED', factor.locked
+                ? 'Segundo fator bloqueado por excesso de tentativas'
+                : (factor.replay ? 'Código MFA reutilizado' : 'Segundo fator inválido'), user._id, maskEmail(email));
+            if (factor.locked) {
+                return res.status(429).json({ message: "Muitas tentativas do código de autenticação. Tente novamente em 15 minutos." });
+            }
             return res.status(401).json({ message: invalidMsg });
         }
     }
@@ -327,7 +337,7 @@ export const login = async (req, res, next) => {
     // (1.4) Novo token CSRF a cada login — rotaciona junto com a sessão.
     issueCsrfToken(req, res, { rotate: true });
 
-    logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, email);
+    logAudit(req, 'LOGIN_SUCCESS', 'Login via Senha', user._id, maskEmail(email));
     
     // [SEGURANÇA] Retorna apenas dados sanitizados
     res.status(200).json({ 
@@ -339,6 +349,32 @@ export const login = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+/**
+ * Depois de mudar o segundo fator, as sessões abertas ANTES da mudança não
+ * podem continuar valendo: quem tinha um refresh token roubado seguia logado
+ * mesmo com o titular ligando o MFA, e desligar o MFA não derrubava nada.
+ * Sobe o sessionVersion (o authMiddleware recusa access tokens antigos),
+ * revoga todos os refresh tokens e reemite SÓ a sessão atual — o titular
+ * continua logado neste aparelho; o cliente, ao receber 401 do token velho,
+ * renova pelo cookie novo. Devolve o access token novo.
+ */
+export const rotateSessionAfterSecurityChange = async (req, res, user) => {
+  user.sessionVersion = (user.sessionVersion ?? 0) + 1;
+  await user.save();
+  await revokeUserSessions(user._id);
+  invalidateUser(user._id);
+
+  const refreshTokenString = jwt.sign(
+    { id: user._id },
+    JWT_REFRESH_SECRET,
+    { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
+  );
+  const expiredAt = new Date();
+  expiredAt.setDate(expiredAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
+  await RefreshToken.create({ token: hashToken(refreshTokenString), user: user._id, expiryDate: expiredAt });
+  return emitSession(req, res, user, refreshTokenString);
 };
 
 // Emite (ou reemite) o cookie de refresh e devolve o access token correspondente.
@@ -479,7 +515,7 @@ export const forgotPassword = async (req, res, next) => {
 
     await sendResetPasswordEmail(user.email, token, CLIENT_URL);
 
-    logAudit(req, 'PASSWORD_RESET_REQUESTED', 'Link de reset enviado', user._id, user.email);
+    logAudit(req, 'PASSWORD_RESET_REQUESTED', 'Link de reset enviado', user._id, maskEmail(user.email));
     res.status(200).json({ message: "Se o email existir, instruções foram enviadas." });
   } catch (error) {
     next(error);
@@ -508,7 +544,7 @@ export const resetPassword = async (req, res, next) => {
     await revokeUserSessions(user._id);
     invalidateUser(user._id);
 
-    logAudit(req, 'PASSWORD_RESET_USED', 'Senha redefinida via token', user._id, user.email);
+    logAudit(req, 'PASSWORD_RESET_USED', 'Senha redefinida via token', user._id, maskEmail(user.email));
     res.status(200).json({ message: "Senha atualizada." });
   } catch (error) {
     next(error);
@@ -654,7 +690,7 @@ export const updateAvatar = async (req, res, next) => {
         );
         invalidateUser(userId);
 
-        logAudit(req, 'AVATAR_UPDATED', 'Foto de perfil atualizada', userId, updatedUser?.email);
+        logAudit(req, 'AVATAR_UPDATED', 'Foto de perfil atualizada', userId, maskEmail(updatedUser?.email));
         res.json({ message: "Foto atualizada.", user: sanitizeUser(updatedUser) });
     } catch (error) {
         next(error);
@@ -672,7 +708,7 @@ export const removeAvatar = async (req, res, next) => {
         );
         invalidateUser(userId);
 
-        logAudit(req, 'AVATAR_REMOVED', 'Foto de perfil removida', userId, updatedUser?.email);
+        logAudit(req, 'AVATAR_REMOVED', 'Foto de perfil removida', userId, maskEmail(updatedUser?.email));
         res.json({ message: "Foto removida.", user: sanitizeUser(updatedUser) });
     } catch (error) {
         next(error);
@@ -703,7 +739,7 @@ export const changePassword = async (req, res, next) => {
         await revokeUserSessions(user._id);
         invalidateUser(user._id);
 
-        logAudit(req, 'PASSWORD_CHANGED', 'Senha alterada pelo usuário', user._id, user.email);
+        logAudit(req, 'PASSWORD_CHANGED', 'Senha alterada pelo usuário', user._id, maskEmail(user.email));
         res.json({ message: "Senha alterada." });
     } catch (error) {
         next(error);
@@ -741,7 +777,7 @@ export const deactivateAccount = async (req, res, next) => {
         await revokeUserSessions(userId);
         invalidateUser(userId);
 
-        logAudit(req, 'ACCOUNT_DEACTIVATED', 'Conta desativada pelo usuário', user._id, user.email);
+        logAudit(req, 'ACCOUNT_DEACTIVATED', 'Conta desativada pelo usuário', user._id, maskEmail(user.email));
         res.status(200).json({ message: "Conta desativada com sucesso." });
     } catch (error) {
         next(error);
@@ -799,7 +835,7 @@ export const exportData = async (req, res, next) => {
             SupportTicket.find({ user: userId }).lean(),
         ]);
 
-        logAudit(req, 'DATA_EXPORT', 'Exportação de dados pessoais solicitada', userId, user.email);
+        logAudit(req, 'DATA_EXPORT', 'Exportação de dados pessoais solicitada', userId, maskEmail(user.email));
 
         res.setHeader('Content-Disposition', `attachment; filename="vertice-meus-dados-${Date.now()}.json"`);
         res.setHeader('Content-Type', 'application/json');
@@ -821,7 +857,12 @@ export const exportData = async (req, res, next) => {
             notifications,
             // Mesmo corte da tela: nota interna, contexto técnico e etiquetas de
             // triagem ficam no servidor (regra 12).
-            supportTickets: supportTickets.map(serializeTicketForUser),
+            // messageCount refeito sobre a thread visível: o desnormalizado do modelo
+            // conta também as notas internas (regra 12).
+            supportTickets: supportTickets.map((t) => {
+                const view = serializeTicketForUser(t);
+                return { ...view, messageCount: view.messages.length };
+            }),
         });
     } catch (error) {
         next(error);
@@ -837,10 +878,12 @@ export const deleteAccount = async (req, res, next) => {
         const userId = req.user.id;
         const { password, mfaToken } = req.body;
 
-        if (!password) return res.status(400).json({ message: "Confirmação de senha obrigatória." });
+        // Tipo/presença garantidos pelo deleteAccountSchema (rota). A checagem
+        // fica como defesa: bcrypt.compare com não-string LANÇA e virava 500.
+        if (typeof password !== 'string' || !password) return res.status(400).json({ message: "Confirmação de senha obrigatória." });
 
         // Carrega campos de MFA (select:false) para o gate de segundo fator.
-        const user = await User.findById(userId).select('+mfaSecret +mfaBackupCodes');
+        const user = await User.findById(userId).select(`+mfaSecret +mfaBackupCodes ${MFA_GUARD_FIELDS}`);
         if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -854,13 +897,12 @@ export const deleteAccount = async (req, res, next) => {
             if (!mfaToken) {
                 return res.status(403).json({ message: "Código de autenticação (2FA) obrigatório.", mfaRequired: true });
             }
-            let mfaOk = verifyTotp(mfaToken, decrypt(user.mfaSecret));
-            if (!mfaOk) {
-                const { ok } = consumeBackupCode(mfaToken, user.mfaBackupCodes);
-                mfaOk = ok;
-            }
-            if (!mfaOk) {
+            const factor = await verifySecondFactor(User, user, mfaToken, { secret: decrypt(user.mfaSecret) });
+            if (!factor.ok) {
                 logAudit(req, 'ACCOUNT_DELETE_FAILED', 'Segundo fator inválido na exclusão', user._id, maskEmail(user.email));
+                if (factor.locked) {
+                    return res.status(429).json({ message: "Muitas tentativas do código de autenticação. Tente novamente em 15 minutos." });
+                }
                 return res.status(403).json({ message: "Código de autenticação inválido." });
             }
         }

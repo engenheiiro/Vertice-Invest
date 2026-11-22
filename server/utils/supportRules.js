@@ -205,11 +205,15 @@ export function mimeOfDataUrl(dataUrl) {
 export function serializeTicketForUser(ticket) {
   const plain = typeof ticket.toObject === 'function' ? ticket.toObject() : ticket;
   const { context, internalTags, ...visible } = plain;
+  const visibleMessages = (plain.messages ?? []).filter((m) => !m.isInternal);
 
   return {
     ...visible,
-    messages: (plain.messages ?? [])
-      .filter((m) => !m.isInternal)
+    // O `messageCount` desnormalizado do modelo conta as notas internas: espalhado
+    // como veio, dizia ao usuário quantas notas internas o ticket tem. Recontado
+    // aqui, no corte do servidor (regra 12), e não em cada chamador.
+    messageCount: visibleMessages.length,
+    messages: visibleMessages
       .map(({ isInternal, author, authorName, ...m }) => ({
         ...m,
         // Quem responde é "o suporte", não uma pessoa. A tela já rotula assim;

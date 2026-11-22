@@ -324,7 +324,7 @@ export const authService = {
       return data;
   },
 
-  async disableMfa(payload: { token?: string; password?: string }): Promise<void> {
+  async disableMfa(payload: { token: string; password?: string }): Promise<void> {
       const response = await this.api('/api/mfa/disable', {
           method: 'POST',
           body: JSON.stringify(payload)

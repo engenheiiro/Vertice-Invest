@@ -164,6 +164,11 @@ const isEligibleForDefensive = (asset, _context) => {
         // Beta muito alto (≥1.5) indica ativo pró-cíclico incompatível com perfil defensivo.
         // O scoring já penaliza -15 pts para beta ≥1.5, mas o gate evita que ativos com
         // muitos bônus de DY/ROE compensem essa fraqueza estrutural e entrem no DEFENSIVE.
+        // Beta AUSENTE reprova (fail-closed). O marketDataService grava `beta: 0` quando não
+        // há série para calcular e marca `_missing.beta` — mas o gate só olhava `beta >= 1.5`,
+        // então 0 passava como se fosse um beta baixíssimo e o ativo sem medição de risco
+        // entrava no perfil Defensivo. Beta negativo REAL continua aceito.
+        if (m._missing?.beta || !Number.isFinite(m.beta)) return false;
         if (m.beta >= 1.5) return false;
         const sector = asset.sector || '';
         // Setor cíclico (INDUSTRIAL/COMMODITIES) NUNCA é elegível ao perfil Defensivo:
@@ -173,10 +178,14 @@ const isEligibleForDefensive = (asset, _context) => {
         if (isCyclicalSector(sector)) return false;
         const isSafeSector = DEFENSIVE_SAFE_SECTORS_BR.some(keyword => sector.includes(keyword));
         if (!isSafeSector) {
-            if (m.dy < 6.0 || m.pl > 10) return false;
+            // P/L precisa ser POSITIVO: `m.pl > 10` sozinho aceitava P/L 0 (ausente) e P/L
+            // negativo (prejuízo) como "barato", abrindo a rota DY≥6% para empresa sem lucro.
+            if (m.dy < 6.0 || !(m.pl > 0 && m.pl <= 10)) return false;
         }
-        // Só aplica rejeição se o dado estiver presente (não ausente) — evita punir por falta de coleta
-        if (!m._missing?.roe && m.roe < 5) return false;
+        // ROE ausente reprova no Defensivo (fail-closed): antes a regra era pulada quando
+        // `_missing.roe`, e a falta de coleta virava passe livre para o perfil mais
+        // conservador. Margem/payout ausentes seguem tolerados (não são o eixo do gate).
+        if (m._missing?.roe || !Number.isFinite(m.roe) || m.roe < 5) return false;
         if (!m._missing?.netMargin && m.netMargin < 3) return false;
         // Payout insustentável (>200%) é incompatível com perfil defensivo — dividendo vem do capital.
         if (!m._missing?.payout && m.payout > 200) return false;
@@ -195,8 +204,11 @@ const isEligibleForDefensive = (asset, _context) => {
     } else if (asset.type === 'STOCK_US') {
         // US stocks: exige market cap mínimo de $10B USD e setor defensivo (Consumer Staples, Utilities, Healthcare, Financials)
         if (m.marketCap < 10_000_000_000) return false;
+        // Mesma regra fail-closed do STOCK BR: beta ausente (gravado como 0) não é beta baixo.
+        if (m._missing?.beta || !Number.isFinite(m.beta)) return false;
         if (m.beta >= 1.8) return false;
-        if (!m._missing?.roe && m.roe < 5) return false;
+        // ROE ausente reprova o Defensivo (fail-closed), como no STOCK BR.
+        if (m._missing?.roe || !Number.isFinite(m.roe) || m.roe < 5) return false;
         const sector = asset.sector || '';
         const isSafeUSSector = DEFENSIVE_SAFE_SECTORS_US.some(s => sector.includes(s));
         if (!isSafeUSSector) {
@@ -1236,7 +1248,7 @@ const calculateProfileScores = (asset, valuationData, context) => {
         BOLD: clampProfile(boldScore, 'BOLD')
     };
 
-    return { scores: finalScores, audit, isAristocrat };
+    return { scores: finalScores, audit, isAristocrat, confidence };
 };
 
 // ---------------------------------------------------------------------------
@@ -1859,6 +1871,11 @@ export const scoringEngine = {
             bullThesis: thesisData.bull,
             bearThesis: thesisData.bear,
             isDividendAristocrat: aristocrat,
+            // Confiança de dados do scorer legado (a mesma que define maxScoreAllowed
+            // acima). Sai daqui para a calibração de ações poder capar o score
+            // publicado pela MENOR das duas confianças — a da calibração só enxerga
+            // stale/ausência para arquétipo OPERATIONAL (ver aiResearchService).
+            dataConfidence: profileResult.confidence,
             // Consumido pelo Brasil 10 (getTop5Defensive): sem este flag, ativos
             // reprovados no gate defensivo entravam na lista rotulados DEFENSIVE.
             isDefensiveEligible: isEligibleForDefensive(scored, context)

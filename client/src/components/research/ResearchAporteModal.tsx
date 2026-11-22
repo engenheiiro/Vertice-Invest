@@ -295,7 +295,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                 autoFocus
                             />
 
-                            {isUsd && usdRate > 0 && amountNum > 0 && (
+                            {isUsd && usdRate != null && usdRate > 0 && amountNum > 0 && (
                                 <p className="text-[10px] text-slate-500 mt-1">≈ {formatCurrency(amountNum * usdRate, 'BRL')}</p>
                             )}
 

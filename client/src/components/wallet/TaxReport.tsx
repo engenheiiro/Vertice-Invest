@@ -1,9 +1,13 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { walletService } from '../../services/wallet';
 import { useDemo } from '../../contexts/DemoContext';
 import { useToast } from '../../contexts/ToastContext';
-import { formatCurrency as fmtCurrency } from '../../utils/format';
+import { useAuth } from '../../contexts/AuthContext';
+import { useWallet } from '../../contexts/WalletContext';
+import { STALE_TIME } from '../../config/queryConfig';
+import { formatCurrency as fmtCurrency, PRIVACY_MASK_SHORT } from '../../utils/format';
 import {
     FileText, Download, Landmark, Receipt, Coins, AlertTriangle,
     Info, Loader2, ChevronDown,
@@ -40,7 +44,6 @@ const CATEGORY_PT: Record<string, string> = { ACOES: 'Ações', FII: 'FIIs', ETF
 const currentYear = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => currentYear - i);
 
-const fmt = (v: number) => fmtCurrency(v || 0);
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 
 export const TaxReport = () => {
@@ -48,30 +51,31 @@ export const TaxReport = () => {
     const { addToast } = useToast();
     // Padrão: ano-base anterior (a declaração corrente é sobre o ano encerrado).
     const [year, setYear] = useState<number>(currentYear - 1);
-    const [data, setData] = useState<TaxReportData | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [showDisclaimers, setShowDisclaimers] = useState(false);
+    const { user } = useAuth();
+    const { isPrivacyMode } = useWallet();
 
-    const load = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const res = await walletService.getTaxReport(year);
-            setData(res);
-        } catch (e: any) {
-            setError(e?.message || 'Falha ao gerar o relatório de IR.');
-            setData(null);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [year]);
+    // O relatório de IR é da CONTA inteira (o servidor não aplica resolveWallet em
+    // /tax-report), então a chave é usuário + ano-base — não a carteira ativa.
+    // Em cache: voltar para a aba ou alternar anos já vistos não refaz a apuração.
+    const reportQuery = useQuery<TaxReportData>({
+        queryKey: ['taxReport', user?.id, year],
+        queryFn: () => walletService.getTaxReport(year),
+        enabled: !isDemoMode && !!user?.id,
+        staleTime: STALE_TIME.MEDIUM,
+        retry: false,
+    });
+    const data = reportQuery.data ?? null;
+    const isLoading = !isDemoMode && reportQuery.isPending;
+    const error = reportQuery.isError
+        ? ((reportQuery.error as Error | null)?.message || 'Falha ao gerar o relatório de IR.')
+        : null;
+    const load = () => { reportQuery.refetch(); };
 
-    useEffect(() => {
-        if (isDemoMode) { setIsLoading(false); return; }
-        load();
-    }, [isDemoMode, load]);
+    // Modo privacidade: DARF, proventos, custo e preço médio são valores da carteira
+    // como qualquer outro — mascarados com a mesma régua do resumo patrimonial.
+    const fmt = (v: number) => fmtCurrency(v || 0, 'BRL', { privacy: isPrivacyMode });
 
     const handleDownload = async () => {
         if (isDemoMode) { addToast('O relatório de IR usa os dados reais da sua carteira.', 'info'); return; }
@@ -189,7 +193,7 @@ export const TaxReport = () => {
                                                                 {p.ticker}
                                                                 {p.manualReview && <span className="ml-2 text-[9px] text-amber-400 font-normal">(conferir câmbio)</span>}
                                                             </td>
-                                                            <td className="py-2 text-right text-slate-300 tabular-nums">{p.quantity % 1 === 0 ? p.quantity : p.quantity.toFixed(6)}</td>
+                                                            <td className="py-2 text-right text-slate-300 tabular-nums">{isPrivacyMode ? PRIVACY_MASK_SHORT : (p.quantity % 1 === 0 ? p.quantity : p.quantity.toFixed(6))}</td>
                                                             <td className="py-2 text-right text-slate-300 tabular-nums">{fmt(p.avgPrice)}</td>
                                                             <td className="py-2 text-right text-white tabular-nums font-bold">{fmt(p.totalCost)}</td>
                                                         </tr>
