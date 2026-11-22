@@ -1,0 +1,13 @@
+# Pre-push: o portão rápido (tipos, lint, testes com cobertura e catraca).
+# Push na main é publicação (o Render publica sozinho), então o portão
+# vermelho barra o envio. Pular só em emergência, com o motivo escrito em
+# docs/medicoes.md: git push --no-verify.
+if command -v bash >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+  npm run -s check:rapido || {
+    echo "✖ Portão vermelho: push bloqueado. Conserte antes de enviar (detalhes em .qualidade/logs/)."
+    exit 1
+  }
+else
+  echo "ℹ husky: ambiente sem bash/npm (ex.: GitHub Desktop) — pulando o check:rapido."
+  echo "  Rode 'npm run check:rapido' no terminal antes de publicar."
+fi

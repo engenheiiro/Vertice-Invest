@@ -13,7 +13,13 @@ if [ -n "$blocked" ]; then
   exit 1
 fi
 
-# 2) Scan de segredos com gitleaks (se disponível)
+# 2) Varredura de segredos. A própria (scripts/qualidade/segredos.mjs) roda
+#    sempre que houver node; o gitleaks, mais completo, roda se estiver
+#    instalado. Antes só havia o gitleaks, que não está em toda máquina, e
+#    o gancho pulava em silêncio.
+if command -v node >/dev/null 2>&1; then
+  node scripts/qualidade/segredos.mjs --staged || exit 1
+fi
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --redact --config .gitleaks.toml || {
     echo "✖ gitleaks encontrou possíveis segredos nos arquivos staged."
