@@ -20,48 +20,48 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 <!-- placar:inicio (gerado por npm run metricas -- --registrar; não edite à mão) -->
 | Métrica | Limite | 2026-11-22 |
 |---|---|---|
-| `cobertura.server.config` — Cobertura de linhas — server/config (%) | 89.5 | 89.6 |
-| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 44 | 44.3 |
+| `cobertura.server.config` — Cobertura de linhas — server/config (%) | 90 | 90.2 |
+| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 71 | 71.2 |
 | `cobertura.server.middleware` — Cobertura de linhas — server/middleware (%) | 93.5 | 93.9 |
 | `cobertura.server.models` — Cobertura de linhas — server/models (%) | 91 | 91.3 |
 | `cobertura.server.routes` — Cobertura de linhas — server/routes (%) | 81.5 | 81.6 |
 | `cobertura.server.schemas` — Cobertura de linhas — server/schemas (%) | 94 | 94.2 |
 | `cobertura.server.services` — Cobertura de linhas — server/services (%) | 68.5 | 68.5 |
 | `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 93.5 | 93.6 |
-| `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.1 |
+| `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.2 |
 | `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 51 | 51.1 |
 | `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 46.5 | 46.6 |
-| `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 17 | 17.3 |
+| `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 100 | 100 |
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 29 | 29.2 |
-| `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 20 | 20.4 |
-| `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 82.5 | 82.5 |
-| `testes.server` — Casos de teste do server | 3070 | 3070 |
-| `testes.client` — Casos de teste do client | 1091 | 1091 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 29.4 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 21.9 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 43 | 43 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1259 | 1259 |
-| `eslintDisable` — Supressões eslint-disable | 16 | 16 |
-| `eslintDisableSemMotivo` — eslint-disable sem "-- motivo" na linha | 16 | 16 |
+| `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 |
+| `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 82.5 | 82.6 |
+| `testes.server` — Casos de teste do server | 3225 | 3225 |
+| `testes.client` — Casos de teste do client | 1312 | 1312 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 32.6 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 28.5 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 42 | 42 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1213 | 1213 |
+| `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 |
+| `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 |
 | `tsDiretivas` — Diretivas de supressão do TypeScript (ignore / expect-error / nocheck) | 0 | 0 |
 | `naoNulo` — Asserções de não-nulo "x!" (TS) | 68 | 68 |
 | `focoEmTeste` — Testes com .only / fit / fdescribe | 0 | 0 |
-| `testesComData` — Arquivos de teste que leem o relógio sem fixá-lo | 41 | 41 |
+| `testesComData` — Arquivos de teste que leem o relógio sem fixá-lo | 0 | 0 |
 | `testesEmQuarentena` — Testes pulados em quarentena (0 no fim da semana) | info | 0 |
 | `quarentenaIrregular` — Teste pulado sem data, vencido ou com prazo > 7 dias | 0 | 0 |
 | `cssSemUso` — Classes do CSS próprio sem uso | 9 | 9 |
 | `imgSemSrcset` — <img> sem srcSet | 23 | 23 |
-| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 679 |
+| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 698 |
 | `lint.erros` — Erros do ESLint | 0 | 0 |
 | `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 15 | 15 |
-| `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 200 | 200 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 120 | 120 |
-| `complexidadeMax` — Maior complexidade ciclomática de uma função | 190 | 190 |
-| `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.64 | 0.64 |
-| `codigoMorto` — Arquivos/exports sem uso de produção | 34 | 34 |
+| `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 112 | 112 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 124 | 124 |
+| `complexidadeMax` — Maior complexidade ciclomática de uma função | 82 | 82 |
+| `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.63 | 0.63 |
+| `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 |
 | `vulnAltas` — Vulnerabilidades altas/críticas (npm audit) | 0 | 0 |
-| `depsMajorAtras` — Dependências mais de uma versão maior atrás | 9 | 9 |
+| `depsMajorAtras` — Dependências mais de uma versão maior atrás | 0 | 0 |
 | `depsSemUso` — Dependências declaradas sem uso | 0 | 0 |
 | `segredos` — Segredos aparentes em arquivos versionados | 0 | 0 |
 | `foraStrict` — Arquivos TS fora do modo strict | 0 | 0 |
@@ -77,7 +77,13 @@ linha nesta seção.
 
 Formato: `- AAAA-MM-DD` seguido de `` `chave` ``, do que mudou e do porquê.
 
-_(nenhum até agora)_
+- 2026-11-22 `complexidade`: o `walletController.js` (8 funções acima de 15)
+  foi dividido em seis módulos, só movendo código. As mesmas 8 funções foram
+  para os módulos novos: walletTransactionsController 3,
+  walletPerformanceController 2, walletKpis 1, walletPayload 1 e
+  walletAssetProcessor 1. O walletController.js caiu para 0. O total não
+  mudou: é redistribuição, não piora. Mover código não reduz complexidade;
+  baixar essas 8 é trabalho à parte.
 
 ## Fora do portão (medido à mão)
 

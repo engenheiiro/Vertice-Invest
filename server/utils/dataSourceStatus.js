@@ -216,9 +216,8 @@ export const buildSuspectView = (suspects = []) => {
          * A lista misturava dois estados muito diferentes sob a mesma cor. Em
          * 07/09/2026, de sete linhas, duas (RBRL11 e STX) eram o momento em que
          * um preço ERRADO que estava guardado foi substituído pelo certo: nada a
-         * investigar, o conserto já entrou na mesma gravação. Contá-las junto com
-         * as outras cinco é como um alarme perde a credibilidade — o dono abre a
-         * lista, vê sete, checa duas que já estavam resolvidas e para de abrir.
+         * investigar, o conserto já entrou na mesma gravação. Contá-las com as
+         * outras cinco faz o dono checar duas já resolvidas e parar de abrir.
          */
         settled: (s.findings || []).some(isSettledFinding),
         count: s.count ?? 1,
