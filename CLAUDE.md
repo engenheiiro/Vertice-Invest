@@ -4,9 +4,85 @@ Plataforma institucional de análise quantitativa financeira (Ações, FIIs, Cri
 
 ---
 
+## Qualidade: portão e catraca
+
+**Portão** = `npm run check` (tem de sair verde). **Catraca** = `docs/metricas.json`: cada número só anda para o lado bom. O código mora em `scripts/qualidade/`; o placar com data, em `docs/medicoes.md`.
+
+### Princípios
+1. **Portão sempre verde.** Se o check falha, consertar vem antes de qualquer coisa nova. Nunca publicar com ele vermelho (push na `main` = deploy no Render).
+2. **Catraca.** Cada número só anda para o lado bom; melhorou, trava o ganho (`npm run metricas -- --apertar`). Um limite só afrouxa com motivo escrito em `docs/medicoes.md`, seção "Afrouxamentos", citando a chave entre crases. O `metricas` compara com a base publicada (`@{u}`) e reprova afrouxamento sem motivo.
+3. **Regra do escoteiro.** Quem mexe num arquivo deixa ele um pouco melhor, nunca maior e mais confuso.
+4. **Bug corrigido ganha teste**, que falha sem a correção e passa com ela. O nome do teste diz qual era o defeito.
+5. **Nada de falha "conhecida".** Teste instável vai para a quarentena (`skip` com `// QUARENTENA até AAAA-MM-DD` na linha ou na anterior, no máximo 7 dias) e sai até a data, corrigido ou apagado. Teste pulado sem data, vencido ou com prazo maior reprova.
+
+### Comandos
+| Quando | Comando |
+|---|---|
+| Ajuste pequeno | `npx vitest run <spec>` (na pasta da parte) + `npx eslint <arquivo>` |
+| Antes de commitar | automático (pre-commit): bloqueia `.env`, varre segredos e roda o lint-staged |
+| Antes de enviar ao GitHub | automático (pre-push): `npm run check:rapido` com tipos, lint, testes com cobertura e catraca (cerca de 2 min) |
+| Antes de publicar | `npm run check`, o completo: + build, duplicação, dependências, e2e e catraca estrita (cerca de 3,5 min; teto 8 min) |
+| Placar da catraca | `npm run metricas` · travar ganhos: `npm run metricas -- --apertar` |
+| Fim de sessão | `npm run fechar` |
+
+### Métricas (limites em `docs/metricas.json`; base = valores de 22/11/2026)
+| Métrica | Regra | Quem confere |
+|---|---|---|
+| Cobertura de linhas por área (9 do server, 6 do client) | piso que só sobe, arredondado para baixo em 0,5 | catraca |
+| Casos de teste (server/client) | não caem | catraca |
+| Tamanho de arquivo | acima de 600 linhas não cresce (teto = tamanho de 22/11); nenhum outro passa de 600, e arquivo novo acima de 800 nem entra | catraca |
+| Linhas acima de 160 caracteres | não sobem | catraca |
+| `eslint-disable` | não sobe; o novo leva o motivo na mesma linha (`-- motivo`) | catraca |
+| `as any`, não-nulo `x!` | não sobem | catraca |
+| Diretivas de supressão do TS, `.only`/`fit` | sempre 0 | catraca |
+| Teste que lê o relógio sem fixá-lo | lista de 22/11 não cresce; teste novo usa `vi.useFakeTimers` + `setSystemTime` | catraca |
+| CSS próprio sem uso, `<img>` sem `srcSet` | não sobem | catraca |
+| Bundle do client (gzip) | ≤ medido × 1,10 | catraca |
+| Suíte de uma parte / check inteiro | < 60 s / < 8 min (no CI o tempo não é julgado: runner ~2× mais lento) | check |
+| ESLint: erros / avisos / a11y (`jsx-a11y`) | 0 / não sobem / não sobem | lint + catraca |
+| Complexidade ciclomática | funções acima de 15 não aumentam em nenhum arquivo; a maior não sobe | lint + catraca |
+| Duplicação (jscpd) | % não sobe | check completo |
+| Código morto (arquivo sem import, export sem uso de produção) | lista não cresce; meta zero | catraca |
+| Vulnerabilidades altas/críticas · dependências sem uso | 0 · 0 | check completo · catraca |
+| Dependências mais de uma versão maior atrás | não sobem | check completo |
+| Segredos · arquivos TS fora do strict · TODO sem `(dono, AAAA-MM-DD)` | 0 · 0 · 0 | catraca + pre-commit |
+
+Fora do portão, anotados à mão em `docs/medicoes.md`: Lighthouse (só conta com 3 medições no mesmo dia) e taxa de erro do Sentry por versão.
+
+### Regras por situação
+- **Função nova:** vem com teste, complexidade até 15, e o arquivo não passa do seu teto.
+- **Correção de bug:** o teste falha sem a correção e passa com ela.
+- **Tela:** a lógica fica em hook/util testado; o componente ganha teste (com `jest-axe` quando tiver interação) e nenhum aviso novo de `jsx-a11y`.
+- **Rota de servidor:** `rateLimiter → authenticateToken → requireAdmin`, corpo validado por Zod (`validate`) e teste de contrato (status + corpo).
+- **Banco:**
+  - script de migração idempotente, com `--dry-run`, testado a partir de um documento no formato da versão anterior;
+  - índice declarado no modelo;
+  - o `.env` local aponta para PRODUÇÃO, então nenhum script que escreve roda sem aprovação do dono.
+- **Pagamento (Mercado Pago):** o webhook valida a assinatura e é idempotente; todo caminho de valor tem teste; nunca usar chave real em teste.
+- **E-mail:** em teste o transporte é sempre falso; nunca enviar e-mail real a partir de teste.
+- **Dado pessoal (LGPD):** nunca em log, URL ou query string (`redactLogPath`); o recorte do que sai é feito no servidor.
+- **Teste com data:** relógio fixo (`vi.useFakeTimers({ toFake: ['Date'] })` + `vi.setSystemTime`); nunca depender de hoje.
+- **Código só usado por teste:** apagar. A exceção são ganchos de teste com prefixo `_`/`__` (reset de estado, internals).
+
+### Git
+- **Formato do commit:** em português, `Área: o que mudou` (commitlint). Áreas: Carteira, Pesquisa, Sinais, Macro, Sync, Suporte, Auth, Pagamento, Admin, Infra, Qualidade, Docs, Deps, Tela, Academy. Área nova entra em `commitlint.config.js`.
+- **Conferir o ramo antes de commitar** (`git branch --show-current`).
+- **Push e publicação só com aprovação do dono.** Push na `main` publica.
+
+### Fechamento de sessão (`npm run fechar` confere com ✔/✘)
+- tudo em commit, no ramo certo;
+- ramos mesclados apagados e sem worktree parado;
+- catraca em dia (ganho travado) e quarentena zerada;
+- portão verde no HEAD, ou o motivo escrito em `docs/PENDENCIAS.md`;
+- o que falta publicar dito ao dono;
+- docs atualizados, com `docs/metricas.json` e `docs/medicoes.md` mudando juntos;
+- pendências em `docs/PENDENCIAS.md`.
+
+---
+
 ## Stack
 
-- **Frontend** (`/client`): React 18 + TypeScript + Vite + Tailwind. Ícones: `lucide-react`. Gráficos: `recharts`. Data fetching: `@tanstack/react-query` v5. Roteamento: React Router v6 com **BrowserRouter** (o Express atende deep links da SPA). Animações: CSS/Tailwind (keyframes em `tailwind.config.js`; sem libs de animação).
+- **Frontend** (`/client`): React 18 + TypeScript + Vite + Tailwind. Ícones: `lucide-react`. Gráficos: `recharts`. Data fetching: `@tanstack/react-query` v5. Roteamento: React Router v7 com **BrowserRouter** (o Express atende deep links da SPA). Animações: CSS/Tailwind (keyframes em `tailwind.config.js`; sem libs de animação).
 - **Backend** (`/server`): Node.js ES Modules (`import/export`, nunca `require`). Express 4, MongoDB/Mongoose 8, Winston (logs), node-cron. AI: `@google/genai` (Gemini). Pagamentos: Mercado Pago SDK.
 - **Dev**: Nodemon (server), Vite HMR (client), Vitest (testes).
 
