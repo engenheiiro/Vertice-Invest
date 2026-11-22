@@ -163,6 +163,7 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
                                     onClick={isPublic ? disable : enable}
                                     disabled={busy === 'toggle'}
                                     aria-pressed={isPublic}
+                                    aria-label="Link público"
                                     className={`relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-60 ${isPublic ? 'bg-emerald-500' : 'bg-slate-700'}`}
                                 >
                                     <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${isPublic ? 'translate-x-5' : ''}`} />
@@ -216,6 +217,7 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
                                             onClick={toggleValues}
                                             disabled={busy === 'values'}
                                             aria-pressed={showValues}
+                                            aria-label="Exibir valores em R$"
                                             className={`relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-60 ${showValues ? 'bg-amber-500' : 'bg-slate-700'}`}
                                         >
                                             <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${showValues ? 'translate-x-5' : ''}`} />

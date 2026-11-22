@@ -6,10 +6,12 @@ import React from 'react';
 // sem precisar migrar o que está gravado.
 const ACADEMY_PNG = /^\/assets\/academy\/.+\.png$/;
 
-type Props = React.ImgHTMLAttributes<HTMLImageElement> & { src: string };
+// `alt` obrigatório no tipo: repassado por spread, ele sumia sem aviso quando
+// quem chama esquecia (capa vira "imagem" sem nome no leitor de tela).
+type Props = React.ImgHTMLAttributes<HTMLImageElement> & { src: string; alt: string };
 
-export const AcademyImage: React.FC<Props> = ({ src, ...imgProps }) => {
-    const img = <img src={src} {...imgProps} />;
+export const AcademyImage: React.FC<Props> = ({ src, alt, ...imgProps }) => {
+    const img = <img src={src} alt={alt} {...imgProps} />;
     if (!ACADEMY_PNG.test(src)) return img;
     return (
         <picture className="contents">

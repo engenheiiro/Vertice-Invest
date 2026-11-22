@@ -43,9 +43,15 @@ js.configs.recommended, // --- Client: TypeScript + React ---
     'react-refresh': reactRefresh,
   },
   rules: {
-    // Acessibilidade: as regras recomendadas do jsx-a11y entram como AVISO. O
-    // total desses avisos é travado pela catraca (docs/metricas.json): não sobe.
-    ...Object.fromEntries(Object.keys(jsxA11y.flatConfigs.recommended.rules).map((r) => [r, 'warn'])),
+    // Acessibilidade: as regras recomendadas do jsx-a11y entram como AVISO, com
+    // as OPÇÕES do preset preservadas (sem elas, control-has-associated-label
+    // passa a cobrar rótulo até de <td>). O total é travado pela catraca
+    // (docs/metricas.json): não sobe.
+    ...Object.fromEntries(Object.entries(jsxA11y.flatConfigs.recommended.rules)
+      .map(([regra, valor]) => [regra, Array.isArray(valor) ? ['warn', ...valor.slice(1)] : 'warn'])),
+    // Obsoleta no próprio plugin (substituída por label-has-associated-control,
+    // que segue ligada): exigia id + aninhamento ao mesmo tempo.
+    'jsx-a11y/label-has-for': 'off',
     'react-hooks/rules-of-hooks': 'error',
     'react-hooks/exhaustive-deps': 'warn',
     // Cada contexto exporta o Provider (componente) e o hook de consumo no mesmo
