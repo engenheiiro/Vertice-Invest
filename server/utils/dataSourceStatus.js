@@ -70,20 +70,13 @@ const deliveryFacts = (facts) => {
     const rateSources = macro.ratesSources || {};
     const indexSources = macro.indicesSources || {};
     const price = facts.priceDelivery || {};
+    const stampIf = (entregou, at) => (entregou ? at || null : null);
 
     // Uma fonte de câmbio "entregou" se ela é a origem gravada de alguma moeda.
-    const currencyDelivery = (nome) => (
-        currencySources.usd === nome || currencySources.btc === nome
-            ? macro.currenciesUpdatedAt || null
-            : null
-    );
-
+    const currencyDelivery = (nome) => stampIf(currencySources.usd === nome || currencySources.btc === nome, macro.currenciesUpdatedAt);
     // Mesma regra para índice: entregou quem está gravado como origem do valor.
-    const indexDelivery = (nome) => (
-        indexSources.ibov === nome || indexSources.spx === nome
-            ? macro.indicesUpdatedAt || null
-            : null
-    );
+    const indexDelivery = (nome) => stampIf(indexSources.ibov === nome || indexSources.spx === nome, macro.indicesUpdatedAt);
+    const rateDelivery = (nome) => stampIf(rateSources.selic === nome || rateSources.ipca === nome, macro.ratesUpdatedAt);
 
     // E para cotação: quem escreveu `lastPrice` em algum ativo vivo. O `priceSource`
     // do ativo é o registro, e ele sobrevive ao reinício — que é a diferença
@@ -103,11 +96,9 @@ const deliveryFacts = (facts) => {
         // Nome distinto do elo acima de propósito: os dois são Coinbase, e um
         // rótulo compartilhado creditaria a entrega ao card errado.
         'coinbase.rates': currencyDelivery('Coinbase (taxas)'),
-        'bcb.series': rateSources.selic === 'BCB' || rateSources.ipca === 'BCB'
-            ? macro.ratesUpdatedAt || null : null,
-        brasilapi: rateSources.selic === 'BrasilAPI' || rateSources.ipca === 'BrasilAPI'
-            ? macro.ratesUpdatedAt || null : null,
-        ibge: rateSources.ipca === 'IBGE' ? macro.ratesUpdatedAt || null : null,
+        'bcb.series': rateDelivery('BCB'),
+        brasilapi: rateDelivery('BrasilAPI'),
+        ibge: stampIf(rateSources.ipca === 'IBGE', macro.ratesUpdatedAt),
         // Era `macro.updatedAt`, o carimbo do DOCUMENTO inteiro: ele avança a cada
         // run do macro-sync mesmo quando o índice não veio, então o card exibia
         // "recebeu há 6 min" ao lado de "SEM RECEBER" (09/09/2026). Agora responde
@@ -410,6 +401,167 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
     return { bySource, chains };
 };
 
+/**
+ * RESERVA CHAMADA SÓ PARA ASSUNTO MORTO NÃO É RESERVA QUEBRADA.
+ *
+ * A taxa de falha de uma fonte `onFailure` mede a POPULAÇÃO que chega até
+ * ela, não a fonte: por construção, só lhe perguntam o que a anterior já
+ * não conseguiu — uma amostra enriquecida de ticker extinto. Em 05/09/2026
+ * o candle do Yahoo aparecia como "INSTÁVEL · 100% das 3 chamadas
+ * falharam" enquanto respondia normalmente para o resto do mercado; as
+ * três chamadas tinham sido para AVB, EQR e EA, que haviam saído da bolsa
+ * (fusão em VMRK e fechamento de capital). Card vermelho permanente por
+ * um defeito que não era dela — o alarme falso que este módulo existe
+ * para evitar.
+ *
+ * O ledger por assunto é quem desempata, e só ele consegue: se NENHUM dos
+ * assuntos que passaram por aqui foi precificado por fonte alguma, o que
+ * faltou foi papel negociando. Basta um assunto que a fonte seguinte tenha
+ * salvado para a suspeita voltar a ser legítima — aí uma peça da cadeia
+ * conseguiu onde esta falhou, e isso é sobre a fonte.
+ *
+ * Mas só em 'candle' "ninguém resolveu" basta sozinho — e é preciso dizer
+ * por quê, porque a própria cadeia de cotações do exemplo do AVB/EQR/EA
+ * acima segue sem essa exigência, de propósito. `expected` não quer dizer
+ * a mesma coisa nas duas: em 'candle' ele é o SEM_NEGOCIO do
+ * `timeSeriesWorker`/`walletDayCandleService` — o papel confirmadamente
+ * não negociou, então não vai ter fechamento em fonte nenhuma, hoje nem
+ * depois. Em 'quotes' ele é `PREFER_GOOGLE_TICKERS`, uma lista de ticker
+ * que NEGOCIA normalmente e só falha no Yahoo — o oposto de "não existe
+ * fechamento". Exigir `orphanedExpected` ali apagaria de propósito o caso
+ * que este bloco existe para cobrir.
+ *
+ * Em 'candle', porém, "ninguém resolveu" sozinho engolia SEM_ARQUIVO (o
+ * arquivo da B3 não veio) junto com SEM_NEGOCIO: os dois deixam
+ * `orphaned === reached`, mas só o segundo é ausência inevitável. O card
+ * da B3 ficava azul e calmo bem ao lado da própria linha da cadeia
+ * dizendo "N sem fechamento em fonte nenhuma" em vermelho — mesma falha,
+ * duas cores. `orphanedExpected` é o desempate: só é assunto morto se
+ * TODO órfão que chegou aqui também é uma ausência esperada.
+ */
+const isDeadSubjectOnly = (source, led, deReserva) => {
+    if (!deReserva || !led || !(led.reached > 0) || led.rescued !== 0 || led.orphaned !== led.reached) return false;
+    return source.chain !== 'candle' || led.orphaned === (led.orphanedExpected || 0);
+};
+
+/**
+ * Silêncio não é falha. Uma fonte que só roda no sync diário fica sem chamada
+ * nenhuma por horas depois de um deploy, e marcá-la de vermelho aí é o alarme
+ * falso que ensina o operador a ignorar o painel.
+ */
+const idleVerdict = (source, deReserva, lastDeliveryAt) => {
+    const quieta = (detail, idleReason) => ({ status: SOURCE_STATUS.UNKNOWN, detail, idleReason });
+    if (source.skipped > 0 && source.lastSkipReason) {
+        // ANTES do ramo de reserva, e não depois: a PTAX é `onFailure`, então
+        // ela cairia em "a fonte anterior deu conta" — frase falsa num dia em
+        // que o Yahoo falhou e ela deixou de ser chamada por decisão nossa.
+        // Quem pulou fomos nós, e a razão é mais informativa que o silêncio.
+        return quieta(source.lastSkipReason, 'SKIPPED');
+    }
+    if (source.schedule?.kind === 'manual') {
+        // Manual entra ANTES do ramo de reserva: as duas ficam cinza pelo
+        // mesmo motivo aparente, mas por causas opostas. Dizer "a fonte
+        // anterior deu conta" numa fonte que só roda por clique inventaria
+        // um fallback que nunca aconteceu.
+        return quieta('Nenhuma chamada porque ninguém disparou — esta fonte roda por botão no Admin, não por agendamento', 'STANDBY');
+    }
+    if (deReserva) {
+        // Aqui o cinza é BOA notícia: a cadeia não precisou da reserva.
+        return quieta('Nenhuma chamada porque a fonte anterior da cadeia deu conta — é o esperado', 'STANDBY');
+    }
+    if (lastDeliveryAt) {
+        // Entrega gravada ANTES do reinício. Dizer só "sem chamadas" ao lado
+        // de "há 12 min" faz a linha se contradizer na tela; o que aconteceu
+        // é que o dado dela está no banco e o processo atual ainda não a usou.
+        return quieta('Entregou antes do último reinício; ainda sem novas chamadas neste processo', 'DELIVERED_BEFORE_RESTART');
+    }
+    return quieta('Ainda não teve a vez dela desde o reinício do servidor', 'NOT_YET');
+};
+
+// Antes de qualquer régua de taxa: ela não se aplica a esta amostra.
+const deadSubjectVerdict = (source, led) => {
+    const vocab = LEDGERED_CHAINS.get(source.chain);
+    const morto = vocab?.deadSubject || 'que nenhuma fonte resolveu';
+    const noun = vocab?.noun || 'assunto';
+    const detail = led.reached === 1
+        ? `A única chamada foi para um ${noun} ${morto}, não resposta desta fonte`
+        : `As ${source.attempts} chamadas foram para ${led.reached} ${noun}(s) ${morto}, não resposta desta fonte`;
+    return { status: SOURCE_STATUS.UNKNOWN, detail, idleReason: 'NO_LIVE_SUBJECT' };
+};
+
+// A última tentativa terminou em falha? É o estado CORRENTE da fonte, e vale
+// mais que a média: uma fonte que roda duas vezes por dia levaria dias para a
+// taxa acusar algo, enquanto "a última chamada falhou" é exatamente o que se
+// quer ver no painel no momento em que acontece.
+const lastCallFailed = (source) => !!source.lastFailAt
+    && (!source.lastOkAt || new Date(source.lastFailAt) > new Date(source.lastOkAt));
+
+const activeVerdict = (source) => {
+    const rate = source.failureRate;
+    const julgavel = source.attempts >= MIN_ATTEMPTS && rate !== null;
+    const grave = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
+    const veredito = (status, detail) => ({ status, detail, idleReason: null });
+    if (julgavel && rate >= FAILURE_RATE.critical) return veredito(grave, `${pct(rate)} das ${source.attempts} chamadas falharam`);
+    if (julgavel && rate >= FAILURE_RATE.warn) return veredito(SOURCE_STATUS.WARN, `${pct(rate)} das ${source.attempts} chamadas falharam`);
+    if (source.ok === 0) {
+        // Rodou e não trouxe nada, nem uma vez. Ainda não é tendência
+        // estatística, mas não há uma única entrega para chamar de saudável.
+        return veredito(grave, source.attempts === 1
+            ? 'Foi chamada uma vez e não trouxe dado'
+            : `Nenhuma das ${source.attempts} chamadas trouxe dado`);
+    }
+    if (lastCallFailed(source)) {
+        // Já entregou antes, mas a chamada mais recente falhou. Verde aqui
+        // esconderia uma fonte caindo AGORA atrás de um histórico bom.
+        return veredito(SOURCE_STATUS.WARN, `A última chamada falhou (${source.ok} de ${source.attempts} trouxeram dado)`);
+    }
+    return veredito(SOURCE_STATUS.OK, `${source.ok} de ${source.attempts} chamadas com dado`);
+};
+
+/**
+ * POR QUE ESTA FONTE ESTÁ QUIETA — decidido AQUI, nunca rededuzido na tela.
+ *
+ * O card mostrava "Sem alvo vivo" para a PTAX no feriado de 07/09/2026
+ * enquanto o detalhe, no modal, dizia "não foi chamada: feriado". Duas
+ * explicações para o mesmo card, porque a tela tinha uma cópia MAIS FROUXA
+ * da regra do servidor: ela checava só `reached > 0`, e a regra de verdade
+ * exige também que ninguém tenha resolvido aquele assunto
+ * (`soAssuntoMorto`). O dólar tinha passado pela PTAX e sido resolvido pela
+ * Coinbase logo depois — alvo bem vivo.
+ *
+ * Dois lugares decidindo o mesmo estado divergem; é a mesma lição da faixa
+ * do modal, que já foi unificada com a cor do card. O servidor decide e
+ * manda o código; a tela só escolhe a palavra curta do rodapé.
+ */
+const judgeSource = (source, led, deReserva, lastDeliveryAt) => {
+    if (source.attempts === 0) return idleVerdict(source, deReserva, lastDeliveryAt);
+    if (isDeadSubjectOnly(source, led, deReserva)) return deadSubjectVerdict(source, led);
+    return activeVerdict(source);
+};
+
+const roundedHours = (date, now) => {
+    const idade = hoursSince(date, now);
+    return idade === null ? null : Math.round(idade * 10) / 10;
+};
+
+/**
+ * Cadeia de fallback a que pertence, e a posição nela. `null` quando a
+ * fonte não tem reserva — e isso NÃO se deduz do agrupamento visual: o
+ * bloco junta responsabilidades independentes (o Fundamentus não
+ * substitui o Tesouro), então a tela precisa do dado explícito para não
+ * desenhar uma cadeia que não existe só porque dois cards ficaram lado
+ * a lado.
+ */
+const chainFields = (elo) => ({
+    chain: elo?.chain ?? null,
+    chainPosition: elo?.chainPosition ?? null,
+    chainSize: elo?.chainSize ?? null,
+    /** Fontes que assumem se esta falhar, na ordem de tentativa. Vazio = ponto único de falha. */
+    backups: elo?.backups ?? [],
+    /** A fonte principal que esta cobre; `null` se ela própria for a principal. */
+    covers: elo?.covers ?? null,
+});
+
 export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) => {
     const now = facts?.now || new Date();
     const delivery = deliveryFacts(facts || {});
@@ -421,152 +573,12 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
         // vazio, o vazio é o dado — ver deliveryFacts.
         const deliveryTracked = Object.prototype.hasOwnProperty.call(delivery, source.id);
         const lastDeliveryAt = deliveryTracked ? (delivery[source.id] || null) : null;
-        const rate = source.failureRate;
-        const julgavel = source.attempts >= MIN_ATTEMPTS && rate !== null;
-
-        let status = SOURCE_STATUS.OK;
-        let detail;
-        /**
-         * POR QUE ESTA FONTE ESTÁ QUIETA — decidido AQUI, nunca rededuzido na tela.
-         *
-         * O card mostrava "Sem alvo vivo" para a PTAX no feriado de 07/09/2026
-         * enquanto o detalhe, no modal, dizia "não foi chamada: feriado". Duas
-         * explicações para o mesmo card, porque a tela tinha uma cópia MAIS FROUXA
-         * da regra do servidor: ela checava só `reached > 0`, e a regra de verdade
-         * exige também que ninguém tenha resolvido aquele assunto
-         * (`soAssuntoMorto`). O dólar tinha passado pela PTAX e sido resolvido pela
-         * Coinbase logo depois — alvo bem vivo.
-         *
-         * Dois lugares decidindo o mesmo estado divergem; é a mesma lição da faixa
-         * do modal, que já foi unificada com a cor do card. O servidor decide e
-         * manda o código; a tela só escolhe a palavra curta do rodapé.
-         */
-        let idleReason = null;
-
         // Manual entra junto com a reserva: nenhuma das duas tem hora marcada, e
         // o silêncio de ambas é estado normal, não atraso. A diferença — "ninguém
         // precisou" contra "ninguém clicou" — está em `cadenceLabel`.
         const deReserva = source.schedule?.kind === 'onFailure' || source.schedule?.kind === 'manual';
-        // A última tentativa terminou em falha? É o estado CORRENTE da fonte, e
-        // vale mais que a média: uma fonte que roda duas vezes por dia levaria
-        // dias para a taxa acusar algo, enquanto "a última chamada falhou" é
-        // exatamente o que se quer ver no painel no momento em que acontece.
-        const ultimaFalhou = !!source.lastFailAt
-            && (!source.lastOkAt || new Date(source.lastFailAt) > new Date(source.lastOkAt));
-
-        /**
-         * RESERVA CHAMADA SÓ PARA ASSUNTO MORTO NÃO É RESERVA QUEBRADA.
-         *
-         * A taxa de falha de uma fonte `onFailure` mede a POPULAÇÃO que chega até
-         * ela, não a fonte: por construção, só lhe perguntam o que a anterior já
-         * não conseguiu — uma amostra enriquecida de ticker extinto. Em 05/09/2026
-         * o candle do Yahoo aparecia como "INSTÁVEL · 100% das 3 chamadas
-         * falharam" enquanto respondia normalmente para o resto do mercado; as
-         * três chamadas tinham sido para AVB, EQR e EA, que haviam saído da bolsa
-         * (fusão em VMRK e fechamento de capital). Card vermelho permanente por
-         * um defeito que não era dela — o alarme falso que este módulo existe
-         * para evitar.
-         *
-         * O ledger por assunto é quem desempata, e só ele consegue: se NENHUM dos
-         * assuntos que passaram por aqui foi precificado por fonte alguma, o que
-         * faltou foi papel negociando. Basta um assunto que a fonte seguinte tenha
-         * salvado para a suspeita voltar a ser legítima — aí uma peça da cadeia
-         * conseguiu onde esta falhou, e isso é sobre a fonte.
-         *
-         * Mas só em 'candle' "ninguém resolveu" basta sozinho — e é preciso dizer
-         * por quê, porque a própria cadeia de cotações do exemplo do AVB/EQR/EA
-         * acima segue sem essa exigência, de propósito. `expected` não quer dizer
-         * a mesma coisa nas duas: em 'candle' ele é o SEM_NEGOCIO do
-         * `timeSeriesWorker`/`walletDayCandleService` — o papel confirmadamente
-         * não negociou, então não vai ter fechamento em fonte nenhuma, hoje nem
-         * depois. Em 'quotes' ele é `PREFER_GOOGLE_TICKERS`, uma lista de ticker
-         * que NEGOCIA normalmente e só falha no Yahoo — o oposto de "não existe
-         * fechamento". Exigir `orphanedExpected` ali apagaria de propósito o caso
-         * que este bloco existe para cobrir.
-         *
-         * Em 'candle', porém, "ninguém resolveu" sozinho engolia SEM_ARQUIVO (o
-         * arquivo da B3 não veio) junto com SEM_NEGOCIO: os dois deixam
-         * `orphaned === reached`, mas só o segundo é ausência inevitável. O card
-         * da B3 ficava azul e calmo bem ao lado da própria linha da cadeia
-         * dizendo "N sem fechamento em fonte nenhuma" em vermelho — mesma falha,
-         * duas cores. `orphanedExpected` é o desempate: só é assunto morto se
-         * TODO órfão que chegou aqui também é uma ausência esperada.
-         */
         const led = escalada.bySource.get(source.id) || null;
-        const exigeTodosEsperados = source.chain === 'candle';
-        const soAssuntoMorto = deReserva
-            && !!led
-            && led.reached > 0
-            && led.rescued === 0
-            && led.orphaned === led.reached
-            && (!exigeTodosEsperados || led.orphaned === (led.orphanedExpected || 0));
-
-        if (source.attempts === 0) {
-            // Silêncio não é falha. Uma fonte que só roda no sync diário fica sem
-            // chamada nenhuma por horas depois de um deploy, e marcá-la de vermelho
-            // aí é o alarme falso que ensina o operador a ignorar o painel.
-            status = SOURCE_STATUS.UNKNOWN;
-            if (source.skipped > 0 && source.lastSkipReason) {
-                // ANTES do ramo de reserva, e não depois: a PTAX é `onFailure`, então
-                // ela cairia em "a fonte anterior deu conta" — frase falsa num dia em
-                // que o Yahoo falhou e ela deixou de ser chamada por decisão nossa.
-                // Quem pulou fomos nós, e a razão é mais informativa que o silêncio.
-                detail = source.lastSkipReason;
-                idleReason = 'SKIPPED';
-            } else if (source.schedule?.kind === 'manual') {
-                // Manual entra ANTES do ramo de reserva: as duas ficam cinza pelo
-                // mesmo motivo aparente, mas por causas opostas. Dizer "a fonte
-                // anterior deu conta" numa fonte que só roda por clique inventaria
-                // um fallback que nunca aconteceu.
-                detail = 'Nenhuma chamada porque ninguém disparou — esta fonte roda por botão no Admin, não por agendamento';
-                idleReason = 'STANDBY';
-            } else if (deReserva) {
-                // Aqui o cinza é BOA notícia: a cadeia não precisou da reserva.
-                detail = 'Nenhuma chamada porque a fonte anterior da cadeia deu conta — é o esperado';
-                idleReason = 'STANDBY';
-            } else if (lastDeliveryAt) {
-                // Entrega gravada ANTES do reinício. Dizer só "sem chamadas" ao lado
-                // de "há 12 min" faz a linha se contradizer na tela; o que aconteceu
-                // é que o dado dela está no banco e o processo atual ainda não a usou.
-                detail = 'Entregou antes do último reinício; ainda sem novas chamadas neste processo';
-                idleReason = 'DELIVERED_BEFORE_RESTART';
-            } else {
-                detail = 'Ainda não teve a vez dela desde o reinício do servidor';
-                idleReason = 'NOT_YET';
-            }
-        } else if (soAssuntoMorto) {
-            // Antes de qualquer régua de taxa: ela não se aplica a esta amostra.
-            status = SOURCE_STATUS.UNKNOWN;
-            idleReason = 'NO_LIVE_SUBJECT';
-            const vocab = LEDGERED_CHAINS.get(source.chain);
-            const morto = vocab?.deadSubject || 'que nenhuma fonte resolveu';
-            detail = led.reached === 1
-                ? `A única chamada foi para um ${vocab?.noun || 'assunto'} ${morto}, não resposta desta fonte`
-                : `As ${source.attempts} chamadas foram para ${led.reached} ${vocab?.noun || 'assunto'}(s) ${morto}, não resposta desta fonte`;
-        } else if (julgavel && rate >= FAILURE_RATE.critical) {
-            status = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
-            detail = `${pct(rate)} das ${source.attempts} chamadas falharam`;
-        } else if (julgavel && rate >= FAILURE_RATE.warn) {
-            status = SOURCE_STATUS.WARN;
-            detail = `${pct(rate)} das ${source.attempts} chamadas falharam`;
-        } else if (source.ok === 0) {
-            // Rodou e não trouxe nada, nem uma vez. Ainda não é tendência
-            // estatística, mas não há uma única entrega para chamar de saudável.
-            status = source.critical ? SOURCE_STATUS.CRITICAL : SOURCE_STATUS.WARN;
-            detail = source.attempts === 1
-                ? 'Foi chamada uma vez e não trouxe dado'
-                : `Nenhuma das ${source.attempts} chamadas trouxe dado`;
-        } else if (ultimaFalhou) {
-            // Já entregou antes, mas a chamada mais recente falhou. Verde aqui
-            // esconderia uma fonte caindo AGORA atrás de um histórico bom.
-            status = SOURCE_STATUS.WARN;
-            detail = `A última chamada falhou (${source.ok} de ${source.attempts} trouxeram dado)`;
-        } else {
-            detail = `${source.ok} de ${source.attempts} chamadas com dado`;
-        }
-
-        const idade = hoursSince(lastDeliveryAt, now);
-        const idadeResposta = hoursSince(source.lastOkAt, now);
+        const { status, detail, idleReason } = judgeSource(source, led, deReserva, lastDeliveryAt);
 
         return {
             id: source.id,
@@ -581,21 +593,7 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             cadence: cadenceLabel(source.schedule),
             /** Frase do próximo disparo; `null` para fonte de reserva (não tem hora). */
             nextRun: nextRunLabel(source.schedule, now),
-            /**
-             * Cadeia de fallback a que pertence, e a posição nela. `null` quando a
-             * fonte não tem reserva — e isso NÃO se deduz do agrupamento visual: o
-             * bloco junta responsabilidades independentes (o Fundamentus não
-             * substitui o Tesouro), então a tela precisa do dado explícito para não
-             * desenhar uma cadeia que não existe só porque dois cards ficaram lado
-             * a lado.
-             */
-            chain: cadeia.get(source.id)?.chain ?? null,
-            chainPosition: cadeia.get(source.id)?.chainPosition ?? null,
-            chainSize: cadeia.get(source.id)?.chainSize ?? null,
-            /** Fontes que assumem se esta falhar, na ordem de tentativa. Vazio = ponto único de falha. */
-            backups: cadeia.get(source.id)?.backups ?? [],
-            /** A fonte principal que esta cobre; `null` se ela própria for a principal. */
-            covers: cadeia.get(source.id)?.covers ?? null,
+            ...chainFields(cadeia.get(source.id)),
             status,
             detail,
             /**
@@ -605,7 +603,7 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
              */
             idleReason,
             lastDeliveryAt,
-            lastDeliveryHours: idade === null ? null : Math.round(idade * 10) / 10,
+            lastDeliveryHours: roundedHours(lastDeliveryAt, now),
             /**
              * Temos como medir a ENTREGA desta fonte? `false` = só conectividade,
              * e a tela precisa dizer "última resposta" em vez de "última entrega".
@@ -613,7 +611,7 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             deliveryTracked,
             /** Última chamada que voltou COM dado. Responde por conectividade, não por entrega. */
             lastResponseAt: source.lastOkAt || null,
-            lastResponseHours: idadeResposta === null ? null : Math.round(idadeResposta * 10) / 10,
+            lastResponseHours: roundedHours(source.lastOkAt, now),
             /** Chamadas que NÃO foram feitas por decisão nossa, e a razão da última. */
             skipped: source.skipped || 0,
             lastSkipAt: source.lastSkipAt || null,
@@ -623,7 +621,7 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
             attempts: source.attempts,
             ok: source.ok,
             failures: source.failures,
-            failureRate: rate,
+            failureRate: source.failureRate,
             lastError: source.lastError,
             lastOkAt: source.lastOkAt,
             lastFailAt: source.lastFailAt,
@@ -639,7 +637,6 @@ export const buildSourceStatuses = (facts, sourceStats = [], escalations = []) =
         };
     });
 };
-
 /**
  * Resumo de uma linha para o topo do painel: quantas fontes há, quantas estão
  * entregando, e o nome das que não estão. É o texto que responde "está tudo
