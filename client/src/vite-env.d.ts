@@ -10,6 +10,11 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+// CSS importado só pelo efeito (`import './index.css'`). O TypeScript 7 passou a
+// exigir declaração para esse tipo de import, e o vite/client (que a tem) não é
+// referenciado aqui — ver o comentário do topo.
+declare module '*.css';
+
 // Tipos do vite-plugin-pwa (declarados manualmente para não puxar vite/client).
 declare module 'virtual:pwa-register/react' {
   import type { Dispatch, SetStateAction } from 'react';
