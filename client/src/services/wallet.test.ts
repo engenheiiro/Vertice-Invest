@@ -203,7 +203,7 @@ describe('walletService — download do PDF de IR', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloads.push(`${this.download}|${this.href}`);
     });
-    apiSpy.mockImplementation(async () => new Response(new Blob(['%PDF']), { status: 200 }));
+    apiSpy.mockImplementation(async () => new Response('%PDF', { status: 200 }));
 
     await walletService.downloadTaxReportPdf(2025);
 

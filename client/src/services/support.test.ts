@@ -102,7 +102,7 @@ describe('supportService — usuário', () => {
 
 describe('supportService — anexos', () => {
   it('baixa com o token uma vez e reaproveita o object URL', async () => {
-    apiSpy.mockImplementation(async () => new Response(new Blob(['png']), { status: 200 }));
+    apiSpy.mockImplementation(async () => new Response('png', { status: 200 }));
 
     const first = await supportService.loadAttachment('att-cache');
     const second = await supportService.loadAttachment('att-cache');
