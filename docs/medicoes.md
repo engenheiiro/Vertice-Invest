@@ -26,38 +26,38 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.server.models` — Cobertura de linhas — server/models (%) | 91 | 91.3 |
 | `cobertura.server.routes` — Cobertura de linhas — server/routes (%) | 81.5 | 81.6 |
 | `cobertura.server.schemas` — Cobertura de linhas — server/schemas (%) | 94 | 94.2 |
-| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 75 | 75.3 |
+| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 76.5 | 76.6 |
 | `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 93.5 | 93.6 |
 | `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.3 |
-| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 51 | 51.3 |
+| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 79.5 | 79.8 |
 | `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 77.5 | 77.7 |
 | `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 100 | 100 |
-| `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 88 | 88 |
-| `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 |
-| `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 83 | 83 |
-| `testes.server` — Casos de teste do server | 3307 | 3307 |
-| `testes.client` — Casos de teste do client | 1487 | 1487 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 34.6 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 32.8 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 41 | 41 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1209 | 1209 |
+| `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89 | 89.3 |
+| `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87 |
+| `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 88 | 88 |
+| `testes.server` — Casos de teste do server | 3338 | 3338 |
+| `testes.client` — Casos de teste do client | 1709 | 1709 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 52.1 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 53.1 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 40 | 40 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1181 | 1181 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 |
 | `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 |
 | `tsDiretivas` — Diretivas de supressão do TypeScript (ignore / expect-error / nocheck) | 0 | 0 |
-| `naoNulo` — Asserções de não-nulo "x!" (TS) | 68 | 68 |
+| `naoNulo` — Asserções de não-nulo "x!" (TS) | 58 | 58 |
 | `focoEmTeste` — Testes com .only / fit / fdescribe | 0 | 0 |
 | `testesComData` — Arquivos de teste que leem o relógio sem fixá-lo | 0 | 0 |
 | `testesEmQuarentena` — Testes pulados em quarentena (0 no fim da semana) | info | 0 |
 | `quarentenaIrregular` — Teste pulado sem data, vencido ou com prazo > 7 dias | 0 | 0 |
 | `cssSemUso` — Classes do CSS próprio sem uso | 9 | 9 |
 | `imgSemSrcset` — <img> sem srcSet | 23 | 23 |
-| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 699 |
+| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 701 |
 | `lint.erros` — Erros do ESLint | 0 | 0 |
-| `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 15 | 15 |
+| `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 13 | 13 |
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 119 | 119 |
-| `complexidadeMax` — Maior complexidade ciclomática de uma função | 82 | 82 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 115 | 115 |
+| `complexidadeMax` — Maior complexidade ciclomática de uma função | 73 | 73 |
 | `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.63 | 0.63 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 |
 | `vulnAltas` — Vulnerabilidades altas/críticas (npm audit) | 0 | 0 |
