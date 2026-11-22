@@ -156,7 +156,9 @@ export function useAssetSearch({ form, transactionType, setForm }: UseAssetSearc
       setActiveIndex((i) => (i + 1) % searchResults.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActiveIndex((i) => (i - 1 + searchResults.length) % searchResults.length);
+      // Sem destaque (-1), a seta para cima vai ao ÚLTIMO item — a conta
+      // modular sozinha caía no penúltimo.
+      setActiveIndex((i) => (i <= 0 ? searchResults.length - 1 : i - 1));
     } else if (e.key === 'Enter') {
       if (activeIndex >= 0 && activeIndex < searchResults.length) {
         e.preventDefault();
