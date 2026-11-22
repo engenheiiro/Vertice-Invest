@@ -5,22 +5,20 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-22) Maior complexidade agora é 73.** O
-  `recalculatePosition` (82) foi quebrado. O teto `complexidadeMax` passa a
-  ser o perfil FII do `scoringEngine.js:330` (73) — código do score, pede
-  revisão própria — e o script `auditDividendPaymentSources.js` (73). Seguem
-  `dataSourceStatus.js` (60), Indicators e AuditDetailModal (53).
-- **(dono, 2026-11-22) Suíte do client perto do teto de 60 s.** Com 1709
-  testes ela mediu 53 s no check de 22/11 (com a máquina carregada; antes dos
-  ~400 testes novos eram ~33 s). Se encostar no
-  teto, olhar primeiro os testes de página mais pesados (Calculadora, Admin).
-- **(dono, 2026-11-22) `getMarketData`: `metrics.price` sem fallback.** O
-  topo do item usa `asset.lastPrice || 0`, mas `metrics.price` é
-  `asset.lastPrice` cru e pode sair `undefined`. Travado como está por
-  `tests/market_data_batch_characterization.spec.js`; decidir qual dos dois
-  vale antes de mudar.
+- **(dono, 2026-11-22) Maior complexidade agora é 60.** O perfil FII do
+  scoring e o `auditDividendPaymentSources.js` (73) foram quebrados. Seguem
+  `dataSourceStatus.js` (60), Indicators e AuditDetailModal (53) e o gate
+  `isEligibleForDefensive` do scoring (52).
 
 ## Decididas
+
+- **`getMarketData`: `metrics.price` fica cru (22/11/2026).** Sem cotação ele
+  sai `undefined`, que é o estado honesto (regra 13: nunca número inventado
+  como real). O `asset.lastPrice || 0` do topo do item é o desvio, mas a tela
+  lê esse campo; trocá-lo por nulo é mudança de contrato e pede revisão
+  própria. Travado por `tests/market_data_batch_characterization.spec.js`.
+- **Suíte do client fica como está (22/11/2026).** Os 53 s eram máquina
+  carregada; com ela livre, 34 s para 1709 testes (teto 60).
 
 - **"12.000 investidores" na landing:** fica. É tática de venda, decidida pelo
   dono em 22/11/2026.

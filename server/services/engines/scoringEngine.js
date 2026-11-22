@@ -3,7 +3,6 @@ import {
     DEFAULT_NTNB_FALLBACK,
     BAZIN_MIN_YIELD,
     BAZIN_NTNB_PREMIUM,
-    FII_YIELD_TRAP_THRESHOLD,
 } from '../../config/financialConstants.js';
 import { isCyclicalSector } from '../../config/sectorTaxonomy.js';
 import {
@@ -14,6 +13,7 @@ import {
     resolveRoeReading,
 } from '../../config/stockCalibration.js';
 import { asObservedNumber } from '../../utils/metricObservation.js';
+import { scoreFiiProfileRules } from './fiiProfileRules.js';
 import { scoreStockProfileRules } from './stockProfileRules.js';
 import {
     cryptoStructuralScores,
@@ -326,161 +326,10 @@ const scoreStockProfiles = (asset, valuationData, context, audit) => {
     return scoreStockProfileRules(asset, valuationData, MACRO, isEligibleForDefensive(asset, context), flags, audit);
 };
 
-// (M1) Scoring por perfil de FII. Lógica idêntica à versão monolítica anterior.
-const scoreFiiProfiles = (asset, context, audit) => {
-    const { MACRO } = context;
-    const m = asset.metrics;
-    const NTNB = MACRO.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
-    let defScore = 0, modScore = 0, boldScore = 0;
-    {
-        const isTier1 = asset.dbFlags?.isTier1 || false;
-        const isPapel = resolvePapel(asset.fiiSubType, asset.sector);
-        const yieldSpread = m.dy - NTNB;
-        // Anti yield-trap: DY 12m acima do teto é quase sempre amortização de capital /
-        // RCA / evento não recorrente — não renda sustentável. Sem esta guarda, FIIs
-        // estressados (ex.: DY 47%) ganhavam o bônus máximo de "Yield Extremo" e viravam
-        // BUY. O DEFENSIVE já é protegido pelo gate dy>18 do isEligibleForDefensive.
-        const isYieldTrap = m.dy > FII_YIELD_TRAP_THRESHOLD;
-
-        // ── DEFENSIVO ────────────────────────────────────────────────────────
-        // Base reduzida de 65→40: bônus progressivos evitam que FIIs medianos
-        // atinjam 100 trivialmente só por cumprir 3 critérios binários.
-        if (isEligibleForDefensive(asset, context)) {
-            defScore = 40;
-            audit.DEFENSIVE.push({ factor: 'Score Base (FII Defensivo)', points: 40, type: 'base' });
-
-            // Yield spread vs NTN-B: escala proporcional ao prêmio real entregue
-            if (yieldSpread >= 5.0) {
-                defScore += 22; audit.DEFENSIVE.push({ factor: `Yield Excepcional (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 22, type: 'bonus' });
-            } else if (yieldSpread >= 3.0) {
-                defScore += 18; audit.DEFENSIVE.push({ factor: `Yield Alto (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 18, type: 'bonus' });
-            } else if (yieldSpread >= 1.5) {
-                defScore += 12; audit.DEFENSIVE.push({ factor: 'Yield > NTN-B + 1.5%', points: 12, type: 'bonus' });
-            } else if (yieldSpread >= 0.5) {
-                defScore += 5; audit.DEFENSIVE.push({ factor: `Yield Moderado (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 5, type: 'bonus' });
-            } else if (yieldSpread < 0) {
-                defScore -= 10; audit.DEFENSIVE.push({ factor: `Spread Negativo vs NTN-B (${yieldSpread.toFixed(1)}%)`, points: -10, type: 'penalty' });
-            }
-
-            // P/VP: bonifica zona próxima ao valor patrimonial; penaliza ágio excessivo
-            if (isPapel) {
-                if (m.pvp >= 0.95 && m.pvp <= 1.05) { defScore += 15; audit.DEFENSIVE.push({ factor: 'P/VP Equilibrado (Papel)', points: 15, type: 'bonus' }); }
-                else if (m.pvp >= 0.88 && m.pvp < 0.95) { defScore += 10; audit.DEFENSIVE.push({ factor: 'P/VP com Deságio Leve (Papel)', points: 10, type: 'bonus' }); }
-                else if (m.pvp > 1.05 && m.pvp <= 1.10) { defScore += 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Leve (Papel)', points: 5, type: 'bonus' }); }
-                else if (m.pvp > 1.10) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Elevado (Papel)', points: -5, type: 'penalty' }); }
-            } else {
-                if (m.pvp >= 0.90 && m.pvp <= 1.05) { defScore += 15; audit.DEFENSIVE.push({ factor: 'P/VP Saudável (Tijolo)', points: 15, type: 'bonus' }); }
-                else if (m.pvp >= 0.82 && m.pvp < 0.90) { defScore += 10; audit.DEFENSIVE.push({ factor: 'P/VP com Deságio (Tijolo)', points: 10, type: 'bonus' }); }
-                else if (m.pvp > 1.05 && m.pvp <= 1.12) { defScore += 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Moderado (Tijolo)', points: 5, type: 'bonus' }); }
-                else if (m.pvp > 1.12) { defScore -= 5; audit.DEFENSIVE.push({ factor: 'P/VP com Ágio Elevado (Tijolo)', points: -5, type: 'penalty' }); }
-            }
-
-            // Beta: tiered — diferencia FIIs ultra-estáveis de apenas estáveis.
-            // Beta ausente chega como 0 — exigir > 0 evita bônus indevido sem série de preços.
-            if (m.beta > 0 && m.beta < 0.40) { defScore += 12; audit.DEFENSIVE.push({ factor: 'Beta Ultra Defensivo (<0.4)', points: 12, type: 'bonus' }); }
-            else if (m.beta > 0 && m.beta < 0.70) { defScore += 7; audit.DEFENSIVE.push({ factor: 'Beta Defensivo (<0.7)', points: 7, type: 'bonus' }); }
-            else if (m.beta > 0.90) { defScore -= 15; audit.DEFENSIVE.push({ factor: 'Beta Elevado (>0.9)', points: -15, type: 'penalty' }); }
-
-            if (isTier1) { defScore += 8; audit.DEFENSIVE.push({ factor: 'Fundo Tier 1 (Elite)', points: 8, type: 'bonus' }); }
-
-            // Liquidez como proxy de segurança patrimonial
-            if (m.avgLiquidity > 5000000) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Liquidez Alta (>5M)', points: 6, type: 'bonus' }); }
-            else if (m.avgLiquidity > 2000000) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Liquidez Boa (>2M)', points: 3, type: 'bonus' }); }
-
-            // Diversificação de imóveis (Tijolo) — reduz risco concentração
-            if (!isPapel) {
-                if (m.qtdImoveis > 20) { defScore += 6; audit.DEFENSIVE.push({ factor: 'Alta Diversificação (>20 imóveis)', points: 6, type: 'bonus' }); }
-                else if (m.qtdImoveis > 10) { defScore += 3; audit.DEFENSIVE.push({ factor: 'Boa Diversificação (>10 imóveis)', points: 3, type: 'bonus' }); }
-            }
-
-            // (Fase 3 / achado B-A2) Distribuição CONSISTENTE ao longo do tempo — o sinal
-            // mais relevante para um FII de renda em Buy & Hold. Dormente até haver série
-            // de fundamentos suficiente; magnitude pequena e calibrável.
-            if (m.trackRecord && m.trackRecord.dividendConsistency >= 0.8) {
-                defScore += 4;
-                audit.DEFENSIVE.push({ factor: `Distribuição Consistente (${Math.round(m.trackRecord.dividendConsistency * 100)}% dos períodos)`, points: 4, type: 'bonus' });
-            }
-        } else {
-            defScore = 25;
-            audit.DEFENSIVE.push({ factor: 'Ineligível para Carteira Defensiva FII', points: 25, type: 'base' });
-        }
-
-        // ── MODERADO ─────────────────────────────────────────────────────────
-        modScore = 45;
-        audit.MODERATE.push({ factor: 'Score Base (Perfil Moderado FII)', points: 45, type: 'base' });
-
-        if (isYieldTrap) {
-            modScore -= 15; audit.MODERATE.push({ factor: `Yield Insustentável (${m.dy.toFixed(1)}% — provável amortização/evento não recorrente)`, points: -15, type: 'penalty' });
-        } else if (yieldSpread >= 5.0) {
-            modScore += 25; audit.MODERATE.push({ factor: `Yield Excepcional (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 25, type: 'bonus' });
-        } else if (yieldSpread >= 3.0) {
-            modScore += 18; audit.MODERATE.push({ factor: `Yield Alto (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 18, type: 'bonus' });
-        } else if (yieldSpread >= 1.5) {
-            modScore += 10; audit.MODERATE.push({ factor: 'Yield > NTN-B + 1.5%', points: 10, type: 'bonus' });
-        } else if (yieldSpread >= 0) {
-            modScore += 4; audit.MODERATE.push({ factor: `Yield Positivo (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 4, type: 'bonus' });
-        } else {
-            modScore -= 10; audit.MODERATE.push({ factor: `Spread Negativo vs NTN-B (${yieldSpread.toFixed(1)}%)`, points: -10, type: 'penalty' });
-        }
-
-        if (isPapel) {
-            if (m.pvp < 0.90) { modScore += 12; audit.MODERATE.push({ factor: 'Deságio Expressivo em Papel (>10%)', points: 12, type: 'bonus' }); }
-            else if (m.pvp < 0.95) { modScore += 7; audit.MODERATE.push({ factor: 'Deságio em Papel (5–10%)', points: 7, type: 'bonus' }); }
-            else if (m.pvp < 1.00) { modScore += 3; audit.MODERATE.push({ factor: 'Deságio Leve em Papel', points: 3, type: 'bonus' }); }
-        } else {
-            if (m.capRate > (NTNB + 3)) { modScore += 10; audit.MODERATE.push({ factor: 'Cap Rate Excelente (>NTN-B + 3%)', points: 10, type: 'bonus' }); }
-            else if (m.capRate > (NTNB + 1)) { modScore += 6; audit.MODERATE.push({ factor: 'Cap Rate > NTN-B + 1%', points: 6, type: 'bonus' }); }
-            else if (m.capRate > NTNB) { modScore += 3; audit.MODERATE.push({ factor: 'Cap Rate > NTN-B', points: 3, type: 'bonus' }); }
-
-            if (m.pvp < 0.80) { modScore += 12; audit.MODERATE.push({ factor: 'Deságio Expressivo em Tijolo (>20%)', points: 12, type: 'bonus' }); }
-            else if (m.pvp < 0.90) { modScore += 7; audit.MODERATE.push({ factor: 'Deságio em Tijolo (10–20%)', points: 7, type: 'bonus' }); }
-            else if (m.pvp < 0.95) { modScore += 3; audit.MODERATE.push({ factor: 'Deságio Leve em Tijolo', points: 3, type: 'bonus' }); }
-        }
-
-        if (m.avgLiquidity > 5000000) { modScore += 5; audit.MODERATE.push({ factor: 'Liquidez Alta (>5M)', points: 5, type: 'bonus' }); }
-        else if (m.avgLiquidity > 2000000) { modScore += 3; audit.MODERATE.push({ factor: 'Liquidez Boa (>2M)', points: 3, type: 'bonus' }); }
-
-        // Penalidade por vacância: relevante para moderados que ainda aceitam algum risco
-        if (!isPapel) {
-            if (m.vacancy > 15) { modScore -= 8; audit.MODERATE.push({ factor: `Vacância Alta (${m.vacancy.toFixed(1)}%)`, points: -8, type: 'penalty' }); }
-            else if (m.vacancy > 10) { modScore -= 4; audit.MODERATE.push({ factor: `Vacância Moderada (${m.vacancy.toFixed(1)}%)`, points: -4, type: 'penalty' }); }
-        }
-
-        // ── ARROJADO ──────────────────────────────────────────────────────────
-        boldScore = 35;
-        audit.BOLD.push({ factor: 'Base Arrojada FII', points: 35, type: 'base' });
-
-        if (isYieldTrap) {
-            boldScore -= 10; audit.BOLD.push({ factor: `Yield Insustentável (${m.dy.toFixed(1)}% — provável amortização/evento não recorrente)`, points: -10, type: 'penalty' });
-        } else if (yieldSpread >= 7.0) {
-            boldScore += 35; audit.BOLD.push({ factor: `Yield Extremo (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 35, type: 'bonus' });
-        } else if (yieldSpread >= 5.0) {
-            boldScore += 25; audit.BOLD.push({ factor: 'Yield Agressivo (>NTN-B + 5%)', points: 25, type: 'bonus' });
-        } else if (yieldSpread >= 3.0) {
-            boldScore += 15; audit.BOLD.push({ factor: `Yield Arrojado (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 15, type: 'bonus' });
-        } else if (yieldSpread >= 1.0) {
-            boldScore += 7; audit.BOLD.push({ factor: `Yield Moderado (NTN-B +${yieldSpread.toFixed(1)}%)`, points: 7, type: 'bonus' });
-        }
-
-        if (isPapel) {
-            if (m.pvp < 0.85) { boldScore += 25; audit.BOLD.push({ factor: 'Deságio Acentuado em Papel (>15%)', points: 25, type: 'bonus' }); }
-            else if (m.pvp < 0.92) { boldScore += 15; audit.BOLD.push({ factor: 'Deságio Expressivo em Papel (8–15%)', points: 15, type: 'bonus' }); }
-            else if (m.pvp < 0.97) { boldScore += 8; audit.BOLD.push({ factor: 'Deságio em Papel (3–8%)', points: 8, type: 'bonus' }); }
-        } else {
-            if (m.pvp < 0.75) { boldScore += 25; audit.BOLD.push({ factor: 'Deságio Extremo em Tijolo (>25%)', points: 25, type: 'bonus' }); }
-            else if (m.pvp < 0.82) { boldScore += 18; audit.BOLD.push({ factor: 'Deságio Acentuado em Tijolo (18–25%)', points: 18, type: 'bonus' }); }
-            else if (m.pvp < 0.90) { boldScore += 10; audit.BOLD.push({ factor: 'Deságio em Tijolo (10–18%)', points: 10, type: 'bonus' }); }
-        }
-
-        // Cap rate agressivo: imóveis com alta rentabilidade operacional
-        if (!isPapel) {
-            if (m.capRate > (NTNB + 5)) { boldScore += 10; audit.BOLD.push({ factor: 'Cap Rate Excepcional (>NTN-B + 5%)', points: 10, type: 'bonus' }); }
-            else if (m.capRate > (NTNB + 3)) { boldScore += 5; audit.BOLD.push({ factor: 'Cap Rate Alto (>NTN-B + 3%)', points: 5, type: 'bonus' }); }
-        }
-
-    }
-    return { defScore, modScore, boldScore };
-};
+// (M1) Scoring por perfil de FII: regras em fiiProfileRules.js.
+const scoreFiiProfiles = (asset, context, audit) => scoreFiiProfileRules(
+    asset, context.MACRO, resolvePapel(asset.fiiSubType, asset.sector), isEligibleForDefensive(asset, context), audit,
+);
 
 // (M1) Scoring por perfil de cripto. Lógica idêntica à versão monolítica anterior.
 const scoreCryptoProfiles = (asset, audit) => {
