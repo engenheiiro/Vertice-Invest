@@ -393,7 +393,7 @@ describe('busca de snapshots do payload da carteira', () => {
     });
 
     it('o controller consome a busca com .exec()', () => {
-        const src = readFileSync(new URL('../controllers/walletController.js', import.meta.url), 'utf8');
+        const src = readFileSync(new URL('../controllers/walletPayload.js', import.meta.url), 'utf8');
         const linha = src
             .split('\n')
             .find((l) => l.includes('.sort({ date: -1 }).limit(30).lean()'));
