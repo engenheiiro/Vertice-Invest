@@ -30,6 +30,12 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
+      # Mesmo npm da máquina de desenvolvimento (Node 24 / npm 11). Com o npm 10
+      # do Node 22, um lock gerado pelo npm 11 falha no npm ci (dependências
+      # opcionais do driver do mongodb) — foi o que deixou o CI vermelho em 16/11.
+      - name: npm 11
+        run: npm install -g npm@11
+
       - name: Install (root + client + server)
         run: |
           npm ci
@@ -105,6 +111,12 @@ jobs:
             package-lock.json
             client/package-lock.json
             server/package-lock.json
+
+      # Mesmo npm da máquina de desenvolvimento (Node 24 / npm 11). Com o npm 10
+      # do Node 22, um lock gerado pelo npm 11 falha no npm ci (dependências
+      # opcionais do driver do mongodb) — foi o que deixou o CI vermelho em 16/11.
+      - name: npm 11
+        run: npm install -g npm@11
 
       - name: Install (root + client + server)
         run: |
