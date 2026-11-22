@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsService, AppNotification } from '../../services/notifications';
 import { useAuth } from '../../contexts/AuthContext';
+import { onActivateKey } from '../../utils/a11yEvents';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -195,26 +196,30 @@ export const NotificationBell: React.FC = () => {
               ) : (
                 notifications.map((n) => {
                   const read = isNotificationRead(n, userId);
+                  const activate = () => {
+                    if (!read) markReadMutation.mutate(n._id);
+                    // Notificação que anuncia algo sem levar até lá obriga o
+                    // usuário a procurar sozinho o que acabou de ser avisado.
+                    // Só caminho interno: destino vindo do banco nunca vira
+                    // navegação para fora do app.
+                    // '//evil.com' também começa com '/' e resolveria para outro
+                    // domínio — o segundo teste faz a frase acima ser verdade ao pé da letra.
+                    if (n.link && n.link.startsWith('/') && !n.link.startsWith('//')) {
+                      setOpen(false);
+                      navigate(n.link);
+                    }
+                  };
                   return (
                     <div
                       key={n._id}
+                      role="button"
+                      tabIndex={0}
                       className={`
                         flex items-start gap-3 px-4 py-3 border-b border-slate-800/40 last:border-0 transition-colors cursor-pointer
                         ${read ? 'opacity-50 hover:opacity-70' : 'hover:bg-slate-800/30'}
                       `}
-                      onClick={() => {
-                        if (!read) markReadMutation.mutate(n._id);
-                        // Notificação que anuncia algo sem levar até lá obriga o
-                        // usuário a procurar sozinho o que acabou de ser avisado.
-                        // Só caminho interno: destino vindo do banco nunca vira
-                        // navegação para fora do app.
-                        // '//evil.com' também começa com '/' e resolveria para outro
-                        // domínio — o segundo teste faz a frase acima ser verdade ao pé da letra.
-                        if (n.link && n.link.startsWith('/') && !n.link.startsWith('//')) {
-                          setOpen(false);
-                          navigate(n.link);
-                        }
-                      }}
+                      onClick={activate}
+                      onKeyDown={onActivateKey(activate)}
                     >
                       {/* Dot de não-lida */}
                       <div className="mt-1.5 shrink-0">

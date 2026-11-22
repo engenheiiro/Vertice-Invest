@@ -1,5 +1,6 @@
 import React from 'react';
 import { Lock, Clock, BookOpen } from 'lucide-react';
+import { onActivateKey } from '../../utils/a11yEvents';
 import { AcademyImage } from './AcademyImage';
 
 interface CourseCardProps {
@@ -44,7 +45,11 @@ export const CourseCard: React.FC<CourseCardProps> = ({ course, userPlanLevel, o
     return (
         <div 
             className={`relative min-w-[280px] md:min-w-[340px] aspect-video rounded-lg overflow-hidden cursor-pointer group transition-all duration-500 hover:scale-[1.02] hover:shadow-xl hover:shadow-blue-500/10 bg-deep border border-white/5 flex flex-col ${isGlobalLocked ? 'opacity-60 grayscale cursor-not-allowed' : ''}`}
+            role="button"
+            tabIndex={0}
+            aria-disabled={isGlobalLocked || undefined}
             onClick={handleClick}
+            onKeyDown={onActivateKey(handleClick)}
         >
             {/* Background Image */}
             <div className="absolute inset-0 w-full h-full">

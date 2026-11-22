@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Trophy, BarChart2, Layers, Target, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { RankingItem } from '../../services/research';
@@ -7,6 +6,7 @@ import { useWallet, AssetType } from '../../contexts/WalletContext';
 import AssetLogo from '../common/AssetLogo';
 import { useNavigate } from 'react-router-dom';
 import { formatCompact as fmtCompact } from '../../utils/format';
+import { onActivateKey } from '../../utils/a11yEvents';
 
 interface TopPicksCardProps {
     picks: RankingItem[];
@@ -418,7 +418,7 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                         const rebalanceDelta = currentValue - idealValue;
 
                         return (
-                            <div key={idx} onClick={() => setSelectedAsset(pick)} className="bg-base border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-panel transition-all cursor-pointer group relative overflow-hidden">
+                            <div key={idx} role="button" tabIndex={0} aria-label={`Ver detalhes de ${pick.ticker}`} onClick={() => setSelectedAsset(pick)} onKeyDown={onActivateKey(() => setSelectedAsset(pick))} className="bg-base border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-panel transition-all cursor-pointer group relative overflow-hidden">
                                 
                                 <div className="flex flex-col xl:flex-row gap-6 items-center">
                                     {/* SEÇÃO 1: IDENTIDADE E SCORES */}

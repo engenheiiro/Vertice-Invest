@@ -183,13 +183,13 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                         {isLoading ? (
                             [...Array(5)].map((_, i) => (
                                 <tr key={i} className="animate-pulse">
-                                    <td className="p-4"><div className="flex gap-3"><div className="w-8 h-8 bg-slate-800 rounded"></div><div className="space-y-1"><div className="h-3 w-16 bg-slate-800 rounded"></div><div className="h-2 w-24 bg-slate-800 rounded"></div></div></div></td>
-                                    <td className="p-4 text-right"><div className="h-3 w-12 bg-slate-800 rounded ml-auto"></div></td>
-                                    <td className="p-4 text-right"><div className="h-3 w-12 bg-slate-800 rounded ml-auto"></div></td>
-                                    <td className="p-4 text-right"><div className="h-3 w-20 bg-slate-800 rounded ml-auto"></div></td>
-                                    <td className="p-4"><div className="h-2 w-full bg-slate-800 rounded"></div></td>
-                                    <td className="p-4 text-right"><div className="h-3 w-8 bg-slate-800 rounded ml-auto"></div></td>
-                                    <td className="p-4 text-center"><div className="h-6 w-16 bg-slate-800 rounded mx-auto"></div></td>
+                                    <td aria-hidden="true" className="p-4"><div className="flex gap-3"><div className="w-8 h-8 bg-slate-800 rounded"></div><div className="space-y-1"><div className="h-3 w-16 bg-slate-800 rounded"></div><div className="h-2 w-24 bg-slate-800 rounded"></div></div></div></td>
+                                    <td aria-hidden="true" className="p-4 text-right"><div className="h-3 w-12 bg-slate-800 rounded ml-auto"></div></td>
+                                    <td aria-hidden="true" className="p-4 text-right"><div className="h-3 w-12 bg-slate-800 rounded ml-auto"></div></td>
+                                    <td aria-hidden="true" className="p-4 text-right"><div className="h-3 w-20 bg-slate-800 rounded ml-auto"></div></td>
+                                    <td aria-hidden="true" className="p-4"><div className="h-2 w-full bg-slate-800 rounded"></div></td>
+                                    <td aria-hidden="true" className="p-4 text-right"><div className="h-3 w-8 bg-slate-800 rounded ml-auto"></div></td>
+                                    <td aria-hidden="true" className="p-4 text-center"><div className="h-6 w-16 bg-slate-800 rounded mx-auto"></div></td>
                                 </tr>
                             ))
                         ) : (
@@ -197,12 +197,15 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                 const accent = accentOf((groupItems as PortfolioItem[])[0]?.type);
                                 return (
                                 <React.Fragment key={group}>
-                                    <tr
-                                        className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors"
-                                        onClick={() => toggleGroup(group)}
-                                    >
-                                        <td colSpan={7} className="px-4 py-2.5">
-                                            <div className="flex items-center gap-3">
+                                    <tr className="bg-panel border-y border-slate-800/50 cursor-pointer hover:bg-elevated transition-colors">
+                                        <td colSpan={7} className="p-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleGroup(group)}
+                                                aria-expanded={!collapsedGroups[group]}
+                                                aria-label={`${group}: ${pluralAtivos((groupItems as PortfolioItem[]).length)}`}
+                                                className="w-full px-4 py-2.5 flex items-center gap-3 text-left"
+                                            >
                                                 <span className={`shrink-0 ${accent.label}`}>
                                                     {collapsedGroups[group] ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                                                 </span>
@@ -215,7 +218,7 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                 <span className="text-[10px] font-bold text-slate-500 bg-elevated px-2 py-0.5 rounded border border-slate-800/50">
                                                     {pluralAtivos((groupItems as PortfolioItem[]).length)}
                                                 </span>
-                                            </div>
+                                            </button>
                                         </td>
                                     </tr>
 
@@ -296,7 +299,11 @@ export const AssetTable: React.FC<AssetTableProps> = ({ items, isLoading = false
                                                                 {profit >= 0 ? '+' : ''}{profitPercent.toFixed(1)}%
                                                             </span>
                                                         </div>
-                                                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                                                        <div
+                                                            className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative"
+                                                            role="img"
+                                                            aria-label={`Preço atual ${profit >= 0 ? 'acima' : 'abaixo'} do preço médio`}
+                                                        >
                                                             <div className="absolute top-0 bottom-0 w-0.5 bg-slate-400 z-10" style={{ left: `${Math.min((item.avgPrice / maxRange) * 100, 100)}%` }}></div>
                                                             <div 
                                                                 className={`h-full rounded-full transition-all duration-700 ${profit >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}

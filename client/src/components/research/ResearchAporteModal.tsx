@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Info, Coins, ShieldCheck, Target, Zap, Plus, RotateCcw } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -81,6 +81,9 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
     useEffect(() => { setExcludedTickers(new Set()); }, [profile]);
     useEffect(() => { setExcludedTickers(new Set()); }, [etfOrigin]);
     useEffect(() => { if (!isOpen) setExcludedTickers(new Set()); }, [isOpen]);
+    // Foco inicial no valor (antes um autoFocus): o modal abre para digitar o aporte.
+    const amountId = useId();
+    useEffect(() => { if (isOpen) document.getElementById(amountId)?.focus(); }, [isOpen, amountId]);
 
     // Semente vinda da Carteira (deep link). Só escreve quando há valor: numa
     // abertura manual (initialAmount null) o que o usuário digitou é preservado.
@@ -241,7 +244,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity" onClick={onClose}></div>
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity" role="presentation" onClick={onClose}></div>
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 sm:p-0">
                     <div className="relative transform overflow-hidden rounded-2xl bg-panel border border-slate-800 text-left shadow-2xl transition-all w-full max-w-lg animate-fade-in my-auto max-h-[90vh] flex flex-col">
@@ -292,7 +295,7 @@ export const ResearchAporteModal: React.FC<ResearchAporteModalProps> = ({ isOpen
                                 value={amount}
                                 onChange={(e) => setAmount(e.target.value)}
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                autoFocus
+                                id={amountId}
                             />
 
                             {isUsd && usdRate != null && usdRate > 0 && amountNum > 0 && (

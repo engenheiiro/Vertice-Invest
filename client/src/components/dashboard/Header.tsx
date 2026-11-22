@@ -71,13 +71,13 @@ export const Header: React.FC = () => {
       <div className="max-w-[1360px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
            {/* A logo leva para a CASA — e a casa é a Carteira (config/homeRoute). */}
-           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate(HOME_ROUTE)}>
+           <Link to={HOME_ROUTE} className="flex items-center gap-2 cursor-pointer">
               <div className="w-6 h-6 bg-blue-600 flex items-center justify-center rounded-md shadow-lg shadow-blue-600/20">
                  <ShieldCheck size={14} className="text-white" />
               </div>
               <span className="text-sm font-bold tracking-tight text-slate-200">VÉRTICE</span>
               {user && <PlanBadge plan={user.plan} className="ml-1" showIcon={false} />}
-           </div>
+           </Link>
            
            {/* Main Links com ID para o Tutorial. Agrupados em submenus (hover/foco)
                p/ enxugar o topo: Carteira (sua grana), Análise (descoberta), Ferramentas. */}

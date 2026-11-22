@@ -65,7 +65,7 @@ export const BottomNav: React.FC = () => {
     <>
       {moreOpen && (
         <div className="xl:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Mais opções">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" role="presentation" onClick={() => setMoreOpen(false)} />
           <div className="absolute bottom-0 inset-x-0 bg-card border-t border-slate-800 rounded-t-2xl p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] animate-fade-in">
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-bold text-slate-200">Mais opções</span>

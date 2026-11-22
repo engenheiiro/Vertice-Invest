@@ -43,7 +43,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
 
     if (!report) return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" onClick={onClose} />
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" role="presentation" onClick={onClose} />
             <div className="fixed inset-0 z-10 flex items-center justify-center p-4">
                 <div className="w-full max-w-7xl bg-base border border-slate-700 rounded-3xl flex items-center justify-center h-48 shadow-2xl animate-fade-in">
                     <div className="flex flex-col items-center gap-3">
@@ -76,7 +76,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" onClick={onClose}></div>
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" role="presentation" onClick={onClose}></div>
             
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">

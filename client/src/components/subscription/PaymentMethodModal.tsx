@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { CreditCard, QrCode, RefreshCw, CalendarDays, Check, ArrowRight, Loader2 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import type { BillingMode } from '../../services/subscription';
@@ -24,6 +24,7 @@ export const PaymentMethodModal = ({
     isOpen, onClose, onConfirm, planLabel, price, isLoading = false,
 }: PaymentMethodModalProps) => {
     const [mode, setMode] = useState<BillingMode>('RECURRING');
+    const optionId = useId();
 
     const options: Array<{
         value: BillingMode;
@@ -74,6 +75,8 @@ export const PaymentMethodModal = ({
                                 type="button"
                                 role="radio"
                                 aria-checked={selected}
+                                aria-labelledby={`${optionId}-${option.value}-title`}
+                                aria-describedby={`${optionId}-${option.value}-desc`}
                                 onClick={() => setMode(option.value)}
                                 className={`w-full text-left p-4 rounded-xl border transition-all ${
                                     selected
@@ -98,14 +101,14 @@ export const PaymentMethodModal = ({
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-bold text-white">{option.title}</span>
+                                            <span id={`${optionId}-${option.value}-title`} className="text-sm font-bold text-white">{option.title}</span>
                                             {option.badge && (
                                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-blue-600/20 text-blue-300 border border-blue-500/30">
                                                     {option.badge}
                                                 </span>
                                             )}
                                         </div>
-                                        <ul className="mt-2 space-y-1">
+                                        <ul id={`${optionId}-${option.value}-desc`} className="mt-2 space-y-1">
                                             {option.bullets.map((bullet, i) => {
                                                 const BulletIcon = bullet.icon;
                                                 return (

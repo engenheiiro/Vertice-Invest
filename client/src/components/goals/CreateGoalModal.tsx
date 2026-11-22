@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Wallet, TrendingUp, Link2, History } from 'lucide-react';
 import { Modal } from '../ui/Modal';
@@ -46,6 +46,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   const [targetDate, setTargetDate] = useState(goal?.targetDate ? new Date(goal.targetDate).toISOString().slice(0, 10) : '');
   const [manualBalance, setManualBalance] = useState('');
   const [previousGoalId, setPreviousGoalId] = useState<string>(goal?.previousGoalId || '');
+  const fieldId = useId();
   // Baseline da curva "Plano" — só editável, nunca na criação (lá ele é
   // capturado do patrimônio ao vivo).
   const [startValue, setStartValue] = useState(goal ? String((goal.startValue || 0).toFixed(2)).replace('.', ',') : '');
@@ -159,8 +160,8 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
 
         {/* Ícone */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-2">Ícone</label>
-          <div className="flex flex-wrap gap-2">
+          <p id={`${fieldId}-icon`} className="block text-xs font-semibold text-slate-400 mb-2">Ícone</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-labelledby={`${fieldId}-icon`}>
             {ICON_OPTIONS.map((key) => {
               const Ic = getGoalIcon(key);
               const active = key === icon;
@@ -180,8 +181,8 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
 
         {/* Cor */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-2">Cor</label>
-          <div className="flex gap-2">
+          <p id={`${fieldId}-color`} className="block text-xs font-semibold text-slate-400 mb-2">Cor</p>
+          <div className="flex gap-2" role="group" aria-labelledby={`${fieldId}-color`}>
             {COLOR_OPTIONS.map((c) => (
               <button
                 key={c}
@@ -242,10 +243,11 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
         {/* Encadeamento sequencial */}
         {eligiblePrevious.length > 0 && (
           <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5">
+            <label htmlFor={`${fieldId}-prev`} className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5">
               <Link2 size={12} /> Continuação de (opcional)
             </label>
             <select
+              id={`${fieldId}-prev`}
               value={previousGoalId}
               onChange={(e) => setPreviousGoalId(e.target.value)}
               className="w-full bg-base border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
@@ -267,8 +269,9 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
 
         {/* Prazo opcional */}
         <div>
-          <label className="block text-xs font-semibold text-slate-400 mb-1.5">Prazo (opcional)</label>
+          <label htmlFor={`${fieldId}-date`} className="block text-xs font-semibold text-slate-400 mb-1.5">Prazo (opcional)</label>
           <input
+            id={`${fieldId}-date`}
             type="date"
             value={targetDate}
             onChange={(e) => setTargetDate(e.target.value)}

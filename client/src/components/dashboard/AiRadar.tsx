@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import AssetLogo from '../common/AssetLogo';
 import { ScanCountdown, FreshnessDot } from '../common/ScanStatus';
 import type { AssetType } from '../../contexts/WalletContext';
+import { onActivateKey } from '../../utils/a11yEvents';
 
 interface AiRadarProps {
     signals: AiSignal[];
@@ -280,7 +281,10 @@ export const AiRadar: React.FC<AiRadarProps> = ({ signals, isLoading = false, me
                     return (
                         <div
                             key={signal.id || idx}
+                            role="button"
+                            tabIndex={hasAccess ? 0 : -1}
                             onClick={() => handleSignalClick(signal.ticker)}
+                            onKeyDown={onActivateKey(() => handleSignalClick(signal.ticker))}
                             className={`p-3.5 rounded-[14px] border transition-all relative overflow-hidden bg-panel ${urgency.border} ${hasAccess ? 'cursor-pointer hover:brightness-110 hover:-translate-y-0.5 hover:border-slate-600' : 'opacity-50 pointer-events-none grayscale'}`}
                         >
                             {/* Linha superior: ticker + badges */}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { onBackdropClick } from '../../utils/a11yEvents';
 import {
     AlertTriangle, CheckCircle2, ChevronRight, GitBranch, HelpCircle, Radio, ShieldCheck,
     SearchCheck, X, XCircle,
@@ -574,14 +575,13 @@ const SuspectModal = ({ suspects, onClose }: { suspects: QuoteSuspectView; onClo
     return createPortal(
         <div
             className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-center justify-center p-4"
-            onClick={onClose}
+            onClick={onBackdropClick(onClose)}
             role="presentation"
         >
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-label="Cotações com valor fora do esperado"
-                onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-2xl bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
             >
                 <div className="flex items-start justify-between gap-3">
@@ -701,14 +701,13 @@ const ChainFlowModal = ({
     return createPortal(
         <div
             className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-center justify-center p-4"
-            onClick={onClose}
+            onClick={onBackdropClick(onClose)}
             role="presentation"
         >
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-label={`${capitalizar(vocab.noun)}s: ${vocab.escalatedTitle ?? VOCAB_PADRAO.escalatedTitle}`}
-                onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-xl bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
             >
                 <div className="flex items-start justify-between gap-3">
@@ -845,14 +844,13 @@ const SourceDetailModal = ({
     return createPortal(
         <div
             className="fixed inset-0 z-[100] backdrop-blur-md bg-black/95 flex items-center justify-center p-4"
-            onClick={onClose}
+            onClick={onBackdropClick(onClose)}
             role="presentation"
         >
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-label={`Detalhes da fonte ${source.label}`}
-                onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-lg bg-panel border border-slate-700 rounded-2xl p-5 max-h-[85vh] overflow-y-auto"
             >
                 <div className="flex items-start justify-between gap-3">

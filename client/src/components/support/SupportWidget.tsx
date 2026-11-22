@@ -103,8 +103,10 @@ export const SupportWidget: React.FC = () => {
                 // relatar o número errado que está vendo, e o fundo opaco apagava
                 // justamente o que ela ia descrever. Fundo leve e sem desfoque, com
                 // sombra forte no painel fazendo a separação que a cor deixou de fazer.
-                <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)}>
-                    <div className="absolute inset-0 bg-black/40" />
+                <div className="fixed inset-0 z-[100]">
+                    {/* O clique-fora mora no fundo, irmão do painel: clique dentro
+                        dele não chega aqui, sem precisar de stopPropagation. */}
+                    <div className="absolute inset-0 bg-black/40" role="presentation" onClick={() => setOpen(false)} />
 
                     {/* Ancorado ao botão, não centralizado. Centralizar deixava o
                         painel curto (a lista vazia) boiando no meio da tela, longe da
@@ -118,7 +120,6 @@ export const SupportWidget: React.FC = () => {
                         na posição do botão sem mexer aqui gruda um no outro. */}
                     <div
                         className="absolute inset-x-0 bottom-0 sm:inset-x-auto sm:right-4 xl:right-6 sm:bottom-[calc(8.5rem+env(safe-area-inset-bottom))] xl:bottom-[5.25rem] w-full sm:w-[420px] max-h-[92vh] sm:max-h-[calc(100vh-10rem)] xl:max-h-[calc(100vh-6.75rem)] bg-panel border border-slate-700 rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col support-pop shadow-2xl shadow-black/70"
-                        onClick={(e) => e.stopPropagation()}
                     >
                         <SupportCenter onClose={() => setOpen(false)} />
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Rocket } from 'lucide-react';
 import { Modal } from '../ui/Modal';
@@ -27,6 +27,7 @@ export const ContributionModal: React.FC<ContributionModalProps> = ({ isOpen, on
   const [date, setDate] = useState(getLocalDateString());
   const [note, setNote] = useState('');
   const [accelerated, setAccelerated] = useState<number | null>(null);
+  const dateId = useId();
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -78,10 +79,11 @@ export const ContributionModal: React.FC<ContributionModalProps> = ({ isOpen, on
             <p className="text-xs text-slate-500">
               Lance um aporte manual (dinheiro guardado fora da carteira). Compras de ativos registradas na carteira já contam automaticamente.
             </p>
-            <CurrencyInput label="Valor do aporte (R$)" value={amount} onChange={setAmount} autoFocus />
+            <CurrencyInput label="Valor do aporte (R$)" value={amount} onChange={setAmount} />
             <div>
-              <label className="block text-xs font-semibold text-slate-400 mb-1.5">Data</label>
+              <label htmlFor={dateId} className="block text-xs font-semibold text-slate-400 mb-1.5">Data</label>
               <input
+                id={dateId}
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}

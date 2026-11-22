@@ -5,6 +5,7 @@ import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { authService } from '../../services/auth';
 import { getErrorMessage } from '../../utils/errorMessages';
+import { onActivateKey } from '../../utils/a11yEvents';
 
 type MfaMode = 'idle' | 'setup' | 'disable';
 type Msg = { type: 'success' | 'error'; text: string } | null;
@@ -299,7 +300,11 @@ export const SecuritySection = () => {
                     {/* Header do Card de Senha */}
                     <div
                         className="flex items-center justify-between cursor-pointer group"
+                        role="button"
+                        tabIndex={isChangingPassword ? -1 : 0}
+                        aria-expanded={isChangingPassword}
                         onClick={() => !isChangingPassword && setIsChangingPassword(true)}
+                        onKeyDown={onActivateKey(() => !isChangingPassword && setIsChangingPassword(true))}
                     >
                         <div className="flex items-start gap-3">
                             <div className="p-2 rounded-lg bg-slate-800 text-slate-400 group-hover:text-white transition-colors">

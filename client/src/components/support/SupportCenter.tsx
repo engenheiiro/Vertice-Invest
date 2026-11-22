@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -155,6 +155,7 @@ export const SupportCenter: React.FC<Props> = ({ initialTicketCode, variant = 'p
             {lightbox && createPortal(
                 <div
                     className="fixed inset-0 z-[110] backdrop-blur-md bg-black/95 flex items-center justify-center p-6 cursor-zoom-out"
+                    role="presentation"
                     onClick={() => setLightbox(null)}
                 >
                     <img src={lightbox} alt="Anexo ampliado" className="max-w-full max-h-full rounded-lg" />
@@ -371,6 +372,7 @@ const NewTicketForm: React.FC<{
     const [body, setBody] = useState('');
     const [attachments, setAttachments] = useState<string[]>([]);
     const { busy: attachBusy, ingest, dropHandlers } = useAttachmentIntake(attachments, setAttachments);
+    const fid = useId();
 
     const mutation = useMutation({
         mutationFn: () => supportService.createTicket({ category, subject, body, attachments, relatedTicket }),
@@ -389,10 +391,8 @@ const NewTicketForm: React.FC<{
             onSubmit={(e) => { e.preventDefault(); if (canSubmit) mutation.mutate(); }}
         >
             <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    Sobre o que é?
-                </label>
-                <div className="grid grid-cols-2 gap-2">
+                <p id={`${fid}-cat`} className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Sobre o que é?</p>
+                <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby={`${fid}-cat`}>
                     {(Object.keys(CATEGORY_LABEL) as TicketCategory[]).map((key) => (
                         <button
                             key={key}
@@ -414,10 +414,9 @@ const NewTicketForm: React.FC<{
             </div>
 
             <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    Resumo
-                </label>
+                <label htmlFor={`${fid}-subject`} className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Resumo</label>
                 <input
+                    id={`${fid}-subject`}
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
                     maxLength={120}
@@ -427,10 +426,9 @@ const NewTicketForm: React.FC<{
             </div>
 
             <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                    O que aconteceu?
-                </label>
+                <label htmlFor={`${fid}-body`} className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">O que aconteceu?</label>
                 <textarea
+                    id={`${fid}-body`}
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     rows={5}
@@ -442,9 +440,9 @@ const NewTicketForm: React.FC<{
             </div>
 
             <div>
-                <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                     <Paperclip size={11} /> Print da tela (opcional)
-                </label>
+                </p>
                 <AttachmentPicker
                     files={attachments}
                     onChange={setAttachments}

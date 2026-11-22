@@ -20,7 +20,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
     return createPortal(
         <div className="relative z-[200]" aria-labelledby="modal-title" aria-describedby="modal-description" role="dialog" aria-modal="true">
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity" role="presentation" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4 text-center">
