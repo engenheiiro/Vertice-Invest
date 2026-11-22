@@ -14,8 +14,13 @@
  *    só cota pelo Google (nenhuma fonte lhe dá `marketTime`);
  *  - frouxa demais mantém papel morto com preço congelado no ranking para sempre.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { marketDataService, isExpectedNoTrade } from '../services/marketDataService.js';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const eco = (quote, asset) => marketDataService.isEchoQuote(quote, asset);
 
@@ -102,7 +107,7 @@ describe('sessão velha demais para valer como preço de hoje', () => {
  */
 describe('sessão datada, mas sem negócio nenhum', () => {
     const semNegocio = (quote) => marketDataService.isNoTradeQuote(quote);
-    const ontem = new Date(Date.now() - 86400000);
+    const ontem = new Date(AGORA.getTime() - 86400000);
 
     it('volume zero na sessão de ontem não é prova de pregão', () => {
         expect(semNegocio({ price: 153.42, marketTime: ontem, volume: 0 })).toBe(true);

@@ -8,7 +8,12 @@
  * Cobre as três camadas: a derivação pura e suas travas, a detecção no sync de
  * cotações e a reconciliação quando o oficial finalmente chega.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 17h de Brasília (dia útil, sessão de hoje já negociada; véspera útil = terça).
+const AGORA = new Date('2026-11-18T17:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 vi.mock('../config/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
@@ -148,9 +153,9 @@ const chain = (rows = []) => {
 };
 
 // A cotação precisa ser da sessão de HOJE (BR) — o serviço compara com o relógio.
-const todayBr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const todayBr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(AGORA);
 const yesterdayBr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' })
-  .format(new Date(Date.now() - 86400000));
+  .format(new Date(AGORA.getTime() - 86400000));
 // O candle bruto tem de ser o do DIA ÚTIL anterior, não o de ontem no calendário:
 // `deriveDividendFromGap` exige `rawPrevCloseDate === previousWeekdayKey(priceDate)`
 // e devolve null fora disso. Com "ontem" cru, esta suíte passava de segunda a
@@ -232,6 +237,8 @@ vi.mock('../models/AssetTransaction.js', () => ({ default: {} }));
 vi.mock('../models/WalletSnapshot.js', () => ({ default: {} }));
 vi.mock('../models/EconomicIndex.js', () => ({ default: {} }));
 vi.mock('../models/AuditLog.js', () => ({ default: {} }));
+// A data de pagamento (B3 pela rede) não é o assunto aqui: sem o mock o sync saía para a internet.
+vi.mock('../services/dividendPaymentDateService.js', () => ({ fillPaymentDatesForTicker: vi.fn() }));
 
 const { externalMarketService } = await import('../services/externalMarketService.js');
 const { financialService } = await import('../services/financialService.js');

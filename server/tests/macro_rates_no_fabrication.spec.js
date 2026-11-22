@@ -39,6 +39,11 @@ import axios from 'axios';
 import { macroDataService } from '../services/macroDataService.js';
 import { externalMarketService } from '../services/externalMarketService.js';
 
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
+
 const DAY = 24 * 60 * 60 * 1000;
 
 // 252 linhas diárias (dias corridos, simplificação) terminando em `newest`.

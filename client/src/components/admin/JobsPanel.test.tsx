@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { JobsPanel, isJobLate, jobTier, splitJobLabel } from './JobsPanel';
 import type { JobStatus } from '../../services/health';
+
+// Relógio fixo (quarta-feira em horário de pregão: o atraso da rotina é medido contra este relógio, não o da máquina).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 // A seção tem 21 rotinas e o estado normal dela é o desinteressante. O que se
 // cobra aqui é isso: ocupar espaço só quando tem o que contar, e dizer QUEM está
@@ -13,7 +18,7 @@ const job = (over: Partial<JobStatus>): JobStatus => ({
     severity: 'CRITICAL',
     maxSilenceHours: 2,
     monitored: true,
-    lastRunAt: new Date().toISOString(),
+    lastRunAt: AGORA.toISOString(),
     lastStatus: 'SUCCESS',
     lastError: null,
     lastDurationMs: 900,
@@ -32,14 +37,14 @@ describe('JobsPanel', () => {
     // Recolhido não pode virar esconderijo: quando há problema, a seção se abre
     // sozinha — senão o único lugar que conta o defeito é o que ninguém clicou.
     it('abre sozinho quando alguma rotina está atrasada', () => {
-        const velho = new Date(Date.now() - 10 * 3600000).toISOString();
+        const velho = new Date(AGORA.getTime() - 10 * 3600000).toISOString();
         render(<JobsPanel jobs={[job({ lastRunAt: velho })]} />);
         expect(screen.getByText('Macroeconomia')).toBeInTheDocument();
         expect(screen.getByText('1 atrasada(s)')).toBeInTheDocument();
     });
 
     it('o resumo NOMEIA a rotina com problema, sem precisar abrir', () => {
-        const velho = new Date(Date.now() - 10 * 3600000).toISOString();
+        const velho = new Date(AGORA.getTime() - 10 * 3600000).toISOString();
         render(<JobsPanel jobs={[job({ lastRunAt: velho })]} />);
         // Aparece duas vezes: no resumo do cabeçalho e na linha da rotina.
         expect(screen.getAllByText(/Macroeconomia/).length).toBeGreaterThan(1);

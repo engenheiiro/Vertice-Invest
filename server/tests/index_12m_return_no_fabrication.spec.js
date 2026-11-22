@@ -6,7 +6,12 @@
  * esse número em `SystemConfig` como se fosse medido. Falha agora devolve null;
  * o macro-sync só grava valor finito, então o último retorno REAL fica.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const yahoo = vi.hoisted(() => ({ chart: vi.fn() }));
 

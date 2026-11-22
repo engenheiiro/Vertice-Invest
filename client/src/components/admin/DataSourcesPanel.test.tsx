@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterAll } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { DataSourcesPanel } from './DataSourcesPanel';
 import type { ChainFlow, DataSource, QuoteSuspectView, SourceGroup } from '../../services/health';
 
 // A tela existe para responder, sem intermediário técnico: "de onde vem o dado e
 // está chegando?". O que se cobra aqui é a hierarquia de leitura — grade agrupada,
-// ordem estável, problema visível pela cor — e a linguagem.
-
+// ordem estável, problema visível pela cor — e a linguagem. Relógio fixo (quarta, 14h, pregão) antes das fixtures.
+vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-18T14:00:00-03:00')); afterAll(() => { vi.useRealTimers(); });
 const src = (over: Partial<DataSource>): DataSource => ({
     id: 'yahoo.quotes',
     label: 'Yahoo Finance — cotações',

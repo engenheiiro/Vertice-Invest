@@ -1,9 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SubscriptionCard } from './SubscriptionCard';
 import { useAuth } from '../../contexts/AuthContext';
 import { subscriptionService } from '../../services/subscription';
+
+// Relógio fixo (quarta-feira à tarde: validade e renovação contadas em dias a partir de um relógio fixo).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ addToast: vi.fn() }) }));
@@ -24,7 +29,7 @@ const renderCard = () => render(
   </MemoryRouter>
 );
 
-const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+const inDays = (days: number) => new Date(AGORA.getTime() + days * 86_400_000).toISOString();
 
 beforeEach(() => vi.clearAllMocks());
 

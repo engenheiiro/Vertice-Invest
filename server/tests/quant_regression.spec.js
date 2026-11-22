@@ -1,8 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { signalEngine } from '../services/engines/signalEngine.js';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
 import QuantSignal from '../models/QuantSignal.js';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 // Mocks do Mongoose + dependências externas (teste 100% determinístico, sem rede/DB).
 vi.mock('../models/MarketAsset.js');

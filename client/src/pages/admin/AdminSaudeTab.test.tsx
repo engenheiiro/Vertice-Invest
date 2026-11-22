@@ -6,10 +6,15 @@
  * vir junto. Um painel que esconde a falha atrás de um accordion não avisa nada.
  */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { AdminSaudeTab } from './AdminSaudeTab';
 import type { DataHealthResponse } from '../../services/health';
+
+// Relógio fixo (quarta-feira em horário de pregão: silêncio de rotina e idade dos erros medidos contra um relógio fixo).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const getDataHealth = vi.fn();
 const listErrors = vi.fn();
@@ -31,7 +36,7 @@ vi.mock('../../components/admin/PerformanceOverview', () => ({
 
 const mkResponse = (over: Partial<DataHealthResponse> = {}): DataHealthResponse => ({
     report: {
-        runAt: new Date().toISOString(),
+        runAt: AGORA.toISOString(),
         status: 'OK',
         summary: { ok: 2, warn: 0, critical: 0 },
         trigger: 'CRON',
@@ -49,7 +54,7 @@ const mkResponse = (over: Partial<DataHealthResponse> = {}): DataHealthResponse 
     history: [],
     jobs: [{
         jobId: 'quotes-sync', label: 'Cotações em tempo real', severity: 'CRITICAL',
-        maxSilenceHours: 2, monitored: true, lastRunAt: new Date().toISOString(),
+        maxSilenceHours: 2, monitored: true, lastRunAt: AGORA.toISOString(),
         lastStatus: 'SUCCESS', lastError: null, lastDurationMs: 900,
         runs24h: 96, failures24h: 0,
     }],
@@ -71,7 +76,7 @@ describe('veredito global', () => {
     it('mostra estado crítico e o contador de falhas', async () => {
         getDataHealth.mockResolvedValue(mkResponse({
             report: {
-                runAt: new Date().toISOString(),
+                runAt: AGORA.toISOString(),
                 status: 'CRITICAL',
                 summary: { ok: 0, warn: 1, critical: 2 },
                 checks: [{
@@ -92,7 +97,7 @@ describe('regra de leitura', () => {
     it('check quebrado aparece sem precisar expandir nada', async () => {
         getDataHealth.mockResolvedValue(mkResponse({
             report: {
-                runAt: new Date().toISOString(),
+                runAt: AGORA.toISOString(),
                 status: 'CRITICAL',
                 summary: { ok: 1, warn: 0, critical: 1 },
                 checks: [
@@ -120,7 +125,7 @@ describe('regra de leitura', () => {
     it('defeito do catálogo do Tesouro aparece nomeado e sem virar porcentagem', async () => {
         getDataHealth.mockResolvedValue(mkResponse({
             report: {
-                runAt: new Date().toISOString(),
+                runAt: AGORA.toISOString(),
                 status: 'CRITICAL',
                 summary: { ok: 0, warn: 0, critical: 1 },
                 checks: [
@@ -147,7 +152,7 @@ describe('regra de leitura', () => {
         // que a carteira rodou degradada em 02/09/2026 sem ninguém notar.
         getDataHealth.mockResolvedValue(mkResponse({
             report: {
-                runAt: new Date().toISOString(),
+                runAt: AGORA.toISOString(),
                 status: 'CRITICAL',
                 summary: { ok: 0, warn: 0, critical: 1 },
                 checks: [
@@ -214,7 +219,7 @@ describe('erros do backend', () => {
                 _id: 'e1', origin: 'JOB', source: 'quotes-sync', code: 'ETIMEDOUT',
                 message: 'Timeout no Yahoo Finance', stack: 'Error: timeout\n at x',
                 statusCode: null, count: 42,
-                firstSeenAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
+                firstSeenAt: AGORA.toISOString(), lastSeenAt: AGORA.toISOString(),
                 resolvedAt: null,
             }],
             unresolvedCount: 1,
@@ -230,7 +235,7 @@ describe('erros do backend', () => {
             errors: [{
                 _id: 'e1', origin: 'HTTP', source: 'GET /api/wallet', code: 'INTERNAL_ERROR',
                 message: 'boom', stack: null, statusCode: 500, count: 1,
-                firstSeenAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(),
+                firstSeenAt: AGORA.toISOString(), lastSeenAt: AGORA.toISOString(),
                 resolvedAt: null,
             }],
             unresolvedCount: 1,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import {
     buildChainMap,
     buildSourceStatuses,
@@ -14,7 +14,7 @@ import {
 // Duas evidências independentes precisam conviver aqui — conectividade (a chamada
 // voltou?) e frescor (o dado chegou ao banco?) — porque cada uma, sozinha, mente
 // numa direção diferente.
-
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); }); afterAll(() => { vi.useRealTimers(); });
 const NOW = new Date('2026-09-04T20:00:00.000Z');
 const hoursAgo = (h) => new Date(NOW.getTime() - h * 3600000);
 
@@ -584,7 +584,7 @@ describe('a razão do silêncio é decidida no servidor', () => {
     beforeEach(() => resetSourceStats());
 
     const escalada = (subject, resolvedBy, tried) => ({
-        chain: 'fx', subject, tried, resolvedBy, at: new Date(),
+        chain: 'fx', subject, tried, resolvedBy, at: NOW,
     });
 
     it('fonte pulada é SKIPPED, mesmo com assunto tendo passado por ela', () => {

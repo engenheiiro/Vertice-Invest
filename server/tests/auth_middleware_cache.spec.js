@@ -4,7 +4,12 @@
  * hit); (2) um plano pago expirado servido do cache ainda força o caminho de DB
  * para rebaixar e persistir (nunca vaza acesso pago vencido).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 vi.mock('jsonwebtoken', () => ({ default: { verify: vi.fn() } }));
 vi.mock('../models/User.js', () => ({ default: { findById: vi.fn() } }));
@@ -30,8 +35,8 @@ const run = (req) =>
 
 const reqWith = (token = 'tok') => ({ headers: { authorization: `Bearer ${token}` } });
 
-const future = new Date(Date.now() + 86_400_000);
-const past = new Date(Date.now() - 86_400_000);
+const future = new Date(AGORA.getTime() + 86_400_000);
+const past = new Date(AGORA.getTime() - 86_400_000);
 
 beforeEach(() => {
   vi.clearAllMocks();

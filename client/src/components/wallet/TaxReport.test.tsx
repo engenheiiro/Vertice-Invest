@@ -1,9 +1,14 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { TaxReport } from './TaxReport';
 import { walletService } from '../../services/wallet';
+
+// Relógio fixo (novembro de 2026: o ano-base pedido é 2025, o mesmo da fixture, em qualquer ano em que o teste rode).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const wallet = { privacy: false };
 vi.mock('../../contexts/WalletContext', () => ({ useWallet: () => ({ isPrivacyMode: wallet.privacy }) }));
@@ -46,7 +51,7 @@ describe('TaxReport', () => {
     it('busca o ano-base anterior e mostra DARF, proventos e custo', async () => {
         renderReport();
         expect(await screen.findByText('Bens e Direitos — Posição em 31/12')).toBeInTheDocument();
-        expect(walletService.getTaxReport).toHaveBeenCalledWith(new Date().getFullYear() - 1);
+        expect(walletService.getTaxReport).toHaveBeenCalledWith(AGORA.getFullYear() - 1);
         expect(screen.getAllByText('R$ 812,34').length).toBeGreaterThan(0);
         expect(screen.getAllByText('R$ 300,00').length).toBeGreaterThan(0);
         expect(screen.getByText('R$ 30,50')).toBeInTheDocument();

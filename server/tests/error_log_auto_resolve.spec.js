@@ -10,7 +10,12 @@
  * mesmo job; SKIPPED e FAILED não baixam nada; erro visto durante a própria
  * execução continua aberto; e baixar nunca lança nem pendura sem banco.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const mocks = vi.hoisted(() => ({
     updateMany: vi.fn(),

@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 /**
  * Retenção do funil: quem é RENOVAÇÃO e quem é venda nova.
@@ -28,7 +33,7 @@ const Transaction = (await import('../models/Transaction.js')).default;
 const { getFunnelReport } = await import('../services/funnelService.js');
 
 const DIA = 24 * 60 * 60 * 1000;
-const agora = Date.now();
+const agora = AGORA.getTime();
 const diasAtras = (dias) => new Date(agora - dias * DIA);
 
 /** Encadeamento `.select().lean()` do Mongoose, com o resultado já pronto. */

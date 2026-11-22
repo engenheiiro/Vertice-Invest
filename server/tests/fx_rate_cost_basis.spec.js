@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildUsdRateResolver, effectiveFxRate, positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
 import { processWalletAsset } from '../controllers/walletController.js';
 import { sumTransactionFlowBRL } from '../utils/walletSnapshot.js';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 // Regressão do custo cambial: o custo de uma posição em dólar era reconvertido
 // pela cotação de HOJE, a mesma que converte o saldo. As duas pontas se

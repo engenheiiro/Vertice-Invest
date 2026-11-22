@@ -13,7 +13,7 @@
  *  - preserva quando nenhuma fonte datou — o Google sozinho não condena ninguém,
  *    e é o que mantém papel vivo-mas-mal-servido (B3SA3) fora da baixa.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     classifyProbe,
     probeDaysSinceTrade,
@@ -21,6 +21,11 @@ import {
     probeProvesTrading,
     PROBE_FRESH_DAYS,
 } from '../scripts/lib/quoteProbe.js';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const diasAtras = (n) => new Date(Date.now() - n * 86400000);
 const asset = { ticker: 'AVB', type: 'STOCK_US', name: 'AvalonBay Communities Inc' };

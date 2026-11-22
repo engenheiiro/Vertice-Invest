@@ -10,6 +10,10 @@ import { expect, test } from '@playwright/test';
 // O service worker do PWA responde antes do page.route e engole os mocks.
 test.use({ serviceWorkers: 'block' });
 
+// Relógio fixo da página e do relatório: quarta-feira em horário de pregão, com
+// o ranking publicado "agora" — o mesmo instante para o teste e para o app.
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+
 const user = {
   id: 'research-user',
   name: 'Investidor Pro',
@@ -41,7 +45,7 @@ const fii = (ticker: string, sector: string, currentPrice: number, score: number
 
 const report = {
   _id: 'analysis-fii',
-  date: new Date().toISOString(),
+  date: AGORA.toISOString(),
   assetClass: 'FII',
   strategy: 'BUY_HOLD',
   isRankingPublished: true,
@@ -109,6 +113,7 @@ test('Aporte Inteligente (FIIs) mostra setor por linha e as duas pizzas', async 
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user, accessToken: 'tok' }) })
   );
 
+  await page.clock.setFixedTime(AGORA);
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(user.email);
   await page.getByLabel('Senha', { exact: true }).fill('SenhaSegura123!');

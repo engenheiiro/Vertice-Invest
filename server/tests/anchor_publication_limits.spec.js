@@ -16,9 +16,14 @@
  * Em 22/08/2026 a lista tinha KNCR11 (papel) em COMPRAR e HGCR11=69 / BTHF11=67
  * (papel) na faixa de permanência: o cenário abaixo não é hipotético.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { HYSTERESIS_STATES } from '../utils/anchorHysteresis.js';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const mocks = vi.hoisted(() => ({
   generateFii: vi.fn(),

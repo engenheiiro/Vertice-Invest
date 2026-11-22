@@ -6,7 +6,12 @@
  * mais importante daqui é justamente esse — as duas entregas devem produzir uma
  * única Transaction e um único período, sem somar 60 dias.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 process.env.NODE_ENV = 'test';
 
@@ -59,7 +64,7 @@ const makeUser = (overrides = {}) => ({
   ...overrides,
 });
 
-const NEXT = new Date(Date.now() + 30 * DAY);
+const NEXT = new Date(AGORA.getTime() + 30 * DAY);
 const preapproval = (overrides = {}) => ({
   id: 'preapp-1',
   status: 'authorized',

@@ -3,10 +3,15 @@
  * SELIC, e a tabela anual cobrindo todo ano já FECHADO (2025 caía no legado de
  * 10% e encolhia o CDI contra a carteira).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { buildCdiCurve } from '../utils/cdiCurve.js';
 import { getDailyFactorForDate } from '../controllers/walletController.js';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const factorFor = (annual) => Math.pow(1 + annual / 100, 1 / 252);
 

@@ -9,7 +9,12 @@
  * tópicos; somar dias por evento creditaria dois meses. Estes testes travam
  * exatamente isso, além da carência que evita derrubar assinante adimplente.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 process.env.NODE_ENV = 'test';
 

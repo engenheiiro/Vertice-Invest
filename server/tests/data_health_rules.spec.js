@@ -1170,7 +1170,7 @@ describe('provisórios não puxam o alarme da data de pagamento', () => {
  * (535) e nada em lugar nenhum dizia isso.
  */
 describe('check de envio de e-mail', () => {
-    const comEmail = (email) => buildHealthReport({ now: new Date(), email });
+    const comEmail = (email) => buildHealthReport({ now: NOW, email });
     const doCheck = (report) => report.checks.find((c) => c.id === 'delivery.email');
 
     it('SMTP autenticado passa', () => {
@@ -1198,7 +1198,7 @@ describe('check de envio de e-mail', () => {
     it('não inventa aprovação quando o fato não foi coletado', () => {
         // Ausência de medição não é OK nem CRÍTICO: o check simplesmente não
         // aparece. Fabricar "OK" aqui repetiria o defeito que ele veio consertar.
-        const report = buildHealthReport({ now: new Date() });
+        const report = buildHealthReport({ now: NOW });
         expect(doCheck(report)).toBeUndefined();
     });
 

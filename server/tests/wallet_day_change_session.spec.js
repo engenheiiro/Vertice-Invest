@@ -9,12 +9,17 @@
  * até a B3 abrir. Numa carteira real isso valia R$ 14,77 de movimento inventado,
  * o mesmo movimento já contado às 23h59 do dia anterior.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { processWalletAsset } from '../controllers/walletController.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
 
-const HOJE = brazilDateKey();
-const ONTEM = brazilDateKey(new Date(Date.now() - 86400000));
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
+
+const HOJE = brazilDateKey(AGORA);
+const ONTEM = brazilDateKey(new Date(AGORA.getTime() - 86400000));
 
 const macroRates = { cdiRate: 14.15, selic: 14.25, ipca: 4.72 };
 

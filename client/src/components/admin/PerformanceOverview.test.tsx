@@ -1,8 +1,13 @@
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { PerformanceOverview } from './PerformanceOverview';
 import type { PerformanceSnapshot } from '../../services/performance';
+
+// Relógio fixo (quarta-feira em horário de pregão: uptime e idade do snapshot medidos contra um relógio fixo).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 const getSnapshot = vi.fn();
 
@@ -14,8 +19,8 @@ vi.mock('../../services/performance', () => ({
 
 const snapshot = (over: Partial<PerformanceSnapshot> = {}): PerformanceSnapshot => ({
     enabled: true,
-    startedAt: new Date().toISOString(),
-    generatedAt: new Date().toISOString(),
+    startedAt: AGORA.toISOString(),
+    generatedAt: AGORA.toISOString(),
     sampleRate: 0.25,
     limits: { maxSeries: 200, maxSamplesPerSeries: 500 },
     runtime: {

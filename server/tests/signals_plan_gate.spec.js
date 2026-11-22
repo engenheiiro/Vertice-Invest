@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+
+// Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 // Regressão: GET /research/signals entregava o payload ÍNTEGRO (ticker, value,
 // quality, urgency) a qualquer autenticado — inclusive GUEST. O "atraso" do
@@ -29,7 +34,7 @@ const response = () => {
 
 const SIGNAL = {
   _id: 's1', ticker: 'PETR4', status: 'ACTIVE', type: 'RSI_OVERSOLD',
-  value: 22, quality: 'GOLD', urgencyLevel: 'CRITICAL', timestamp: new Date(),
+  value: 22, quality: 'GOLD', urgencyLevel: 'CRITICAL', timestamp: new Date(AGORA),
 };
 
 // Captura o filtro que chegou ao banco — é ali que o atraso é aplicado.

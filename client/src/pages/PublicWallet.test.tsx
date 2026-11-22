@@ -9,12 +9,17 @@
  *   - com valores ocultos, nenhum R$ é exibido — só percentuais.
  */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PublicWallet } from './PublicWallet';
 import { publicWalletService } from '../services/publicWallet';
+
+// Relógio fixo (quarta-feira em horário de pregão: o "atualizado em" da carteira pública vem de um relógio fixo).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 vi.mock('../services/publicWallet', () => {
   const publicWalletService = {
@@ -76,7 +81,7 @@ const walletPayload = (showValues: boolean) => ({
     totalDividends: showValues ? 12000 : 4.8, projectedDividends: showValues ? 1000 : 0.4,
     weightedRentability: 11.2, dataQuality: 'AUDITED', sharpeRatio: null, beta: 0.85,
   },
-  meta: { usdRate: 5.4, lastUpdate: new Date().toISOString() },
+  meta: { usdRate: 5.4, lastUpdate: AGORA.toISOString() },
 });
 
 const renderPage = () => {

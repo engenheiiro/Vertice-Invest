@@ -12,7 +12,7 @@
  *  - AssetLogo: renderizado como null para evitar chamadas de rede
  *  - createPortal: delegado ao jsdom (document.body está disponível)
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AddAssetModal } from './AddAssetModal';
 import { useWallet } from '../../contexts/WalletContext';
@@ -20,6 +20,11 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePriceFetch } from '../../hooks/usePriceFetch';
 import { useAssetSearch } from '../../hooks/useAssetSearch';
 import type { Asset } from '../../contexts/WalletContext';
+
+// Relógio fixo (quarta 14h em Brasília: "amanhã" cai no mesmo dia em qualquer fuso de -12 a +6, seja qual for a hora real).
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(AGORA); });
+afterEach(() => { vi.useRealTimers(); });
 
 vi.mock('../../contexts/WalletContext', () => ({ useWallet: vi.fn() }));
 vi.mock('../../contexts/ToastContext', () => ({ useToast: vi.fn() }));
@@ -260,7 +265,7 @@ describe('validações de erro', () => {
   it('exibe alerta para data futura e não chama addAsset', async () => {
     renderModal();
 
-    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().split('T')[0];
+    const tomorrow = new Date(AGORA.getTime() + 86_400_000).toISOString().split('T')[0];
     fireEvent.change(screen.getByLabelText(/Data do Aporte/i), { target: { value: tomorrow } });
     fireEvent.change(screen.getByLabelText(/Código \/ Ticker/i), { target: { value: 'PETR4' } });
     fireEvent.change(screen.getByLabelText(/Quantidade/i), { target: { value: '100' } });

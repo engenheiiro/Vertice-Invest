@@ -4,7 +4,7 @@ import { isBrBusinessDay } from '../services/schedulerService.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // REGRESSÃO: Gate de dia útil do Snapshot Diário ancorado no DIA-CALENDÁRIO BR.
 //
-// Bug original: runDailySnapshot fazia `isBusinessDay(new Date())`. O cron dispara
+// Bug original: runDailySnapshot fazia `isBusinessDay` sobre o instante corrente. O cron dispara
 // 23:59 America/Sao_Paulo, que é 02:59 UTC do DIA SEGUINTE. Como isBusinessDay lê
 // o dia da semana em UTC (getDay() num servidor UTC), toda SEXTA 23:59 BRT era
 // vista como SÁBADO → snapshot pulado; e todo DOMINGO 23:59 BRT como SEGUNDA →

@@ -19,6 +19,10 @@ import { expect, test } from '@playwright/test';
  */
 test.use({ serviceWorkers: 'block' });
 
+// Relógio fixo da página e das fixtures: quarta-feira em horário de pregão, com
+// o draft sincronizado "agora" — o mesmo instante para o teste e para o app.
+const AGORA = new Date('2026-11-18T14:00:00-03:00');
+
 const ADMIN = {
   id: 'admin-user',
   name: 'Admin Teste',
@@ -36,7 +40,7 @@ const RATE_LIMIT_MESSAGE = 'Muitas operações de administração. Aguarde algun
 const PENDING_STATUS = [
   {
     assetClass: 'STOCK',
-    lastSyncAt: new Date().toISOString(),
+    lastSyncAt: AGORA.toISOString(),
     lastPublishedAt: null,
     isRankingPublished: false,
     isReportPublished: false,
@@ -49,7 +53,7 @@ const PENDING_STATUS = [
   },
   {
     assetClass: 'FII',
-    lastSyncAt: new Date().toISOString(),
+    lastSyncAt: AGORA.toISOString(),
     lastPublishedAt: null,
     isRankingPublished: false,
     isReportPublished: false,
@@ -90,6 +94,7 @@ const loginAsAdmin = async (page: import('@playwright/test').Page) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PENDING_STATUS) })
   );
 
+  await page.clock.setFixedTime(AGORA);
   await page.goto('/login');
   await page.getByLabel('Email', { exact: true }).fill(ADMIN.email);
   await page.getByLabel('Senha', { exact: true }).fill('SenhaSegura123!');
