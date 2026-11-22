@@ -1,5 +1,5 @@
-<!-- Gerado automaticamente a partir de commits Conventional Commits.
-     Para atualizar após novos commits: npm run changelog -->
+<!-- Histórico congelado em 1.0.0 (12/07/2026). Desde 22/11/2026 os commits seguem "Área: o que mudou"
+     e o histórico vive no git log; este arquivo não é mais gerado. -->
 
 ## 1.0.0 (2026-07-12)
 
