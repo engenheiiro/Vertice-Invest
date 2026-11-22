@@ -21,26 +21,26 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | Métrica | Limite | 2026-11-22 |
 |---|---|---|
 | `cobertura.server.config` — Cobertura de linhas — server/config (%) | 90 | 90.2 |
-| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 71 | 71.2 |
+| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 71.5 | 71.7 |
 | `cobertura.server.middleware` — Cobertura de linhas — server/middleware (%) | 93.5 | 93.9 |
 | `cobertura.server.models` — Cobertura de linhas — server/models (%) | 91 | 91.3 |
 | `cobertura.server.routes` — Cobertura de linhas — server/routes (%) | 81.5 | 81.6 |
 | `cobertura.server.schemas` — Cobertura de linhas — server/schemas (%) | 94 | 94.2 |
-| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 68.5 | 68.5 |
+| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 75 | 75.3 |
 | `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 93.5 | 93.6 |
-| `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.2 |
-| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 51 | 51.1 |
-| `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 46.5 | 46.6 |
+| `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.3 |
+| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 51 | 51.3 |
+| `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 77.5 | 77.7 |
 | `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 100 | 100 |
-| `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 29 | 29.2 |
+| `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 88 | 88 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 |
-| `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 82.5 | 82.6 |
-| `testes.server` — Casos de teste do server | 3225 | 3225 |
-| `testes.client` — Casos de teste do client | 1312 | 1312 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 32.6 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 28.5 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 42 | 42 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1213 | 1213 |
+| `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 83 | 83 |
+| `testes.server` — Casos de teste do server | 3307 | 3307 |
+| `testes.client` — Casos de teste do client | 1487 | 1487 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 34.6 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 32.8 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 41 | 41 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1209 | 1209 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 |
 | `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 |
@@ -52,11 +52,11 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `quarentenaIrregular` — Teste pulado sem data, vencido ou com prazo > 7 dias | 0 | 0 |
 | `cssSemUso` — Classes do CSS próprio sem uso | 9 | 9 |
 | `imgSemSrcset` — <img> sem srcSet | 23 | 23 |
-| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 698 |
+| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 699 |
 | `lint.erros` — Erros do ESLint | 0 | 0 |
 | `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 15 | 15 |
-| `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 112 | 112 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 124 | 124 |
+| `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 119 | 119 |
 | `complexidadeMax` — Maior complexidade ciclomática de uma função | 82 | 82 |
 | `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.63 | 0.63 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 |
