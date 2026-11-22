@@ -42,8 +42,9 @@ function ramosLimpos() {
   const mesclados = linhas(git(['branch', '--merged', RAMO_PRINCIPAL, '--format=%(refname:short)']))
     .filter((b) => b !== RAMO_PRINCIPAL && b !== atual);
   const worktrees = linhas(git(['worktree', 'list'])).slice(1);
+  const amostra = `${mesclados.slice(0, 5).join(' ')}${mesclados.length > 5 ? ' …' : ''}`;
   const detalhes = [
-    ...(mesclados.length ? [`${mesclados.length} ramo(s) já mesclado(s): git branch -d ${mesclados.slice(0, 5).join(' ')}${mesclados.length > 5 ? ' …' : ''}`] : []),
+    ...(mesclados.length ? [`${mesclados.length} ramo(s) já mesclado(s): git branch -d ${amostra}`] : []),
     ...worktrees.map((w) => `worktree parado: ${w}`),
   ];
   return item(detalhes.length === 0, 'Ramos mesclados apagados e sem worktree parado', detalhes);

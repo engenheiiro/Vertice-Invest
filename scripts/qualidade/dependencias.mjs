@@ -39,6 +39,7 @@ const resumo = { vulnAltas: somar('vulnAltas'), depsMajorAtras: somar('depsMajor
 fs.mkdirSync(PASTA_ARTEFATOS, { recursive: true });
 fs.writeFileSync(path.join(PASTA_ARTEFATOS, 'deps.json'), `${JSON.stringify(resumo, null, 2)}\n`);
 for (const p of partes) {
-  console.log(`${p.parte.padEnd(7)} altas/críticas ${p.vulnAltas ?? '—'} · moderadas ${p.moderadas ?? '—'} · >1 major atrás ${p.depsMajorAtras ?? '—'}`);
+  const v = (n) => n ?? '—';
+  console.log(`${p.parte.padEnd(7)} altas/críticas ${v(p.vulnAltas)} · moderadas ${v(p.moderadas)} · >1 major atrás ${v(p.depsMajorAtras)}`);
 }
 process.exit(resumo.vulnAltas === null ? 1 : 0);

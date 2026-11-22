@@ -185,8 +185,14 @@ function coletarTestesETempos(rodada) {
 
 function coletarLint(rodada) {
   const l = lerArtefato('.qualidade/lint.json', rodada);
-  if (!l) return { 'lint.erros': null, 'lint.avisos': null, 'lint.a11y': null, complexidade: null, complexidadeMax: null };
-  return { 'lint.erros': l.erros, 'lint.avisos': l.avisos, 'lint.a11y': l.a11y, complexidade: l.complexidade, complexidadeMax: l.complexidadeMax };
+  const de = (campo) => (l ? l[campo] : null);
+  return {
+    'lint.erros': de('erros'),
+    'lint.avisos': de('avisos'),
+    'lint.a11y': de('a11y'),
+    complexidade: de('complexidade'),
+    complexidadeMax: de('complexidadeMax'),
+  };
 }
 
 function coletarCompletos(rodada) {
