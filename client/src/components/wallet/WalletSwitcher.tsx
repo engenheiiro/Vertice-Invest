@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Wallet as WalletIcon, ChevronDown, Plus, Pencil, Trash2, Check, Loader2, Share2, Globe, Lock } from 'lucide-react';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
@@ -35,6 +35,8 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
     const [editingWallet, setEditingWallet] = useState<{ id: string; name: string } | null>(null);
     const [sharingWallet, setSharingWallet] = useState<WalletSummary | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const listId = useId();
+    const listLabelId = useId();
 
     useEffect(() => {
         if (!isOpen) return;
@@ -79,8 +81,8 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
                 type="button"
                 onClick={() => setIsOpen((v) => !v)}
                 disabled={isSwitchingWallet}
-                aria-haspopup="menu"
                 aria-expanded={isOpen}
+                aria-controls={isOpen ? listId : undefined}
                 aria-busy={isSwitchingWallet}
                 aria-label={compact ? `Trocar carteira. Carteira ativa: ${activeWalletName}` : undefined}
                 title={compact ? `Trocar carteira — ${activeWalletName}` : activeWalletName}
@@ -98,33 +100,38 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
             {isOpen && (
                 <div className={`absolute left-0 top-full mt-2 z-50 ${compact ? 'w-[calc(100vw-2rem)] max-w-[20rem]' : 'min-w-[16rem]'}`}>
                     <div className="bg-card border border-slate-800 rounded-xl shadow-2xl p-1.5">
-                        <p className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Minhas Carteiras</p>
-                        <div className={`max-h-64 overflow-y-auto custom-scrollbar ${isSwitchingWallet ? 'opacity-60 pointer-events-none' : ''}`}>
+                        <p id={listLabelId} className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 font-bold">Minhas Carteiras</p>
+                        <ul
+                            id={listId}
+                            aria-labelledby={listLabelId}
+                            className={`max-h-64 overflow-y-auto custom-scrollbar ${isSwitchingWallet ? 'opacity-60 pointer-events-none' : ''}`}
+                        >
                             {isWalletsLoading ? (
-                                <p className="px-2.5 py-2 text-xs text-slate-500">Carregando...</p>
+                                <li className="px-2.5 py-2 text-xs text-slate-500">Carregando...</li>
                             ) : wallets.map((w) => {
                                 const active = w.id === activeWalletId;
                                 return (
-                                    <div
+                                    // A linha não é um botão: o nome é o botão de trocar e as ações são irmãs dele
+                                    // (antes, menuitem fora de menu com botões dentro). Enter/Espaço vêm do <button>.
+                                    <li
                                         key={w.id}
-                                        onClick={() => handleSelect(w.id)}
-                                        onKeyDown={(e) => {
-                                            // Só a própria linha: Enter num botão interno não troca a carteira.
-                                            if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
-                                            e.preventDefault();
-                                            handleSelect(w.id);
-                                        }}
-                                        role="menuitem"
-                                        tabIndex={0}
-                                        className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'}`}
+                                        className={`group flex items-center gap-2 pr-2.5 rounded-lg text-xs font-medium transition-colors ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/60'}`}
                                     >
-                                        <span className="w-4 shrink-0 flex items-center justify-center">
-                                            {active && <Check size={13} className="text-blue-400" />}
-                                        </span>
-                                        <span className="flex-1 truncate">{w.name}</span>
-                                        {w.isPublic && (
-                                            <Globe size={11} className="shrink-0 text-emerald-400" aria-label="Carteira pública" />
-                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelect(w.id)}
+                                            aria-current={active ? 'true' : undefined}
+                                            className="flex flex-1 min-w-0 items-center gap-2 pl-2.5 py-2 text-left cursor-pointer"
+                                        >
+                                            <span className="w-4 shrink-0 flex items-center justify-center">
+                                                {active && <Check size={13} className="text-blue-400" />}
+                                            </span>
+                                            <span className="flex-1 truncate">{w.name}</span>
+                                            {active && <span className="sr-only">(ativa)</span>}
+                                            {w.isPublic && (
+                                                <Globe size={11} className="shrink-0 text-emerald-400" aria-label="Carteira pública" />
+                                            )}
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); setIsOpen(false); setSharingWallet(w); }}
@@ -151,10 +158,10 @@ export const WalletSwitcher: React.FC<WalletSwitcherProps> = ({ compact = false 
                                                 <Trash2 size={12} />
                                             </button>
                                         )}
-                                    </div>
+                                    </li>
                                 );
                             })}
-                        </div>
+                        </ul>
                         <div className="border-t border-slate-800 mt-1 pt-1">
                             {canCreateWallet ? (
                                 <button

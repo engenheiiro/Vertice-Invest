@@ -1,11 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { Lock, Smartphone, ShieldAlert, ChevronRight, X, Loader2, Copy, Check } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { authService } from '../../services/auth';
 import { getErrorMessage } from '../../utils/errorMessages';
-import { onActivateKey } from '../../utils/a11yEvents';
 
 type MfaMode = 'idle' | 'setup' | 'disable';
 type Msg = { type: 'success' | 'error'; text: string } | null;
@@ -107,6 +106,7 @@ export const SecuritySection = () => {
 
     // --- Alteração de Senha (inalterado) ---
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const passwordFormId = useId();
     const [pwdData, setPwdData] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
     const [loadingPwd, setLoadingPwd] = useState(false);
     const [pwdMsg, setPwdMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -277,7 +277,14 @@ export const SecuritySection = () => {
                     <div className="p-4 bg-emerald-950/10 border border-emerald-900/40 rounded-xl animate-fade-in">
                         <div className="flex items-center justify-between mb-2">
                             <p className="text-sm font-bold text-emerald-400">2FA ativado! Guarde seus códigos de backup</p>
-                            <button onClick={() => setBackupCodes(null)} className="text-slate-500 hover:text-white"><X size={16} /></button>
+                            <button
+                                type="button"
+                                onClick={() => setBackupCodes(null)}
+                                aria-label="Fechar códigos de backup"
+                                className="text-slate-500 hover:text-white"
+                            >
+                                <X size={16} />
+                            </button>
                         </div>
                         <p className="text-[11px] text-slate-400 mb-3">
                             Cada código funciona uma vez e serve para entrar caso você perca o acesso ao app. Guarde-os em local seguro — não serão exibidos novamente.
@@ -297,30 +304,38 @@ export const SecuritySection = () => {
                 {/* Password Change - Expansível (inalterado) */}
                 <div className={`p-4 bg-card border border-slate-800 rounded-xl transition-all ${isChangingPassword ? 'border-blue-900/50 bg-blue-900/5' : 'hover:border-slate-700'}`}>
 
-                    {/* Header do Card de Senha */}
-                    <div
-                        className="flex items-center justify-between cursor-pointer group"
-                        role="button"
-                        tabIndex={isChangingPassword ? -1 : 0}
-                        aria-expanded={isChangingPassword}
-                        onClick={() => !isChangingPassword && setIsChangingPassword(true)}
-                        onKeyDown={onActivateKey(() => !isChangingPassword && setIsChangingPassword(true))}
-                    >
-                        <div className="flex items-start gap-3">
-                            <div className="p-2 rounded-lg bg-slate-800 text-slate-400 group-hover:text-white transition-colors">
-                                <ShieldAlert size={18} />
-                            </div>
-                            <div>
-                                <p className="text-sm font-bold text-slate-200">Alterar Senha</p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    {isChangingPassword ? 'Preencha os campos abaixo' : 'Clique para redefinir sua senha de acesso'}
-                                </p>
-                            </div>
-                        </div>
-                        {!isChangingPassword ? (
-                            <ChevronRight size={16} className="text-slate-600 group-hover:text-blue-500 transition-colors" />
-                        ) : (
-                            <button onClick={(e) => { e.stopPropagation(); setIsChangingPassword(false); setPwdMsg(null); }} className="text-slate-500 hover:text-white">
+                    {/* Header do Card de Senha: o título é o botão; o X fica ao lado dele, não dentro (botão dentro de botão). */}
+                    <div className="flex items-center justify-between gap-3 group">
+                        <button
+                            type="button"
+                            className="flex flex-1 items-center justify-between text-left cursor-pointer"
+                            tabIndex={isChangingPassword ? -1 : 0}
+                            aria-expanded={isChangingPassword}
+                            aria-controls={passwordFormId}
+                            onClick={() => !isChangingPassword && setIsChangingPassword(true)}
+                        >
+                            <span className="flex items-start gap-3">
+                                <span className="p-2 rounded-lg bg-slate-800 text-slate-400 group-hover:text-white transition-colors">
+                                    <ShieldAlert size={18} />
+                                </span>
+                                <span className="block">
+                                    <span className="block text-sm font-bold text-slate-200">Alterar Senha</span>
+                                    <span className="block text-xs text-slate-500 mt-0.5">
+                                        {isChangingPassword ? 'Preencha os campos abaixo' : 'Clique para redefinir sua senha de acesso'}
+                                    </span>
+                                </span>
+                            </span>
+                            {!isChangingPassword && (
+                                <ChevronRight size={16} className="text-slate-600 group-hover:text-blue-500 transition-colors" />
+                            )}
+                        </button>
+                        {isChangingPassword && (
+                            <button
+                                type="button"
+                                onClick={() => { setIsChangingPassword(false); setPwdMsg(null); }}
+                                aria-label="Fechar alteração de senha"
+                                className="text-slate-500 hover:text-white"
+                            >
                                 <X size={16} />
                             </button>
                         )}
@@ -328,7 +343,7 @@ export const SecuritySection = () => {
 
                     {/* Formulário Expansível */}
                     {isChangingPassword && (
-                        <form onSubmit={submitChangePassword} className="mt-6 pt-4 border-t border-slate-800/50 animate-fade-in">
+                        <form id={passwordFormId} onSubmit={submitChangePassword} className="mt-6 pt-4 border-t border-slate-800/50 animate-fade-in">
                             <div className="space-y-4">
                                 <Input
                                     label="Senha Atual"

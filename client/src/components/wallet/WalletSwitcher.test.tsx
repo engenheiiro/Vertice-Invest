@@ -8,7 +8,8 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { axe } from 'jest-axe';
 import { WalletSwitcher } from './WalletSwitcher';
 import { useWallet } from '../../contexts/WalletContext';
 import { useDemo } from '../../contexts/DemoContext';
@@ -48,7 +49,11 @@ function setup(over: Record<string, unknown> = {}, demo = false) {
   } as unknown as ReturnType<typeof useWallet>);
 }
 
-const open = () => fireEvent.click(screen.getByRole('button', { name: 'Principal' }));
+const open = () => fireEvent.click(screen.getByRole('button', { name: 'Principal', expanded: false }));
+const trigger = () => screen.getByRole('button', { name: 'Principal', expanded: true });
+const items = () => screen.queryAllByRole('listitem');
+/** Botão de trocar de carteira: o primeiro da linha; compartilhar/renomear/excluir são irmãos dele. */
+const selectButton = (i: number) => within(items()[i]).getAllByRole('button')[0];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,28 +74,32 @@ describe('WalletSwitcher', () => {
   });
 
   it('abre a lista, marca a pública e troca de carteira', async () => {
-    render(<WalletSwitcher />);
+    const { container } = render(<WalletSwitcher />);
     open();
-    expect(screen.getByRole('button', { name: 'Principal' })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    expect(within(screen.getByRole('list', { name: 'Minhas Carteiras' })).getAllByRole('listitem')).toHaveLength(2);
+    expect(selectButton(0)).toHaveAttribute('aria-current', 'true');
     expect(screen.getByLabelText('Carteira pública')).toBeInTheDocument();
+    // Lista simples com o botão de trocar e as ações como irmãos (antes: menuitem fora de menu, aninhado).
+    expect(await axe(container)).toHaveNoViolations();
 
     fireEvent.click(screen.getByText('Aposentadoria'));
     await waitFor(() => expect(setActiveWallet).toHaveBeenCalledWith('w2'));
-    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(items()).toHaveLength(0);
   });
 
-  it('teclado troca; a carteira já ativa só fecha a lista', async () => {
+  it('teclado troca (botão nativo: Enter/Espaço); a carteira já ativa só fecha a lista', async () => {
     render(<WalletSwitcher />);
     open();
-    fireEvent.keyDown(screen.getAllByRole('menuitem')[0], { key: 'Enter' });
+    // <button type="button"> nativo: Enter e Espaço disparam o clique no navegador.
+    expect(selectButton(0).tagName).toBe('BUTTON');
+    expect(selectButton(0)).toHaveAttribute('type', 'button');
+    fireEvent.click(selectButton(0));
     expect(setActiveWallet).not.toHaveBeenCalled();
-    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(items()).toHaveLength(0);
 
     open();
-    fireEvent.keyDown(screen.getAllByRole('menuitem')[1], { key: 'a' });
-    expect(setActiveWallet).not.toHaveBeenCalled();
-    fireEvent.keyDown(screen.getAllByRole('menuitem')[1], { key: ' ' });
+    fireEvent.click(selectButton(1));
     await waitFor(() => expect(setActiveWallet).toHaveBeenCalledWith('w2'));
   });
 
@@ -101,8 +110,9 @@ describe('WalletSwitcher', () => {
     expect(screen.getByText('Carregando...')).toBeInTheDocument();
     setup({ isSwitchingWallet: true });
     rerender(<WalletSwitcher />);
-    expect(screen.getByRole('button', { name: 'Principal' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Principal' })).toHaveAttribute('aria-busy', 'true');
+    const busy = screen.getAllByRole('button', { name: 'Principal' })[0];
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
   });
 
   it('exclui depois de confirmar e avisa o resultado', async () => {
@@ -156,8 +166,8 @@ describe('WalletSwitcher', () => {
     render(<WalletSwitcher />);
     open();
     fireEvent.mouseDown(screen.getByText('Minhas Carteiras'));
-    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+    expect(items()).toHaveLength(2);
     fireEvent.mouseDown(document.body);
-    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+    expect(items()).toHaveLength(0);
   });
 });

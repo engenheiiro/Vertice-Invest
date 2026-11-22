@@ -8,6 +8,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { axe } from 'jest-axe';
 import { TunablesCard } from './TunablesCard';
 import { authService } from '../../services/auth';
 
@@ -21,7 +22,8 @@ const TUNABLES = [
 
 const response = (ok: boolean, body: unknown) => ({ ok, json: async () => body }) as unknown as Response;
 
-const inputs = () => screen.getAllByRole('spinbutton') as HTMLInputElement[];
+const rsi = () => screen.getByLabelText('RSI de sobrevenda') as HTMLInputElement;
+const maxSignals = () => screen.getByLabelText('Máximo de sinais') as HTMLInputElement;
 const saveBtn = () => screen.getByRole('button', { name: /Salvar alterações/ });
 
 beforeEach(() => {
@@ -35,13 +37,15 @@ afterEach(() => {
 describe('TunablesCard', () => {
   it('carrega os parâmetros com faixa e padrão; Salvar começa desabilitado', async () => {
     api.mockResolvedValue(response(true, { tunables: TUNABLES }));
-    render(<TunablesCard />);
+    const { container } = render(<TunablesCard />);
     expect(screen.getByText(/Carregando/)).toBeInTheDocument();
     expect(await screen.findByText('RSI de sobrevenda')).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/api/research/config/tunables', { method: 'GET' });
-    expect(inputs().map((i) => i.value)).toEqual(['30', '20']);
+    // Cada <label> aponta para o seu campo (antes sem htmlFor: label).
+    expect([rsi().value, maxSignals().value]).toEqual(['30', '20']);
     expect(screen.getByText('Faixa 10–40 · padrão 25')).toBeInTheDocument();
     expect(saveBtn()).toBeDisabled();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('erro na carga mostra a mensagem do servidor', async () => {
@@ -57,8 +61,8 @@ describe('TunablesCard', () => {
     await screen.findByText('RSI de sobrevenda');
 
     fireEvent.click(screen.getAllByTitle('Restaurar padrão')[0]);
-    expect(inputs()[0]).toHaveValue(25);
-    fireEvent.change(inputs()[1], { target: { value: '35' } });
+    expect(rsi()).toHaveValue(25);
+    fireEvent.change(maxSignals(), { target: { value: '35' } });
     expect(saveBtn()).toBeEnabled();
 
     vi.useFakeTimers({ toFake: ['setTimeout'] });
@@ -78,10 +82,10 @@ describe('TunablesCard', () => {
       .mockResolvedValueOnce(response(false, {}));
     render(<TunablesCard />);
     await screen.findByText('RSI de sobrevenda');
-    fireEvent.change(inputs()[0], { target: { value: '12' } });
+    fireEvent.change(rsi(), { target: { value: '12' } });
     fireEvent.click(saveBtn());
     expect(await screen.findByText('Falha ao salvar')).toBeInTheDocument();
     await waitFor(() => expect(saveBtn()).toBeEnabled());
-    expect(inputs()[0]).toHaveValue(12);
+    expect(rsi()).toHaveValue(12);
   });
 });

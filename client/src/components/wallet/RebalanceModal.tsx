@@ -254,7 +254,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                     {/* Class gaps */}
                                     {visibleGaps.length > 0 && (
                                         <div>
-                                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Alocação por Classe</h4>
+                                            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Alocação por Classe</h3>
                                             <div className="space-y-2.5">
                                                 {visibleGaps.map(g => {
                                                     const overweight = g.gapValue < 0;
@@ -294,9 +294,9 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                     {/* SELL */}
                                     {plan.sells.length > 0 && (
                                         <div>
-                                            <h4 className="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                            <h3 className="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                                 <TrendingDown size={13} /> Reduzir / Vender
-                                            </h4>
+                                            </h3>
                                             <div className="space-y-2">
                                                 {plan.sells.map((s, i) => (
                                                     <TradeCard key={`s-${i}`} trade={s} side="sell" privacy={isPrivacyMode} />
@@ -308,9 +308,9 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
                                     {/* BUY */}
                                     {plan.buys.length > 0 && (
                                         <div>
-                                            <h4 className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                            <h3 className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                                                 <TrendingUp size={13} /> Comprar / Reforçar
-                                            </h4>
+                                            </h3>
                                             <div className="space-y-2">
                                                 {plan.buys.map((b, i) => (
                                                     <TradeCard key={`b-${i}`} trade={b} side="buy" privacy={isPrivacyMode} />

@@ -69,6 +69,10 @@ describe('MFA — ativação', () => {
     fireEvent.click(screen.getByRole('button', { name: /Copiar todos/ }));
     expect(writeText).toHaveBeenCalledWith('1111-2222\n3333-4444');
     expect(screen.getByText('Copiado!')).toBeInTheDocument();
+    // O X dos códigos de backup tem nome (antes: button-name).
+    expect(await axe(container)).toHaveNoViolations();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar códigos de backup' }));
+    expect(screen.queryByText('1111-2222')).not.toBeInTheDocument();
   });
 
   it('erro na senha mostra a mensagem do servidor e Cancelar volta ao início', async () => {
@@ -139,10 +143,14 @@ describe('MFA — desativação', () => {
 
 describe('troca de senha', () => {
   const openForm = async () => {
-    render(<SecuritySection />);
+    const view = render(<SecuritySection />);
     await toggle('Ativar 2FA');
-    fireEvent.keyDown(screen.getByRole('button', { name: /Alterar Senha/ }), { key: 'Enter' });
+    const header = screen.getByRole('button', { name: /Alterar Senha/ });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(header);
     expect(screen.getByText('Preencha os campos abaixo')).toBeInTheDocument();
+    expect(header).toHaveAttribute('aria-expanded', 'true');
+    return view;
   };
   const fill = (oldP: string, newP: string, confirm: string) => {
     fireEvent.change(screen.getByLabelText('Senha Atual'), { target: { value: oldP } });
@@ -150,6 +158,14 @@ describe('troca de senha', () => {
     fireEvent.change(screen.getByLabelText('Confirmar Nova Senha'), { target: { value: confirm } });
     fireEvent.click(screen.getByRole('button', { name: 'Atualizar Senha' }));
   };
+
+  it('cabeçalho aberto: X com nome e fora do botão do título (antes: button-name e nested-interactive)', async () => {
+    const { container } = await openForm();
+    expect(await axe(container)).toHaveNoViolations();
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar alteração de senha' }));
+    expect(screen.getByText('Clique para redefinir sua senha de acesso')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Nova Senha')).not.toBeInTheDocument();
+  });
 
   it('recusa senha curta e confirmação diferente sem chamar a API', async () => {
     await openForm();

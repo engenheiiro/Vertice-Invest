@@ -64,7 +64,7 @@ describe('RebalanceModal', () => {
   });
 
   it('busca o plano Moderado da carteira ativa e mostra lacunas, vendas e compras', async () => {
-    render(<RebalanceModal isOpen onClose={vi.fn()} />);
+    const { baseElement } = render(<RebalanceModal isOpen onClose={vi.fn()} />);
     expect(screen.getByText(/Analisando carteira vs\. carteira-modelo Moderado/)).toBeInTheDocument();
     expect(await screen.findByText('Alocação por Classe')).toBeInTheDocument();
     expect(getRebalancePlan).toHaveBeenCalledWith('MODERATE', 'w1');
@@ -86,7 +86,8 @@ describe('RebalanceModal', () => {
     expect(screen.getByText('IPCA+')).toBeInTheDocument();
     expect(screen.getByText('• Diversifica gestor')).toBeInTheDocument();
     expect(screen.getByText(/Ranking quant de 20\/11\/2026/)).toBeInTheDocument();
-    // Sem axe aqui: os h4 de seção pulam do h2 do título (heading-order) — defeito relatado.
+    // Títulos de seção em h3 logo abaixo do h2 do modal (antes h4: heading-order).
+    expect(await axe(baseElement)).toHaveNoViolations();
   });
 
   it('trocar o perfil busca de novo com o perfil escolhido', async () => {

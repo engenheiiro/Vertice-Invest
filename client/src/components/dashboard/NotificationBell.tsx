@@ -148,6 +148,8 @@ export const NotificationBell: React.FC = () => {
         createPortal(
           <div
             ref={panelRef}
+            role="dialog"
+            aria-label="Notificações"
             style={panelStyle}
             className="z-[100] flex flex-col max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-700/60 bg-panel shadow-2xl shadow-black/60 backdrop-blur-md overflow-hidden"
           >
@@ -178,7 +180,9 @@ export const NotificationBell: React.FC = () => {
                   </button>
                 )}
                 <button
+                  type="button"
                   onClick={() => setOpen(false)}
+                  aria-label="Fechar notificações"
                   className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
                 >
                   <X size={13} />

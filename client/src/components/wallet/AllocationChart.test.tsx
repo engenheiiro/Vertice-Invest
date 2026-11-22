@@ -170,6 +170,18 @@ describe('editor da Carteira Ideal', () => {
     expect(screen.getByText('Alocação-alvo do seu perfil')).toBeInTheDocument();
   });
 
+  it('editor aberto dá nome a cada campo numérico (antes sem rótulo: label)', async () => {
+    mockWallet();
+    const { container } = render(<AllocationChart />);
+    const editor = openEditor();
+    fireEvent.click(within(editor).getByRole('button', { name: 'Definir sub-metas de Ações BR' }));
+    expect(within(editor).getByLabelText('Reserva (valor fixo, R$)')).toBeInTheDocument();
+    expect(within(editor).getByLabelText('Meta de renda passiva mensal (R$)')).toBeInTheDocument();
+    expect(within(editor).getByLabelText('Meta de Ações BR (%)')).toBeInTheDocument();
+    expect(within(editor).getByLabelText('Sub-meta de ETFs em Ações BR (%)')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it('recusa soma diferente de 100% com toast de erro', () => {
     mockWallet();
     render(<AllocationChart />);

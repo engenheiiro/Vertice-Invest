@@ -9,6 +9,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
+import { axe } from 'jest-axe';
 import { AuditDetailModal } from './AuditDetailModal';
 import type { ResearchReport, RankingItem } from '../../services/research';
 
@@ -37,14 +38,16 @@ const tickers = () => within(screen.getByRole('table')).getAllByRole('row').slic
   .map((r) => within(r).getAllByRole('cell')[1].firstChild?.textContent);
 
 describe('AuditDetailModal', () => {
-  it('fechado não renderiza; sem relatório mostra carregando', () => {
+  it('fechado não renderiza; sem relatório mostra carregando', async () => {
     const { rerender } = render(<AuditDetailModal isOpen={false} onClose={vi.fn()} report={REPORT} />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     rerender(<AuditDetailModal isOpen onClose={vi.fn()} report={null} />);
     expect(screen.getByText('Carregando auditoria...')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Carregando auditoria' })).toBeInTheDocument();
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
-  it('lista o ranking por score com métricas formatadas', () => {
+  it('lista o ranking por score com métricas formatadas', async () => {
     render(<AuditDetailModal isOpen onClose={vi.fn()} report={REPORT} />);
     expect(screen.getByText('Auditoria: STOCK')).toBeInTheDocument();
     expect(screen.getByText(/3 Ativos Listados/)).toBeInTheDocument();
@@ -57,7 +60,9 @@ describe('AuditDetailModal', () => {
     expect(mglu[0]).toHaveTextContent('3');
     expect(mglu[4]).toHaveTextContent('-');
     expect(mglu[7]).toHaveTextContent('0%');
-    // Sem axe: o role="dialog" não tem nome acessível (aria-dialog-name) — defeito relatado.
+    // O dialog leva o nome do título (antes sem nome: aria-dialog-name).
+    expect(screen.getByRole('dialog', { name: 'Auditoria: STOCK' })).toBeInTheDocument();
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
   it('filtra por perfil e mostra o vazio quando nada casa', () => {

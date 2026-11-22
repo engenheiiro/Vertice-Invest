@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { SlidersHorizontal, Save, RotateCcw, Loader2 } from 'lucide-react';
 import { authService } from '../../services/auth';
 import { getErrorMessage } from '../../utils/errorMessages';
@@ -18,6 +18,7 @@ interface Tunable {
  * até ~1min (TTL do cache do configService no backend).
  */
 export const TunablesCard = () => {
+    const fieldIdBase = useId();
     const [tunables, setTunables] = useState<Tunable[]>([]);
     const [draft, setDraft] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
@@ -81,7 +82,7 @@ export const TunablesCard = () => {
                     {tunables.map((t) => (
                         <div key={t.key}>
                             <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold uppercase">{t.label}</label>
+                                <label htmlFor={`${fieldIdBase}-${t.key}`} className="text-[10px] text-slate-400 font-bold uppercase">{t.label}</label>
                                 <button
                                     type="button"
                                     title="Restaurar padrão"
@@ -92,6 +93,7 @@ export const TunablesCard = () => {
                                 </button>
                             </div>
                             <input
+                                id={`${fieldIdBase}-${t.key}`}
                                 type="number"
                                 min={t.min}
                                 max={t.max}

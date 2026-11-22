@@ -580,7 +580,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                 <div className="flex-1 relative">
                                     <span className="absolute left-3 top-1.5 text-xs text-slate-500">R$</span>
                                     <input
-                                        type="number"
+                                        type="number" aria-label="Reserva (valor fixo, R$)"
                                         min="0"
                                         value={tempReserve}
                                         onChange={handleReserveChange}
@@ -598,7 +598,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                     <span className="absolute left-3 top-1.5 text-xs text-slate-500">R$</span>
                                     <input
                                         ref={dividendGoalInputRef}
-                                        type="number"
+                                        type="number" aria-label="Meta de renda passiva mensal (R$)"
                                         min="0"
                                         value={tempDividendGoal}
                                         onChange={handleDividendGoalChange}
@@ -635,7 +635,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                                 <span className="text-xs text-slate-300 w-20 truncate">{LABELS[type]}</span>
                                                 <div className="flex-1 relative">
                                                     <input
-                                                        type="number"
+                                                        type="number" aria-label={`Meta de ${LABELS[type]} (%)`}
                                                         min="0"
                                                         max="100"
                                                         value={tempTargets[type] || ''}
@@ -655,7 +655,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
                                                             <span className="text-[11px] text-slate-400 w-20 truncate">{SUB_LABELS[type][k]}</span>
                                                             <div className="flex-1 relative">
                                                                 <input
-                                                                    type="number"
+                                                                    type="number" aria-label={`Sub-meta de ${SUB_LABELS[type][k]} em ${LABELS[type]} (%)`}
                                                                     min="0"
                                                                     max="100"
                                                                     value={(tempSub as any)[type]?.[k] || ''}

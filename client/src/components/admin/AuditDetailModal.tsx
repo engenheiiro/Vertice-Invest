@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calculator, Search, List, Activity, DollarSign, Shield, Target, Zap, Filter, RefreshCw } from 'lucide-react';
 import { ResearchReport, RankingItem } from '../../services/research';
@@ -18,6 +18,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     const [viewMode, setViewMode] = useState<'TOP10' | 'FULL'>('TOP10');
     const [riskFilter, setRiskFilter] = useState<RiskProfileFilter>('ALL');
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
+    const titleId = useId();
 
     const itemsToShow = useMemo(() => {
         // Proteção interna
@@ -42,7 +43,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     if (!isOpen) return null;
 
     if (!report) return createPortal(
-        <div className="relative z-[100]" role="dialog" aria-modal="true">
+        <div className="relative z-[100]" role="dialog" aria-modal="true" aria-label="Carregando auditoria">
             <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" role="presentation" onClick={onClose} />
             <div className="fixed inset-0 z-10 flex items-center justify-center p-4">
                 <div className="w-full max-w-7xl bg-base border border-slate-700 rounded-3xl flex items-center justify-center h-48 shadow-2xl animate-fade-in">
@@ -75,7 +76,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
     };
 
     return createPortal(
-        <div className="relative z-[100]" role="dialog" aria-modal="true">
+        <div className="relative z-[100]" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" role="presentation" onClick={onClose}></div>
             
             <div className="fixed inset-0 z-10 overflow-y-auto">
@@ -89,7 +90,7 @@ export const AuditDetailModal: React.FC<AuditDetailModalProps> = ({ isOpen, onCl
                                     <Search size={20} />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-black text-white uppercase tracking-tight">Auditoria: {report.assetClass}</h2>
+                                    <h2 id={titleId} className="text-lg font-black text-white uppercase tracking-tight">Auditoria: {report.assetClass}</h2>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                                         Motor Quant v3 • {itemsToShow?.length || 0} Ativos Listados
                                     </p>

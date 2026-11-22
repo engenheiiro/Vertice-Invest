@@ -75,6 +75,9 @@ describe('NotificationBell', () => {
     expect(screen.getByText('5m atrás')).toBeInTheDocument();
     expect(screen.getByText('3h atrás')).toBeInTheDocument();
     expect(screen.getByText('2d atrás')).toBeInTheDocument();
+    // Painel (portal no body) é um dialog com nome e o X tem rótulo (antes: region e button-name).
+    expect(screen.getByRole('dialog', { name: 'Notificações' })).toBeInTheDocument();
+    expect(await axe(document.body)).toHaveNoViolations();
 
     const card = (title: string) => screen.getByText(title).closest('[role="button"]') as HTMLElement;
     expect(card('Manutenção').className).toContain('opacity-50'); // difusão lida por u1
@@ -129,8 +132,7 @@ describe('NotificationBell', () => {
     Object.defineProperty(window, 'innerWidth', { value: width, configurable: true });
     fireEvent.click(bell);
     expect((screen.getByText('Provento pago').closest('.z-\\[100\\]') as HTMLElement).style.width).toBe('320px');
-    const close = screen.getByTitle('Marcar todas como lidas').nextElementSibling as HTMLElement;
-    fireEvent.click(close);
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar notificações' }));
     expect(screen.queryByText('Provento pago')).not.toBeInTheDocument();
   });
 });

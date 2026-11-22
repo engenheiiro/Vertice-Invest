@@ -33,6 +33,7 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
     const [busy, setBusy] = useState<null | 'toggle' | 'values' | 'regen'>(null);
     const [copied, setCopied] = useState(false);
     const linkId = useId();
+    const titleId = useId();
 
     useEffect(() => {
         if (isOpen) {
@@ -126,13 +127,13 @@ export const ShareWalletModal: React.FC<ShareWalletModalProps> = ({
     };
 
     return createPortal(
-        <div className="relative z-[100]" role="dialog" aria-modal="true">
+        <div className="relative z-[100]" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <div role="presentation" className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose}></div>
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
                     <div className="relative w-full max-w-md rounded-2xl bg-base border border-slate-800 shadow-2xl animate-fade-in">
                         <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-card">
-                            <h2 className="text-base font-bold text-white flex items-center gap-2">
+                            <h2 id={titleId} className="text-base font-bold text-white flex items-center gap-2">
                                 <Share2 size={18} className="text-blue-400" />
                                 Compartilhar carteira
                             </h2>

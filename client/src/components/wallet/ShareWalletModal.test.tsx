@@ -10,6 +10,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { axe } from 'jest-axe';
 import { ShareWalletModal } from './ShareWalletModal';
 import { walletsService } from '../../services/wallets';
 
@@ -59,6 +60,9 @@ describe('ShareWalletModal', () => {
     expect(screen.getByLabelText('Link')).toHaveValue(`${window.location.origin}/p/tok123`);
     expect(screen.getByRole('link', { name: /Abrir link/ })).toHaveAttribute('href', `${window.location.origin}/p/tok123`);
     expect(client.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['wallets'] });
+    // O dialog leva o nome do h2 (antes sem nome: aria-dialog-name).
+    expect(screen.getByRole('dialog', { name: /Compartilhar carteira/ })).toBeInTheDocument();
+    expect(await axe(document.body)).toHaveNoViolations();
   });
 
   it('erro ao ativar mantém desligado e avisa', async () => {
