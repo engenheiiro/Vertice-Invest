@@ -7,6 +7,7 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 export default tseslint.config(// --- Ignorados globais ---
 {
@@ -37,10 +38,14 @@ js.configs.recommended, // --- Client: TypeScript + React ---
     parserOptions: { ecmaFeatures: { jsx: true } },
   },
   plugins: {
+    'jsx-a11y': jsxA11y,
     'react-hooks': reactHooks,
     'react-refresh': reactRefresh,
   },
   rules: {
+    // Acessibilidade: as regras recomendadas do jsx-a11y entram como AVISO. O
+    // total desses avisos é travado pela catraca (docs/metricas.json): não sobe.
+    ...Object.fromEntries(Object.keys(jsxA11y.flatConfigs.recommended.rules).map((r) => [r, 'warn'])),
     'react-hooks/rules-of-hooks': 'error',
     'react-hooks/exhaustive-deps': 'warn',
     // Cada contexto exporta o Provider (componente) e o hook de consumo no mesmo
@@ -82,7 +87,7 @@ js.configs.recommended, // --- Client: TypeScript + React ---
   },
 }, // --- Scripts de build do client (Node ESM, fora de src) ---
 {
-  files: ['client/build-assets/**/*.{js,mjs}'],
+  files: ['client/build-assets/**/*.{js,mjs}', 'scripts/**/*.{js,mjs}'],
   languageOptions: {
     ecmaVersion: 2022,
     sourceType: 'module',

@@ -16,9 +16,10 @@ export default defineConfig({
     hookTimeout: 30000,
     coverage: {
       provider: 'v8',
-      reporter: ['text-summary', 'html', 'lcov'],
-      // Foca a medição no núcleo testável (matemática financeira + engines)
-      include: ['utils/**/*.js', 'services/engines/**/*.js'],
+      reporter: ['text-summary', 'html', 'lcov', 'json-summary'],
+      // Mede todas as áreas de produção. O piso de cada área mora em
+      // docs/metricas.json (catraca); os pisos por arquivo abaixo continuam.
+      include: ['{config,controllers,middleware,models,routes,schemas,services,utils}/**/*.js'],
       // Gate-ratchet: thresholds logo abaixo da cobertura atual para travar o piso
       // e impedir regressão. Recalibrado para a instrumentação do Vitest 5.
       // (functions baixo no mathUtils: muitos helpers pequenos ainda sem teste direto.)

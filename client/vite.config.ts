@@ -187,7 +187,7 @@ export default defineConfig({
     exclude: ['node_modules', 'dist'],
     coverage: {
       provider: 'v8',
-      reporter: ['text-summary', 'json', 'lcov'],
+      reporter: ['text-summary', 'json', 'json-summary', 'lcov'],
       // Arquivos com lógica de negócio que devem ser monitorados
       include: [
         'src/utils/**/*.ts',
@@ -195,6 +195,7 @@ export default defineConfig({
         'src/services/**/*.ts',
         'src/contexts/**/*.tsx',
         'src/pages/**/*.tsx',
+        'src/components/**/*.tsx',
       ],
       exclude: [
         'src/**/*.test.*',
@@ -202,15 +203,8 @@ export default defineConfig({
         'src/test/**',
         'src/prerender.tsx',
       ],
-      // Linha de base recalibrada após a migração para Vitest 5, cujo
-      // instrumentador V8 passou a contabilizar mais ramos e funções.
-      // Mantemos o ratchet logo abaixo da cobertura efetivamente medida.
-      thresholds: {
-        lines: 39,
-        statements: 38,
-        functions: 35,
-        branches: 36,
-      },
+      // Sem teto global aqui: o piso de cobertura é por área e mora em
+      // docs/metricas.json (catraca: scripts/qualidade/metricas.mjs).
     },
   }
 });
