@@ -7,7 +7,7 @@
  * cupom vir primeiro na lista para a simulação adotar a taxa dele.
  */
 import { describe, it, expect } from 'vitest';
-import { pickPrefixadoRate, macroRates } from './Calculator';
+import { pickPrefixadoRate, macroRates } from './calculatorMath';
 
 describe('pickPrefixadoRate', () => {
     it('pula o título com juros semestrais mesmo quando ele vem primeiro', () => {

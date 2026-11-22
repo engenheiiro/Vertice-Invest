@@ -2,17 +2,16 @@ import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { RefreshCw, ShieldCheck, ShieldAlert, Activity, Clock, Target, Globe, Database, Zap, Play, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import {
+    snapshotSummary, timeSeriesSummary, visibleBenchmarks, formatReturnTooltip, formatPointLabel, buildMacroCards,
+    type QualityStats, type AccuracyPoint, type MacroData, type MacroCardView,
+} from './adminPainelView';
 
-interface MacroIndicator { value: number; change?: number }
-export interface MacroData {
-    selic?: MacroIndicator; cdi?: MacroIndicator; ipca?: MacroIndicator;
-    ibov?: MacroIndicator; usd?: MacroIndicator; spx?: MacroIndicator;
-    btc?: MacroIndicator; lastUpdated?: string;
-}
+export type { MacroData } from './adminPainelView';
 
 interface Props {
-    qualityStats: any;
-    accuracyData: any[];
+    qualityStats: QualityStats | null;
+    accuracyData: AccuracyPoint[];
     accuracyWindow: number;
     setAccuracyWindow: (v: number) => void;
     accuracyAsset: string;
@@ -37,11 +36,10 @@ interface Props {
 
 const Skel = () => <span className="block h-7 w-12 bg-slate-800 rounded animate-pulse mt-1" />;
 
-// Cotação ausente vira "—", nunca "R$ 0.000": zero na tela parece dado de verdade.
-const macroOrDash = (value: unknown, format: (v: number) => string): string =>
-    typeof value === 'number' && Number.isFinite(value) && value > 0 ? format(value) : '—';
+const trendIcon = (change: number) =>
+    change > 0 ? <TrendingUp size={8} className="mr-0.5" /> : change < 0 ? <TrendingDown size={8} className="mr-0.5" /> : <Minus size={8} className="mr-0.5" />;
 
-const MacroCard = ({ label, value, change, sub, color }: { label: string; value: string; change?: number; sub: string; color?: string }) => (
+const MacroCard = ({ label, value, change, sub, color }: MacroCardView) => (
     <div className="bg-panel border border-slate-800 p-3 rounded-xl flex flex-col justify-between h-full">
         <div>
             <p className="text-[9px] text-slate-500 font-bold uppercase mb-1">{label}</p>
@@ -51,7 +49,7 @@ const MacroCard = ({ label, value, change, sub, color }: { label: string; value:
             <span className="text-[9px] text-slate-600">{sub}</span>
             {change !== undefined && (
                 <span className={`text-[9px] font-bold flex items-center ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {change > 0 ? <TrendingUp size={8} className="mr-0.5" /> : change < 0 ? <TrendingDown size={8} className="mr-0.5" /> : <Minus size={8} className="mr-0.5" />}
+                    {trendIcon(change)}
                     {Math.abs(change).toFixed(2)}%
                 </span>
             )}
@@ -59,255 +57,250 @@ const MacroCard = ({ label, value, change, sub, color }: { label: string; value:
     </div>
 );
 
-export const AdminPainelTab: React.FC<Props> = ({
-    qualityStats, accuracyData, accuracyWindow, setAccuracyWindow, accuracyAsset, setAccuracyAsset,
-    accuracyProfile, setAccuracyProfile,
-    macroData, isLoadingMacro, isMacroSyncing, isSyncing, isGlobalRunning,
-    isResettingHealth, isSnapshotRunning, isSyncingTimeSeries,
-    onResetHealth, onForceSnapshot, onSyncTimeSeries, onMacroSync, onSyncData, onRetryMacro,
-}) => {
-    const isMacroDataValid = macroData && macroData.selic && macroData.ibov;
+// Classes Tailwind completas (JIT não resolve interpolação de cor).
+const ACTION_TONE = {
+    red: 'bg-red-900/20 border border-red-900/50 text-red-400 hover:bg-red-900/40',
+    indigo: 'bg-indigo-900/20 border border-indigo-900/50 text-indigo-400 hover:bg-indigo-900/40',
+    blue: 'bg-blue-900/20 border border-blue-900/50 text-blue-400 hover:bg-blue-900/40',
+};
+
+/** Botão de ação pequeno dos cards: ícone de execução enquanto roda. */
+const CardAction = ({ onClick, running, tone, title, idle, label }: {
+    onClick: () => void; running: boolean; tone: keyof typeof ACTION_TONE; title: string; idle: React.ReactNode; label: string;
+}) => (
+    <button onClick={onClick} disabled={running} className={`px-2 py-1.5 ${ACTION_TONE[tone]} text-[10px] font-bold rounded-lg transition-all flex items-center gap-1`} title={title}>
+        {running ? <RefreshCw size={12} className="animate-spin" /> : idle}
+        {label}
+    </button>
+);
+
+const StaticKpi = ({ icon, iconCls, label, value, sub }: { icon: React.ReactNode; iconCls: string; label: string; value: React.ReactNode; sub: string }) => (
+    <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
+        <div className={iconCls}>{icon}</div>
+        <div>
+            <p className="text-[10px] text-slate-500 font-bold uppercase">{label}</p>
+            <h3 className="text-2xl font-black text-white">{value}</h3>
+            <p className="text-[9px] text-slate-500 mt-0.5">{sub}</p>
+        </div>
+    </div>
+);
+
+const BlacklistCard = ({ stats, isResetting, onReset }: { stats: QualityStats | null; isResetting: boolean; onReset: () => void }) => {
+    const blocked = (stats?.blacklistedAssets ?? 0) > 0;
+    return (
+        <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${blocked ? 'bg-red-900/20 text-red-500 border-red-900/50' : 'bg-green-900/20 text-green-500 border-green-900/50'}`}><ShieldAlert size={24} /></div>
+                <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">Blacklist</p>
+                    <h3 className={`text-2xl font-black ${blocked ? 'text-red-500' : 'text-green-500'}`}>{stats ? stats.blacklistedAssets : <Skel />}</h3>
+                    <p className="text-[9px] text-slate-500 mt-0.5">Ativos bloqueados</p>
+                </div>
+            </div>
+            {blocked && (
+                <CardAction onClick={onReset} running={isResetting} tone="red" title="Reativa ativos bloqueados por falhas consecutivas" idle={<Zap size={12} fill="currentColor" />} label="Reativar" />
+            )}
+        </div>
+    );
+};
+
+const SnapshotCard = ({ stats, isRunning, onForce }: { stats: QualityStats | null; isRunning: boolean; onForce: () => void }) => {
+    const { alert, note, created } = snapshotSummary(stats);
+    return (
+        <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${alert ? 'bg-orange-900/20 text-orange-500 border-orange-900/50' : 'bg-indigo-900/20 text-indigo-500 border-indigo-900/50'}`}><Activity size={24} /></div>
+                <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">Snapshots Noturnos</p>
+                    <div className="flex items-baseline gap-1">
+                        <h3 className="text-2xl font-black text-white">{stats ? created : <Skel />}</h3>
+                        <span className="text-[10px] text-slate-500 font-bold">criados</span>
+                    </div>
+                    <p className={`text-[9px] mt-0.5 font-bold ${alert ? 'text-orange-500' : 'text-emerald-500'}`}>
+                        {note}
+                    </p>
+                </div>
+            </div>
+            <CardAction onClick={onForce} running={isRunning} tone="indigo" title="Recalcular rentabilidade de todos os usuários agora" idle={<Play size={12} fill="currentColor" />} label="Forçar" />
+        </div>
+    );
+};
+
+const TimeSeriesCard = ({ stats, isSyncing, onSync }: { stats: QualityStats | null; isSyncing: boolean; onSync: () => void }) => {
+    const ts = timeSeriesSummary(stats);
+    return (
+        <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-4">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${ts.stale ? 'bg-red-900/20 text-red-500 border-red-900/50 animate-pulse' : 'bg-blue-900/20 text-blue-500 border-blue-900/50'}`}><Clock size={24} /></div>
+                <div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">Séries Temporais</p>
+                    <div className="flex items-baseline gap-1">
+                        <h3 className={`text-2xl font-black ${ts.stale ? 'text-red-500' : 'text-white'}`}>
+                            {stats ? ts.age : <Skel />}
+                        </h3>
+                        <span className="text-[10px] text-slate-500 font-bold">h</span>
+                    </div>
+                    <p className={`text-[9px] mt-0.5 font-bold ${ts.stale ? 'text-red-500' : 'text-emerald-500'}`}>
+                        {ts.status}
+                        {ts.cohort ? (
+                            <span className="text-slate-500 font-medium">
+                                {' '}· {ts.cohort.tracked} séries
+                                {ts.cohort.orphans}
+                            </span>
+                        ) : null}
+                    </p>
+                </div>
+            </div>
+            <CardAction onClick={onSync} running={isSyncing} tone="blue" title="Atualiza o histórico de preços de todos os ativos" idle={<Play size={12} fill="currentColor" />} label="Sync" />
+        </div>
+    );
+};
+
+const ASSET_OPTIONS: [string, string][] = [
+    ['BRASIL_10', 'Brasil 10'], ['STOCK', 'Ações BR'], ['FII', 'FIIs'], ['CRYPTO', 'Cripto'],
+    ['STOCK_US', 'Global (S&P 500)'], ['REIT', 'REITs'], ['ETF_BR', 'ETF Nacional'], ['ETF_US', 'ETF Internacional'],
+];
+// Classes Tailwind completas (JIT não resolve interpolação de cor).
+const PROFILE_OPTIONS = [
+    ['DEFENSIVE', 'Defensivo', 'bg-emerald-900/40 text-emerald-400 shadow'],
+    ['MODERATE', 'Moderado', 'bg-blue-900/40 text-blue-400 shadow'],
+    ['BOLD', 'Arrojado', 'bg-purple-900/40 text-purple-400 shadow'],
+] as const;
+const WINDOWS = [7, 30, 60, 90];
+
+const TOOLTIP_STYLE = {
+    light: { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#0f172a' },
+    dark: { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' },
+};
+
+const AccuracyChart = ({ data }: { data: AccuracyPoint[] }) => {
     const { theme } = useTheme();
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                    <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="formattedDate" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={20} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} unit="%" />
+                <Tooltip
+                    contentStyle={theme === 'light' ? TOOLTIP_STYLE.light : TOOLTIP_STYLE.dark}
+                    itemStyle={{ fontWeight: 'bold' }}
+                    formatter={formatReturnTooltip}
+                    labelFormatter={(label, payload) => formatPointLabel(label, payload?.[0]?.payload)}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
+                <Area type="monotone" dataKey="equityReturn" name="Carteira Recomendada" stroke="#3B82F6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={2.5} dot={false} />
+                {visibleBenchmarks(data).map((b) => (
+                    <Area key={b.key} type="monotone" dataKey={b.key} name={b.name} stroke={b.stroke} fill="transparent" strokeDasharray={b.dash} strokeWidth={1.5} dot={false} />
+                ))}
+            </AreaChart>
+        </ResponsiveContainer>
+    );
+};
 
-    /**
-     * A LINHA DE BAIXO DO CARD DE SNAPSHOT.
-     *
-     * Ela lia `skipped` e chamava tudo de "anomalias ignoradas". `skipped` é o
-     * total de carteiras NÃO fotografadas, e a maioria dos motivos é rotina: a
-     * carteira está vazia (cadastrou e ainda não lançou ativo) ou o dia já tinha
-     * sido fotografado. Uma única carteira vazia acendia o laranja toda noite,
-     * para sempre — e cresceria um por assinante novo. Alarme que nunca apaga é
-     * alarme que se aprende a ignorar, e aí o dia da anomalia de verdade passa
-     * despercebido.
-     *
-     * `errors` é o número que merece cor: anomalia de TWRR (variação diária
-     * absurda, snapshot abortado), guarda de reset de cota e exceção. O resto
-     * vira frase neutra, que informa sem gritar.
-     */
-    const snap = qualityStats?.snapshotStats;
-    const snapErrors = snap?.errors || 0;
-    const snapEmpty = snap?.empty || 0;
-    const snapExists = snap?.exists || 0;
-    const snapAlert = snapErrors > 0;
-    const snapNote = (() => {
-        if (!qualityStats) return '...';
-        if (snapErrors > 0) return `${snapErrors} ${snapErrors === 1 ? 'anomalia' : 'anomalias'} — snapshot abortado`;
-        const partes: string[] = [];
-        if (snapEmpty > 0) partes.push(`${snapEmpty} ${snapEmpty === 1 ? 'carteira sem ativos' : 'carteiras sem ativos'}`);
-        if (snapExists > 0) partes.push(`${snapExists} já do dia`);
-        return partes.length > 0 ? `Sem anomalias · ${partes.join(' · ')}` : 'Sem anomalias';
-    })();
-    const chartTooltipStyle = theme === 'light'
-        ? { backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '8px', fontSize: '12px', color: '#0f172a' }
-        : { backgroundColor: '#0F1729', borderColor: '#1e293b', borderRadius: '8px', fontSize: '12px' };
+type AccuracyProps = Pick<Props, 'accuracyData' | 'accuracyWindow' | 'setAccuracyWindow' | 'accuracyAsset' | 'setAccuracyAsset' | 'accuracyProfile' | 'setAccuracyProfile'>;
 
+const AccuracyPanel = ({ accuracyData, accuracyWindow, setAccuracyWindow, accuracyAsset, setAccuracyAsset, accuracyProfile, setAccuracyProfile }: AccuracyProps) => (
+    <div className="bg-base border border-slate-800 rounded-2xl p-6 mb-6 shadow-lg">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2"><Target size={18} className="text-purple-500" />Carteira Recomendada (Backtest Contínuo)</h3>
+                <p className="text-xs text-slate-500">Valorização de uma carteira que segue a Research (só COMPRAR, entradas/saídas a cada publicação) vs benchmark da classe (IBOV · CDI · IFIX · S&P · BTC)</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+                <select value={accuracyAsset} onChange={(e) => setAccuracyAsset(e.target.value)} className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1 outline-none">
+                    {ASSET_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                {/* Perfil de risco — BRASIL_10 é curva única (carteira curada), sem seletor. */}
+                {accuracyAsset !== 'BRASIL_10' && (
+                    <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
+                        {PROFILE_OPTIONS.map(([key, label, activeCls]) => (
+                            <button key={key} onClick={() => setAccuracyProfile(key)} className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${accuracyProfile === key ? activeCls : 'text-slate-500 hover:text-slate-300'}`}>{label}</button>
+                        ))}
+                    </div>
+                )}
+                <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
+                    {WINDOWS.map(days => (
+                        <button key={days} onClick={() => setAccuracyWindow(days)} className={`px-3 py-1 text-[10px] font-bold rounded ${accuracyWindow === days ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>{days}D</button>
+                    ))}
+                </div>
+            </div>
+        </div>
+        <div className="h-[280px] w-full">
+            {accuracyData.length > 0 ? <AccuracyChart data={accuracyData} /> : (
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
+                    <Target size={24} className="opacity-30" />
+                    <p className="text-xs">Sem curva para esta classe. É preciso ≥1 publicação da Research; a curva é gerada nas rotinas diárias (09:00/18:30).</p>
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+type MacroProps = Pick<Props, 'macroData' | 'isLoadingMacro' | 'isMacroSyncing' | 'isSyncing' | 'isGlobalRunning' | 'onMacroSync' | 'onSyncData' | 'onRetryMacro'>;
+
+const MacroPanel = ({ macroData, isLoadingMacro, isMacroSyncing, isSyncing, isGlobalRunning, onMacroSync, onSyncData, onRetryMacro }: MacroProps) => {
+    const cards = buildMacroCards(macroData);
+    return (
+        <div className="bg-card border border-slate-800 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Globe size={14} className="text-blue-500" />Ambiente Macroeconômico</h3>
+                    {macroData?.lastUpdated && (
+                        <span className="text-[10px] text-slate-500 font-mono mt-1 ml-6 flex items-center gap-1">
+                            <Clock size={10} />
+                            Última Sync: {new Date(macroData.lastUpdated).toLocaleString()}
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    <button onClick={onMacroSync} disabled={isMacroSyncing} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-purple-500">
+                        <Globe size={12} className={isMacroSyncing ? 'animate-pulse' : ''} />
+                        {isMacroSyncing ? 'Atualizando...' : 'Sync Macro'}
+                    </button>
+                    <button onClick={onSyncData} disabled={isSyncing || isGlobalRunning} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500">
+                        <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
+                        {isSyncing ? 'Sincronizando...' : 'Sync Preços'}
+                    </button>
+                </div>
+            </div>
+            {cards ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+                    {cards.map((c) => <MacroCard key={c.label} {...c} />)}
+                </div>
+            ) : (
+                <div className="text-center text-xs text-slate-500 py-4 flex flex-col items-center">
+                    <p>Carregando dados globais ou serviço indisponível...</p>
+                    {!isLoadingMacro && <button onClick={onRetryMacro} className="mt-2 text-blue-500 hover:underline">Tentar Novamente</button>}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export const AdminPainelTab: React.FC<Props> = (props) => {
+    const { qualityStats } = props;
     return (
         <>
             {/* Stats KPI */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
-                    <div className="w-12 h-12 bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-500 border border-blue-900/50 shrink-0"><RefreshCw size={24} /></div>
-                    <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase">Ativos Processados</p>
-                        <h3 className="text-2xl font-black text-white">{qualityStats ? qualityStats.assetsProcessed : <Skel />}</h3>
-                        <p className="text-[9px] text-slate-500 mt-0.5">Na última sincronização</p>
-                    </div>
-                </div>
-
-                <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-lg">
-                    <div className="w-12 h-12 bg-yellow-900/20 rounded-xl flex items-center justify-center text-yellow-500 border border-yellow-900/50 shrink-0"><ShieldCheck size={24} /></div>
-                    <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase">Typos Corrigidos</p>
-                        <h3 className="text-2xl font-black text-white">{qualityStats ? qualityStats.typosFixed : <Skel />}</h3>
-                        <p className="text-[9px] text-slate-500 mt-0.5">Sanitização ativa</p>
-                    </div>
-                </div>
-
-                <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
-                    <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${qualityStats?.blacklistedAssets > 0 ? 'bg-red-900/20 text-red-500 border-red-900/50' : 'bg-green-900/20 text-green-500 border-green-900/50'}`}><ShieldAlert size={24} /></div>
-                        <div>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">Blacklist</p>
-                            <h3 className={`text-2xl font-black ${qualityStats?.blacklistedAssets > 0 ? 'text-red-500' : 'text-green-500'}`}>{qualityStats ? qualityStats.blacklistedAssets : <Skel />}</h3>
-                            <p className="text-[9px] text-slate-500 mt-0.5">Ativos bloqueados</p>
-                        </div>
-                    </div>
-                    {qualityStats?.blacklistedAssets > 0 && (
-                        <button onClick={onResetHealth} disabled={isResettingHealth} className="px-2 py-1.5 bg-red-900/20 border border-red-900/50 text-red-400 hover:bg-red-900/40 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1" title="Reativa ativos bloqueados por falhas consecutivas">
-                            {isResettingHealth ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} fill="currentColor" />}
-                            Reativar
-                        </button>
-                    )}
-                </div>
-
-                <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
-                    <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${snapAlert ? 'bg-orange-900/20 text-orange-500 border-orange-900/50' : 'bg-indigo-900/20 text-indigo-500 border-indigo-900/50'}`}><Activity size={24} /></div>
-                        <div>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">Snapshots Noturnos</p>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className="text-2xl font-black text-white">{qualityStats ? (qualityStats.snapshotStats?.created || 0) : <Skel />}</h3>
-                                <span className="text-[10px] text-slate-500 font-bold">criados</span>
-                            </div>
-                            <p className={`text-[9px] mt-0.5 font-bold ${snapAlert ? 'text-orange-500' : 'text-emerald-500'}`}>
-                                {snapNote}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onForceSnapshot} disabled={isSnapshotRunning} className="px-2 py-1.5 bg-indigo-900/20 border border-indigo-900/50 text-indigo-400 hover:bg-indigo-900/40 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1" title="Recalcular rentabilidade de todos os usuários agora">
-                        {isSnapshotRunning ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} fill="currentColor" />}
-                        Forçar
-                    </button>
-                </div>
-
-                <div className="bg-base border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
-                    <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${qualityStats?.timeSeriesAgeHours > 48 ? 'bg-red-900/20 text-red-500 border-red-900/50 animate-pulse' : 'bg-blue-900/20 text-blue-500 border-blue-900/50'}`}><Clock size={24} /></div>
-                        <div>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">Séries Temporais</p>
-                            <div className="flex items-baseline gap-1">
-                                <h3 className={`text-2xl font-black ${qualityStats?.timeSeriesAgeHours > 48 ? 'text-red-500' : 'text-white'}`}>
-                                    {qualityStats ? (qualityStats.timeSeriesAgeHours ? qualityStats.timeSeriesAgeHours.toFixed(1) : 0) : <Skel />}
-                                </h3>
-                                <span className="text-[10px] text-slate-500 font-bold">h</span>
-                            </div>
-                            <p className={`text-[9px] mt-0.5 font-bold ${qualityStats?.timeSeriesAgeHours > 48 ? 'text-red-500' : 'text-emerald-500'}`}>
-                                {qualityStats ? (qualityStats.timeSeriesAgeHours > 48 ? 'ALERTA: Defasado' : 'Saudável') : '...'}
-                                {/* A idade é a da coorte mantida. Mostrar o tamanho dela e o
-                                    que ficou de fora deixa explícito o que o número cobre —
-                                    a média sobre a coleção inteira acendia o vermelho por
-                                    documentos que ninguém atualiza. */}
-                                {qualityStats?.timeSeriesTracked ? (
-                                    <span className="text-slate-500 font-medium">
-                                        {' '}· {qualityStats.timeSeriesTracked} séries
-                                        {qualityStats.timeSeriesOrphans ? ` · ${qualityStats.timeSeriesOrphans} fora da coorte` : ''}
-                                    </span>
-                                ) : null}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={onSyncTimeSeries} disabled={isSyncingTimeSeries} className="px-2 py-1.5 bg-blue-900/20 border border-blue-900/50 text-blue-400 hover:bg-blue-900/40 text-[10px] font-bold rounded-lg transition-all flex items-center gap-1" title="Atualiza o histórico de preços de todos os ativos">
-                        {isSyncingTimeSeries ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} fill="currentColor" />}
-                        Sync
-                    </button>
-                </div>
+                <StaticKpi icon={<RefreshCw size={24} />} iconCls="w-12 h-12 bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-500 border border-blue-900/50 shrink-0" label="Ativos Processados" value={qualityStats ? qualityStats.assetsProcessed : <Skel />} sub="Na última sincronização" />
+                <StaticKpi icon={<ShieldCheck size={24} />} iconCls="w-12 h-12 bg-yellow-900/20 rounded-xl flex items-center justify-center text-yellow-500 border border-yellow-900/50 shrink-0" label="Typos Corrigidos" value={qualityStats ? qualityStats.typosFixed : <Skel />} sub="Sanitização ativa" />
+                <BlacklistCard stats={qualityStats} isResetting={props.isResettingHealth} onReset={props.onResetHealth} />
+                <SnapshotCard stats={qualityStats} isRunning={props.isSnapshotRunning} onForce={props.onForceSnapshot} />
+                <TimeSeriesCard stats={qualityStats} isSyncing={props.isSyncingTimeSeries} onSync={props.onSyncTimeSeries} />
             </div>
 
             {/* Precisão do Algoritmo */}
-            <div className="bg-base border border-slate-800 rounded-2xl p-6 mb-6 shadow-lg">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                    <div>
-                        <h3 className="text-base font-bold text-white flex items-center gap-2"><Target size={18} className="text-purple-500" />Carteira Recomendada (Backtest Contínuo)</h3>
-                        <p className="text-xs text-slate-500">Valorização de uma carteira que segue a Research (só COMPRAR, entradas/saídas a cada publicação) vs benchmark da classe (IBOV · CDI · IFIX · S&P · BTC)</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <select value={accuracyAsset} onChange={(e) => setAccuracyAsset(e.target.value)} className="bg-slate-900 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1 outline-none">
-                            <option value="BRASIL_10">Brasil 10</option>
-                            <option value="STOCK">Ações BR</option>
-                            <option value="FII">FIIs</option>
-                            <option value="CRYPTO">Cripto</option>
-                            <option value="STOCK_US">Global (S&P 500)</option>
-                            <option value="REIT">REITs</option>
-                            <option value="ETF_BR">ETF Nacional</option>
-                            <option value="ETF_US">ETF Internacional</option>
-                        </select>
-                        {/* Perfil de risco — BRASIL_10 é curva única (carteira curada), sem seletor.
-                            Classes Tailwind completas (JIT não resolve interpolação de cor). */}
-                        {accuracyAsset !== 'BRASIL_10' && (
-                            <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
-                                {([['DEFENSIVE', 'Defensivo', 'bg-emerald-900/40 text-emerald-400 shadow'], ['MODERATE', 'Moderado', 'bg-blue-900/40 text-blue-400 shadow'], ['BOLD', 'Arrojado', 'bg-purple-900/40 text-purple-400 shadow']] as const).map(([key, label, activeCls]) => (
-                                    <button key={key} onClick={() => setAccuracyProfile(key)} className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${accuracyProfile === key ? activeCls : 'text-slate-500 hover:text-slate-300'}`}>{label}</button>
-                                ))}
-                            </div>
-                        )}
-                        <div className="flex bg-slate-900 p-0.5 rounded border border-slate-700">
-                            {[7, 30, 60, 90].map(days => (
-                                <button key={days} onClick={() => setAccuracyWindow(days)} className={`px-3 py-1 text-[10px] font-bold rounded ${accuracyWindow === days ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>{days}D</button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-                <div className="h-[280px] w-full">
-                    {accuracyData.length > 0 ? (() => {
-                        // Cada benchmark aparece só quando a série tem dado (o backend zera as
-                        // que a classe não usa — ex.: cripto só traz BTC+CDI, ETF_US só SPX+CDI).
-                        const has = (key: string) => accuracyData.some(d => d[key] !== 0);
-                        return (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={accuracyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                                    <defs>
-                                        <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.25} />
-                                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                    <XAxis dataKey="formattedDate" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={20} />
-                                    <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} unit="%" />
-                                    <Tooltip contentStyle={chartTooltipStyle} itemStyle={{ fontWeight: 'bold' }} formatter={(value: number, name: string) => [`${value >= 0 ? '+' : ''}${value.toFixed(2)}%`, name]} labelFormatter={(label, payload) => {
-                                        const p: any = payload?.[0]?.payload;
-                                        const reb = p?.lastRebalanceDate ? new Date(p.lastRebalanceDate).toLocaleDateString('pt-BR') : null;
-                                        return `📅 ${label}${p?.holdingsCount ? ` · ${p.holdingsCount} ativos` : ''}${reb ? ` · rebal. ${reb}` : ''}`;
-                                    }} />
-                                    <Legend iconType="circle" wrapperStyle={{ fontSize: '11px' }} />
-                                    <Area type="monotone" dataKey="equityReturn" name="Carteira Recomendada" stroke="#3B82F6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={2.5} dot={false} />
-                                    {has('ibovReturn') && <Area type="monotone" dataKey="ibovReturn" name="IBOV" stroke="#F97316" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
-                                    {has('cdiReturn') && <Area type="monotone" dataKey="cdiReturn" name="CDI" stroke="#10B981" fill="transparent" strokeDasharray="3 3" strokeWidth={1.5} dot={false} />}
-                                    {has('ifixReturn') && <Area type="monotone" dataKey="ifixReturn" name="IFIX" stroke="#A78BFA" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
-                                    {has('spxReturn') && <Area type="monotone" dataKey="spxReturn" name="S&P 500" stroke="#06B6D4" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
-                                    {has('btcReturn') && <Area type="monotone" dataKey="btcReturn" name="BTC" stroke="#F59E0B" fill="transparent" strokeDasharray="5 3" strokeWidth={1.5} dot={false} />}
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        );
-                    })() : (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
-                            <Target size={24} className="opacity-30" />
-                            <p className="text-xs">Sem curva para esta classe. É preciso ≥1 publicação da Research; a curva é gerada nas rotinas diárias (09:00/18:30).</p>
-                        </div>
-                    )}
-                </div>
-            </div>
+            <AccuracyPanel {...props} />
 
             {/* Ambiente Macro */}
-            <div className="bg-card border border-slate-800 rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex flex-col">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Globe size={14} className="text-blue-500" />Ambiente Macroeconômico</h3>
-                        {macroData?.lastUpdated && (
-                            <span className="text-[10px] text-slate-500 font-mono mt-1 ml-6 flex items-center gap-1">
-                                <Clock size={10} />
-                                Última Sync: {new Date(macroData.lastUpdated).toLocaleString()}
-                            </span>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button onClick={onMacroSync} disabled={isMacroSyncing} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-purple-500">
-                            <Globe size={12} className={isMacroSyncing ? 'animate-pulse' : ''} />
-                            {isMacroSyncing ? 'Atualizando...' : 'Sync Macro'}
-                        </button>
-                        <button onClick={onSyncData} disabled={isSyncing || isGlobalRunning} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-slate-800 text-slate-400 border-slate-700 hover:text-white hover:border-blue-500">
-                            <Database size={12} className={isSyncing ? 'animate-pulse' : ''} />
-                            {isSyncing ? 'Sincronizando...' : 'Sync Preços'}
-                        </button>
-                    </div>
-                </div>
-                {isMacroDataValid ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
-                        <MacroCard label="Selic" value={`${macroData?.selic?.value}%`} sub="BCB Meta" color="text-yellow-400" />
-                        <MacroCard label="CDI" value={`${macroData?.cdi?.value?.toFixed(2)}%`} sub="Est. Cetip" color="text-yellow-400" />
-                        <MacroCard label="IPCA" value={`${macroData?.ipca?.value}%`} sub="12 meses" color="text-red-400" />
-                        <MacroCard label="Ibovespa" value={macroOrDash(macroData?.ibov?.value, (v) => Math.round(v).toLocaleString())} change={macroData?.ibov?.change} sub="Pts" />
-                        <MacroCard label="Dólar" value={macroOrDash(macroData?.usd?.value, (v) => `R$ ${v.toFixed(3)}`)} change={macroData?.usd?.change} sub="PTAX" />
-                        <MacroCard label="S&P 500" value={macroOrDash(macroData?.spx?.value, (v) => Math.round(v).toLocaleString())} change={macroData?.spx?.change} sub="US Pts" />
-                        <MacroCard label="Bitcoin" value={macroOrDash(macroData?.btc?.value, (v) => `$${Math.round(v).toLocaleString()}`)} change={macroData?.btc?.change} sub="USD" color="text-purple-400" />
-                    </div>
-                ) : (
-                    <div className="text-center text-xs text-slate-500 py-4 flex flex-col items-center">
-                        <p>Carregando dados globais ou serviço indisponível...</p>
-                        {!isLoadingMacro && <button onClick={onRetryMacro} className="mt-2 text-blue-500 hover:underline">Tentar Novamente</button>}
-                    </div>
-                )}
-            </div>
+            <MacroPanel {...props} />
         </>
     );
 };
