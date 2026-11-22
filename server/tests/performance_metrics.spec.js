@@ -11,7 +11,7 @@ import {
   recordHttpMetric,
   getPerformanceSnapshot,
   sampleMemory,
-  resetMemoryTrend,
+  _resetMemoryTrend,
 } from '../utils/performanceMetrics.js';
 import { getPerformanceMetrics } from '../controllers/performanceController.js';
 import adminRoutes from '../routes/adminRoutes.js';
@@ -133,11 +133,11 @@ describe('performanceMetrics', () => {
     });
 
     const alimentar = (horas, rssPorHora) => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       horas.forEach((hora) => sampleMemory({ force: true, read: em(hora, rssPorHora(hora)) }));
     };
 
-    afterEach(() => resetMemoryTrend());
+    afterEach(() => _resetMemoryTrend());
 
     it('não afirma direção com janela curta — ausência de dado não é "estável"', () => {
       alimentar([0, 0.1], () => 396);
@@ -183,7 +183,7 @@ describe('performanceMetrics', () => {
     // alcança e o teto do V8 ainda transforma em OOM diagnosticável; o outro
     // termina em SIGKILL mudo do container.
     it('diz ONDE a memória cresce, não só que cresce', () => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       Array.from({ length: 12 }, (_, h) => h).forEach((h) => sampleMemory({
         force: true,
         read: () => ({
@@ -212,7 +212,7 @@ describe('performanceMetrics', () => {
      * depois de TODO deploy, e alarme que acende sempre se aprende a ignorar.
      */
     it('não confunde rampa de aquecimento que já achatou com vazamento', () => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       // A curva medida: 6h de aquecimento (270 → 330) e 18h de platô cedendo de
       // volta para ~324. Devolve +1,3 MB/h na janela inteira e −0,3 nas últimas
       // 4h — os mesmos números que estavam na tela.
@@ -236,7 +236,7 @@ describe('performanceMetrics', () => {
     // O outro lado: a comparação não pode virar anistia. Subida que se mantém
     // deixa as duas retas iguais e continua acusada.
     it('vazamento constante não é absolvido pela comparação', () => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       Array.from({ length: 145 }, (_, i) => i * 0.166)
         .forEach((hora) => sampleMemory({ force: true, read: em(hora, 200 + (hora * 8)) }));
       const { memoryTrend } = getPerformanceSnapshot().runtime;
@@ -250,7 +250,7 @@ describe('performanceMetrics', () => {
     // Janela curta não sustenta a comparação: "recente" e "inteira" seriam a
     // mesma reta medida duas vezes, e uma subida real seria perdoada por isso.
     it('não compara antes de a janela ter o dobro da recente', () => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       Array.from({ length: 36 }, (_, i) => i * 0.166)
         .forEach((hora) => sampleMemory({ force: true, read: em(hora, 300 + (hora * 6)) }));
       const { memoryTrend } = getPerformanceSnapshot().runtime;
@@ -263,7 +263,7 @@ describe('performanceMetrics', () => {
 
     // Observabilidade que cresce sozinha vira o vazamento que deveria denunciar.
     it('a própria série é bounded', () => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       for (let i = 0; i < 400; i += 1) sampleMemory({ force: true, read: em(i, 300) });
       expect(getPerformanceSnapshot().runtime.memoryTrend.points).toBe(288);
     });
@@ -271,7 +271,7 @@ describe('performanceMetrics', () => {
     // O boot é um piso que o processo nunca mais revisita, e a regressão pesa
     // mais os extremos: sem a quarentena, o fim do boot vira "subida".
     it('descarta amostra enquanto o processo esquenta', () => {
-      resetMemoryTrend();
+      _resetMemoryTrend();
       const uptime = vi.spyOn(process, 'uptime').mockReturnValue(60);
       expect(sampleMemory()).toBeNull();
       expect(getPerformanceSnapshot().runtime.memoryTrend.points).toBe(0);

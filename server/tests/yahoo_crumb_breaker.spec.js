@@ -20,7 +20,7 @@
  * volume (que é quem separa papel vivo de papel morto) e variação de verdade.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getEscalations, resetSourceStats } from '../utils/sourceHealth.js';
+import { getEscalations, _resetSourceStats } from '../utils/sourceHealth.js';
 
 const yahoo = vi.hoisted(() => ({ quote: vi.fn(), chart: vi.fn() }));
 
@@ -52,7 +52,7 @@ const CICLOS = 6;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resetSourceStats();
+  _resetSourceStats();
 });
 
 describe('cotação em 429 de crumb', () => {

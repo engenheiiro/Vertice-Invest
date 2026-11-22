@@ -62,8 +62,8 @@ describe('encryption — round-trip e formato', () => {
     expect(enc.decrypt(legacy)).toBe('cpf-12345678900');
   });
 
-  it('getActiveKeyId default é v1', () => {
-    expect(enc.getActiveKeyId()).toBe('v1');
+  it('_getActiveKeyId default é v1', () => {
+    expect(enc._getActiveKeyId()).toBe('v1');
   });
 });
 

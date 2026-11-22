@@ -3,7 +3,7 @@ import axios from 'axios';
 import { macroDataService, isPlausibleUsd, isPlausibleBtc } from '../services/macroDataService.js';
 import { externalMarketService } from '../services/externalMarketService.js';
 import AssetHistory from '../models/AssetHistory.js';
-import { getEscalations, getSourceStats, resetSourceStats } from '../utils/sourceHealth.js';
+import { getEscalations, getSourceStats, _resetSourceStats } from '../utils/sourceHealth.js';
 import { buildEscalationView } from '../utils/dataSourceStatus.js';
 
 // Incidente de 04/09/2026: a fonte de câmbio de então (AwesomeAPI) parou de
@@ -165,7 +165,7 @@ describe('updateCurrencies — cadeia de fontes', () => {
  * tentada-e-falhada no Bitcoin, que ela nunca teve como cotar.
  */
 describe('updateCurrencies — o que o painel aprende com a cadeia', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
     afterEach(() => vi.restoreAllMocks());
 
     it('Yahoo cobrindo tudo não gera escalada: o ledger é de quem precisou de reserva', async () => {
@@ -301,7 +301,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     // razão. O painel ficou anunciando "1 de 1 chamadas com dado" ao lado de "0
     // moedas resolvidas aqui". Em dia não útil a chamada nasce condenada.
     it('em feriado nem chega a perguntar, e a razão fica registrada no painel', async () => {
-        resetSourceStats();
+        _resetSourceStats();
         vi.setSystemTime(new Date('2026-09-07T15:00:00.000Z')); // segunda, Independência
         const rede = vi.spyOn(axios, 'get');
 
@@ -332,7 +332,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     // reiniciar, porque a estatística é cumulativa desde o boot e a PTAX quase não
     // é chamada de novo. É a mesma certeza do feriado, com outro nome.
     it('antes do boletim nem chega a perguntar, e a razão fica no painel', async () => {
-        resetSourceStats();
+        _resetSourceStats();
         vi.setSystemTime(SEXTA_UTIL); // 12h BRT, dia útil
         const rede = vi.spyOn(axios, 'get');
 
@@ -350,7 +350,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     // `missed` por elo alcançado que não resolveu, e acusar a fonte por uma
     // chamada que não houve é o mesmo defeito, um andar acima.
     it('na trilha da manhã, a PTAX aparece como não consultada', async () => {
-        resetSourceStats();
+        _resetSourceStats();
         vi.setSystemTime(SEXTA_UTIL);
         vi.spyOn(externalMarketService, 'getCurrencyQuotes').mockResolvedValue({});
         vi.spyOn(macroDataService, '_fetchBtcCoinbase').mockResolvedValue(null);
@@ -371,7 +371,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     // verdade. Medir "dado" pelo tamanho da série faria o card se contradizer com
     // o ledger de escaladas.
     it('série sem a fixação de hoje conta como resposta SEM dado, não como entrega', async () => {
-        resetSourceStats();
+        _resetSourceStats();
         vi.spyOn(axios, 'get').mockResolvedValue({
             data: { value: [ptax('2026-09-02', 5.1273), ptax('2026-09-03', 5.0962)] },
         });
@@ -385,7 +385,7 @@ describe('_fetchPtaxUsd — rede final, só dólar e só do dia', () => {
     });
 
     it('com a fixação do dia, a chamada conta como entrega', async () => {
-        resetSourceStats();
+        _resetSourceStats();
         vi.spyOn(axios, 'get').mockResolvedValue({
             data: { value: [ptax('2026-09-03', 5.0962), ptax('2026-09-04', 5.1253)] },
         });

@@ -16,7 +16,7 @@ afterEach(() => { vi.useRealTimers(); });
 
 vi.mock('../config/logger.js', () => ({ default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } }));
 
-const { verifyWebhookSignature, isValidSignature } = await import('../controllers/webhookController.js');
+const { verifyWebhookSignature } = await import('../controllers/webhookController.js');
 
 const SECRET = 'webhook-test-secret';
 const original = { nodeEnv: process.env.NODE_ENV, secret: process.env.MP_WEBHOOK_SECRET };
@@ -55,7 +55,7 @@ describe('id do manifesto assinado', () => {
       query: {},
       headers: { 'x-request-id': 'r2', 'x-signature': `ts=${ts},v1=${v1}` },
     };
-    expect(isValidSignature(req)).toBe(false);
+    expect(verifyWebhookSignature(req).valid).toBe(false);
   });
 
   it('notificação moderna (com data.id) não cai no manifesto sem id', () => {
@@ -67,7 +67,7 @@ describe('id do manifesto assinado', () => {
       query: {},
       headers: { 'x-request-id': 'r3', 'x-signature': `ts=${ts},v1=${v1}` },
     };
-    expect(isValidSignature(req)).toBe(false);
+    expect(verifyWebhookSignature(req).valid).toBe(false);
   });
 
   it('fontes de id divergentes (body × query) são recusadas', () => {
@@ -79,7 +79,7 @@ describe('id do manifesto assinado', () => {
       query: {},
       headers: { 'x-request-id': 'r4', 'x-signature': `ts=${ts},v1=${v1}` },
     };
-    expect(isValidSignature(req)).toBe(false);
+    expect(verifyWebhookSignature(req).valid).toBe(false);
   });
 
   it('data.id repetido na URL é ambíguo e não vale como id', () => {
@@ -91,7 +91,7 @@ describe('id do manifesto assinado', () => {
       query: {},
       headers: { 'x-request-id': 'r5', 'x-signature': `ts=${ts},v1=${v1}` },
     };
-    expect(isValidSignature(req)).toBe(false);
+    expect(verifyWebhookSignature(req).valid).toBe(false);
   });
 
   it('IPN legado: a assinatura sem id fica presa ao primeiro id usado', () => {
@@ -106,13 +106,13 @@ describe('id do manifesto assinado', () => {
 
     expect(verifyWebhookSignature(legacy('1001'))).toEqual({ valid: true, resourceId: '1001' });
     // Reentrega do MP com o mesmo id continua passando.
-    expect(isValidSignature(legacy('1001'))).toBe(true);
+    expect(verifyWebhookSignature(legacy('1001')).valid).toBe(true);
     // Replay da mesma assinatura com outro id: recusado.
-    expect(isValidSignature(legacy('2002'))).toBe(false);
+    expect(verifyWebhookSignature(legacy('2002')).valid).toBe(false);
   });
 
   it('sem segredo em produção continua fail-closed', () => {
     delete process.env.MP_WEBHOOK_SECRET;
-    expect(isValidSignature({ body: { data: { id: '1' } }, query: {}, headers: {} })).toBe(false);
+    expect(verifyWebhookSignature({ body: { data: { id: '1' } }, query: {}, headers: {} }).valid).toBe(false);
   });
 });

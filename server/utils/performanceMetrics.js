@@ -263,7 +263,7 @@ export const sampleMemory = ({ force = false, read = readMemorySample } = {}) =>
   return point;
 };
 
-export const resetMemoryTrend = () => { memoryTrendPoints.length = 0; };
+export const _resetMemoryTrend = () => { memoryTrendPoints.length = 0; };
 
 /**
  * Inclinação em MB/h por mínimos quadrados sobre a janela inteira.

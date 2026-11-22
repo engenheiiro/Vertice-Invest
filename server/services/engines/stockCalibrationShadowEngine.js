@@ -233,52 +233,6 @@ export const calibrateStockCandidate = candidate => {
 };
 
 /**
- * Retorna um único Top 10 por perfil. Eixos internos não vazam para a resposta
- * pública; continuam disponíveis em `adminAudit` para validação e governança.
- */
-export const buildCohesiveShadowTop10 = (candidates, profile) => {
-  const unique = new Map();
-
-  for (const candidate of candidates || []) {
-    if (!candidate?.ticker || candidate.eligible === false) continue;
-    if (candidate.coverage?.readyForSectorCalibration === false) continue;
-    const composed = composeCohesiveShadowScore({ profile, ...candidate });
-    const row = { candidate, composed };
-    const previous = unique.get(candidate.ticker);
-    if (!previous || composed.score > previous.composed.score) unique.set(candidate.ticker, row);
-  }
-
-  const selected = [...unique.values()]
-    .sort((a, b) => (
-      b.composed.score - a.composed.score
-      || tieBreaker(b.composed) - tieBreaker(a.composed)
-      || String(a.candidate.ticker).localeCompare(String(b.candidate.ticker))
-    ))
-    .slice(0, 10);
-
-  return {
-    version: STOCK_CALIBRATION_SHADOW_VERSION,
-    profile,
-    ranking: selected.map(({ candidate, composed }, index) => ({
-      position: index + 1,
-      ticker: candidate.ticker,
-      name: candidate.name,
-      sector: candidate.sector,
-      riskProfile: profile,
-      score: composed.score,
-      action: composed.action,
-      reason: candidate.reason || null,
-    })),
-    adminAudit: selected.map(({ candidate, composed }, index) => ({
-      position: index + 1,
-      ticker: candidate.ticker,
-      ...composed.audit,
-      coverage: candidate.coverage || null,
-    })),
-  };
-};
-
-/**
  * Teto de ativos por macro-setor no GOLD defensivo de ACOES. A especificacao do
  * produto estabelece 4; o core legado ainda usa 3 por default, e o override fica
  * isolado a esta calibracao. Exportado porque a retencao de assento

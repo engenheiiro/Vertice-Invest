@@ -120,9 +120,6 @@ export const CRYPTO_ASSETS = [
 
 const BY_TICKER = new Map(CRYPTO_ASSETS.map((c) => [c.ticker, c]));
 
-/** Tickers do universo — a lista que o sync semeia. */
-export const CRYPTO_TICKERS = CRYPTO_ASSETS.map((c) => c.ticker);
-
 /**
  * Este ticker é uma cripto do nosso catálogo?
  *

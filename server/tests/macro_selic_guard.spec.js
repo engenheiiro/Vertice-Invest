@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { macroDataService } from '../services/macroDataService.js';
-import { getEscalations, getSourceStats, resetSourceStats } from '../utils/sourceHealth.js';
+import { getEscalations, getSourceStats, _resetSourceStats } from '../utils/sourceHealth.js';
 import { buildEscalationView } from '../utils/dataSourceStatus.js';
 
 // Guard de autoridade da Selic: só o BCB (meta COPOM) move a taxa; uma fonte
@@ -106,7 +106,7 @@ describe('updateOfficialRates (guard integrado, fontes mockadas)', () => {
  * responder — e o card ficaria vermelho por um defeito que não é dele.
  */
 describe('updateOfficialRates — o que o painel aprende com a cadeia', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
     afterEach(() => vi.restoreAllMocks());
 
     it('BCB cobrindo os dois não gera escalada', async () => {

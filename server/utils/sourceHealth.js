@@ -446,7 +446,7 @@ export const getSourceStats = () => Object.entries(SOURCE_CATALOG).map(([id, met
 });
 
 /** Só para teste — o registro é global ao processo (contadores e ledgers). */
-export const resetSourceStats = () => { stats.clear(); escalations.clear(); suspects.clear(); };
+export const _resetSourceStats = () => { stats.clear(); escalations.clear(); suspects.clear(); };
 
 /**
  * QUEM PRECISOU DE RESERVA — o registro por ASSUNTO, não por chamada.

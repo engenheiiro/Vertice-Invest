@@ -29,7 +29,7 @@ const {
     selectAppendableQuotes,
     ingestTreasuryPrices,
     clearCsvMemo,
-    clearTesouroDiretoMemo,
+    _clearTesouroDiretoMemo,
     TESOURO_CSV_URL,
     TESOURO_DIRETO_QUOTES_URL,
 } = await import('../services/treasuryPriceService.js');
@@ -155,7 +155,7 @@ describe('ingestTreasuryPrices com o CSV fora', () => {
         aggregate.mockReset();
         bulkWrite.mockReset();
         clearCsvMemo();
-        clearTesouroDiretoMemo();
+        _clearTesouroDiretoMemo();
     });
 
     const routeAxios = ({ csv, td }) => axiosGet.mockImplementation(async (url) => {

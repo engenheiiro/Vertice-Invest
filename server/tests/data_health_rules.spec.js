@@ -11,7 +11,6 @@ import {
     DEFAULT_THRESHOLDS,
     HEALTH_STATUS,
     buildHealthReport,
-    failingChecks,
     gradeAscending,
     hoursBetween,
     PLAUSIBILITY_RANGES,
@@ -138,7 +137,7 @@ describe('baseline saudável', () => {
         expect(report.status).toBe(HEALTH_STATUS.OK);
         expect(report.summary.critical).toBe(0);
         expect(report.summary.warn).toBe(0);
-        expect(failingChecks(report)).toHaveLength(0);
+        expect(report.checks.filter((c) => c.status !== HEALTH_STATUS.OK)).toHaveLength(0);
     });
 
     it('base vazia não gera falso alarme de cobertura por divisão por zero', () => {
@@ -403,7 +402,6 @@ describe('COBERTURA', () => {
         facts.assets.STOCK.missing.roe = 380; // 95%
         const report = buildHealthReport(facts);
         expect(byId(report, 'coverage.STOCK.roe').status).toBe(HEALTH_STATUS.WARN);
-        expect(failingChecks(report).map((c) => c.id)).toContain('coverage.STOCK.roe');
     });
 
     it('dica de cobertura BR aponta o Fundamentus, e a de fora aponta o Yahoo', () => {
@@ -951,15 +949,6 @@ describe('agregação do veredito', () => {
         const report = buildHealthReport(facts);
         expect(report.status).toBe(HEALTH_STATUS.CRITICAL);
         expect(report.summary.critical).toBe(1);
-    });
-
-    it('failingChecks ordena crítico antes de alerta', () => {
-        const facts = healthyFacts();
-        facts.macro.dollar = 0;                            // CRITICAL
-        facts.timeSeries.universe = { total: 1000, stale: 300, worst: [], dates: [] }; // 30% → WARN
-        const failing = failingChecks(buildHealthReport(facts));
-        expect(failing[0].status).toBe(HEALTH_STATUS.CRITICAL);
-        expect(failing.at(-1).status).toBe(HEALTH_STATUS.WARN);
     });
 
     it('todo check carrega uma dica de onde olhar', () => {

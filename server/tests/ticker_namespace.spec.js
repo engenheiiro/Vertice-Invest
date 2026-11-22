@@ -32,7 +32,6 @@ import {
     SEEDED_CATALOGS,
     buildTickerOwnership,
     findTickerCollisions,
-    describeCollision,
 } from '../config/tickerNamespace.js';
 
 describe('namespace do ticker canônico', () => {
@@ -40,7 +39,9 @@ describe('namespace do ticker canônico', () => {
         const { crossClass } = findTickerCollisions();
         // A mensagem carrega o caso inteiro: sem ela a falha diz que há colisão
         // mas não qual arquivo editar, que é a única coisa acionável aqui.
-        expect(crossClass.map(describeCollision)).toEqual([]);
+        const linhas = crossClass.map(({ ticker, owners }) =>
+            `${ticker}: ${owners.map((o) => `${o.type} (${o.source}) = ${o.name || '—'}`).join(' × ')}`);
+        expect(linhas).toEqual([]);
     });
 
     it('a Seagate ficou com STX; Stacks saiu do catálogo de cripto', () => {

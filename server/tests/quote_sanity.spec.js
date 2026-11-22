@@ -4,7 +4,7 @@ import {
     effectiveMoveLimit, arbitrateStoredJump, applyStoredJumpArbitration,
     isSettledFinding, needsOwnAnchor,
 } from '../utils/quoteSanity.js';
-import { recordSuspectQuote, getSuspectQuotes, resetSourceStats } from '../utils/sourceHealth.js';
+import { recordSuspectQuote, getSuspectQuotes, _resetSourceStats } from '../utils/sourceHealth.js';
 import { buildSuspectView } from '../utils/dataSourceStatus.js';
 
 /**
@@ -82,7 +82,7 @@ describe('juiz de magnitude da cotação', () => {
 });
 
 describe('registro de cotações suspeitas', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('guarda uma linha por ativo e conta as repetições', () => {
         const evento = {

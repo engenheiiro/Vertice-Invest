@@ -1102,9 +1102,3 @@ export const buildHealthReport = (facts = {}, thresholdOverrides = null) => {
 
     return { runAt: now, status, summary, checks, thresholds: th };
 };
-
-/** Só o que está quebrado, pior primeiro — é o que o painel destaca no topo. */
-export const failingChecks = (report) =>
-    (report?.checks || [])
-        .filter((c) => c.status !== HEALTH_STATUS.OK)
-        .sort((a, b) => RANK[b.status] - RANK[a.status]);

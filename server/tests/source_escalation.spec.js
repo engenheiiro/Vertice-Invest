@@ -4,7 +4,7 @@ import {
     getEscalation,
     getEscalations,
     getSourceStats,
-    resetSourceStats,
+    _resetSourceStats,
 } from '../utils/sourceHealth.js';
 import { buildEscalationView, buildSourceStatuses } from '../utils/dataSourceStatus.js';
 
@@ -26,7 +26,7 @@ const cadeiaCompleta = (subject, resolvedBy, extra = {}) => recordEscalation({
 });
 
 describe('ledger de escaladas', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('guarda o caminho completo, incluindo a fonte principal que falhou', () => {
         cadeiaCompleta('PETR4', 'brapi');
@@ -114,7 +114,7 @@ describe('cruzamento do ledger com as fontes', () => {
         { id: 'coinbase', short: 'Coinbase', chain: 'fx', schedule: { kind: 'onFailure' } },
     ];
 
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('conta, por fonte, quem chegou / quem ela salvou / quem passou direto', () => {
         cadeiaCompleta('PETR4', 'brapi');

@@ -21,7 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { externalMarketService } from '../services/externalMarketService.js';
-import { CRYPTO_ASSETS, CRYPTO_TICKERS, cryptoYahooSymbol, isKnownCryptoTicker } from '../config/cryptoList.js';
+import { CRYPTO_ASSETS, cryptoYahooSymbol, isKnownCryptoTicker } from '../config/cryptoList.js';
 
 const yahoo = vi.hoisted(() => ({ quote: vi.fn() }));
 vi.mock('yahoo-finance2', () => ({
@@ -40,7 +40,8 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('catálogo', () => {
   it('não tem ticker repetido', () => {
-    expect(new Set(CRYPTO_TICKERS).size).toBe(CRYPTO_TICKERS.length);
+    const tickers = CRYPTO_ASSETS.map((c) => c.ticker);
+    expect(new Set(tickers).size).toBe(tickers.length);
   });
 
   it('toda moeda tem nome — é ele que a auditoria confronta com o provedor', () => {

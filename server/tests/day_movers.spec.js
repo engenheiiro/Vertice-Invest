@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { processWalletAsset } from '../controllers/walletController.js';
 import { financialService } from '../services/financialService.js';
-import { DAY_CHANGE_REASON, isDefaultDayChangeReason, ZEROED_BY_DATA_REASONS } from '../utils/dayChangeReason.js';
+import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { brazilToday, PRICING_SOURCE } from '../utils/fixedIncome.js';
 import { reconcileRoundedParts, safeCurrency, safeAdd } from '../utils/mathUtils.js';
@@ -63,7 +63,6 @@ describe('motivo da variação — mercado', () => {
         }));
 
         expect(processed.dayChangeReason).toBe(DAY_CHANGE_REASON.ANCHOR_CLOSE);
-        expect(isDefaultDayChangeReason(processed.dayChangeReason)).toBe(true);
         // 100 × (32 − 31) = 100,00
         expect(processed.dayChangeValue).toBe(100);
     });
@@ -88,7 +87,6 @@ describe('motivo da variação — mercado', () => {
         expect(processed.dayChangeReason).toBe(DAY_CHANGE_REASON.STALE_QUOTE);
         expect(processed.dayChangeValue).toBe(0);
         // O zero é NOSSO (falta de dado), não do mercado: a linha fica visível.
-        expect(ZEROED_BY_DATA_REASONS.has(processed.dayChangeReason)).toBe(true);
     });
 
     it('sem candle-âncora mas com a sessão de hoje, usa a variação do provedor', () => {
@@ -105,7 +103,6 @@ describe('motivo da variação — mercado', () => {
 
         expect(processed.dayChangeReason).toBe(DAY_CHANGE_REASON.NO_QUOTE);
         expect(processed.dayChangeValue).toBe(0);
-        expect(ZEROED_BY_DATA_REASONS.has(processed.dayChangeReason)).toBe(true);
     });
 });
 
@@ -132,7 +129,6 @@ describe('motivo da variação — cripto', () => {
         }));
 
         expect(processed.dayChangeReason).toBe(DAY_CHANGE_REASON.PREVIOUS_CLOSE);
-        expect(isDefaultDayChangeReason(processed.dayChangeReason)).toBe(true);
     });
 
     it('sem candle e sem fechamento anterior, sobra a janela de 24h — e ela é sinalizada', () => {
@@ -143,7 +139,6 @@ describe('motivo da variação — cripto', () => {
         // A janela deslizante do provedor responde outra pergunta ("quanto subiu nas
         // últimas 24h"), então o número é usável mas não é o mesmo "desde ontem".
         expect(processed.dayChangeReason).toBe(DAY_CHANGE_REASON.PROVIDER_WINDOW);
-        expect(isDefaultDayChangeReason(processed.dayChangeReason)).toBe(false);
     });
 });
 
@@ -185,7 +180,6 @@ describe('motivo da variação — renda fixa', () => {
         expect(processed.pricingSource).toBe(PRICING_SOURCE.MTM);
         expect(processed.dayChangeReason).toBe(DAY_CHANGE_REASON.FIXED_INCOME_MTM_PENDING);
         expect(processed.dayChangeValue).toBe(0);
-        expect(ZEROED_BY_DATA_REASONS.has(processed.dayChangeReason)).toBe(true);
     });
 
     it('sem série de PU, a posição fica na curva', () => {

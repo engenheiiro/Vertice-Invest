@@ -174,15 +174,3 @@ export const collectB3CandlesDetailed = async (alvos = [], throughDay, { maxDays
     }
     return saida;
 };
-
-/**
- * A mesma busca, só com os candles.
- *
- * Mantida porque nem todo chamador precisa do desfecho: quem só vai gravar
- * candle não deveria ter que desempacotar um objeto para isso.
- *
- * @returns {Promise<Map<string, Array<{date:string, close:number, volume:number}>>>} candles novos por `key`
- */
-export const collectB3Candles = async (alvos = [], throughDay, opts) => (
-    await collectB3CandlesDetailed(alvos, throughDay, opts)
-).candles;

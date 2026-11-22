@@ -100,7 +100,7 @@ const getKeyById = (id) => {
 };
 
 /** id da chave usada para cifrar novos valores (ex.: "v1", "v2"). */
-export const getActiveKeyId = () => registry().active;
+export const _getActiveKeyId = () => registry().active;
 
 export const encrypt = (plaintext) => {
   if (!plaintext) return plaintext;

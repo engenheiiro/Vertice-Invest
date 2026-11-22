@@ -16,7 +16,7 @@ vi.mock('../config/logger.js', () => ({
     default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
 
-const { startBackfill, getBackfillState, isBackfillRunning, __resetBackfillState } = await import('../services/dividendPaymentBackfillJob.js');
+const { startBackfill, getBackfillState, __resetBackfillState } = await import('../services/dividendPaymentBackfillJob.js');
 
 const resumir = (resumo) => ({ message: `${resumo.preenchidos} data(s)`, stats: resumo });
 const espera = () => new Promise((r) => setTimeout(r, 0));
@@ -55,7 +55,7 @@ describe('dividendPaymentBackfillJob', () => {
         const segundo = startBackfill(executar, resumir);
         expect(segundo.iniciado).toBe(false);
         expect(executar).toHaveBeenCalledTimes(1);
-        expect(isBackfillRunning()).toBe(true);
+        expect(getBackfillState().status).toBe('RUNNING');
     });
 
     it('erro no meio da varredura vira estado de erro, não job preso', async () => {
@@ -64,6 +64,6 @@ describe('dividendPaymentBackfillJob', () => {
 
         expect(getBackfillState().status).toBe('ERROR');
         expect(getBackfillState().erro).toBe('fonte fora do ar');
-        expect(isBackfillRunning()).toBe(false);
+        expect(getBackfillState().status).not.toBe('RUNNING');
     });
 });

@@ -6,7 +6,7 @@ import {
     SOURCE_STATUS,
 } from '../utils/dataSourceStatus.js';
 import {
-    trackSource, getSourceStats, resetSourceStats, recordSourceSkip, SOURCE_CATALOG,
+    trackSource, getSourceStats, _resetSourceStats, recordSourceSkip, SOURCE_CATALOG,
 } from '../utils/sourceHealth.js';
 
 // O painel de fontes nasceu de uma pergunta que não tinha resposta na tela em
@@ -34,7 +34,7 @@ const factsBase = () => ({
 const byId = (rows, id) => rows.find((r) => r.id === id);
 
 describe('sourceHealth — registro de chamadas', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('conta sucesso, exceção e resposta vazia como desfechos DIFERENTES', async () => {
         await trackSource('coinbase', async () => ({ ok: true }));
@@ -70,7 +70,7 @@ describe('sourceHealth — registro de chamadas', () => {
 });
 
 describe('buildSourceStatuses — veredito por fonte', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     const stats = (over) => getSourceStats().map((s) => (s.id === over.id ? { ...s, ...over } : s));
 
@@ -299,7 +299,7 @@ describe('buildSourceStatuses — veredito por fonte', () => {
  * é exatamente o oposto do que ele existe para fazer.
  */
 describe('entrega e resposta são dois relógios', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('fonte que respondeu mas não é a origem do dado NÃO ganha data de entrega', async () => {
         await trackSource('ptax', async () => ({ ok: true }));
@@ -370,7 +370,7 @@ describe('entrega e resposta são dois relógios', () => {
  * ficam idênticas na tela — e a PTAX, sendo `onFailure`, herdava a frase errada.
  */
 describe('fonte que NÃO foi chamada por decisão nossa', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('a razão do salto aparece no lugar do "a anterior deu conta"', () => {
         recordSourceSkip('ptax', 'Sem fixação em fim de semana ou feriado — o Banco Central não publica hoje');
@@ -413,7 +413,7 @@ describe('fonte que NÃO foi chamada por decisão nossa', () => {
 // "Essa fonte caiu — e agora?" é a pergunta seguinte à do painel, e a resposta
 // não estava em lugar nenhum.
 describe('cadeia de cobertura', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('a principal lista quem assume, na ordem de tentativa', () => {
         const yahoo = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'yahoo.currencies');
@@ -501,7 +501,7 @@ describe('cadeia de cobertura', () => {
 });
 
 describe('summarizeSources — a frase do topo', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('conta e NOMEIA as fontes degradadas', () => {
         const rows = buildSourceStatuses(factsBase(), getSourceStats().map((s) => (
@@ -581,7 +581,7 @@ describe('buildChainMap — posição declarada, não inferida da tela', () => {
  * pela PTAX e sido resolvido pela Coinbase logo depois — alvo bem vivo.
  */
 describe('a razão do silêncio é decidida no servidor', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     const escalada = (subject, resolvedBy, tried) => ({
         chain: 'fx', subject, tried, resolvedBy, at: NOW,
@@ -625,7 +625,7 @@ describe('a razão do silêncio é decidida no servidor', () => {
  * percorrida: ninguém disparou.
  */
 describe('fonte manual: cinza normal, explicação certa', () => {
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('é STANDBY, e não "ainda não teve a vez dela"', () => {
         const row = byId(buildSourceStatuses(factsBase(), getSourceStats()), 'fundamentus.dividends');

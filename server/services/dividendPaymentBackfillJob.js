@@ -52,8 +52,6 @@ let estado = {
 /** Cópia rasa: o chamador não escreve no estado do job. */
 export const getBackfillState = () => ({ ...estado });
 
-export const isBackfillRunning = () => estado.status === RODANDO;
-
 /**
  * Dispara a varredura se não houver outra em andamento.
  *

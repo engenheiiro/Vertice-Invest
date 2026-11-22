@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import logger from '../config/logger.js';
 import { externalMarketService } from '../services/externalMarketService.js';
-import { getEscalations, resetSourceStats } from '../utils/sourceHealth.js';
+import { getEscalations, _resetSourceStats } from '../utils/sourceHealth.js';
 
 const yahoo = vi.hoisted(() => ({ quote: vi.fn() }));
 
@@ -66,7 +66,7 @@ describe('getQuotes — aviso só para o que nenhuma fonte recuperou', () => {
  * ativo e confunde "24 papéis falhando" com "um papel morto tentado 24 vezes".
  */
 describe('recoverQuote — registro do trajeto de cada ativo', () => {
-  beforeEach(() => resetSourceStats());
+  beforeEach(() => _resetSourceStats());
 
   it('grava quem tentou e quem entregou quando a Brapi salva o ativo', async () => {
     vi.spyOn(externalMarketService, 'fetchFromGoogleFinance').mockResolvedValue(null);

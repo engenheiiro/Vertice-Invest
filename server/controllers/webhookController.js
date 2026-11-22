@@ -187,8 +187,6 @@ export const verifyWebhookSignature = (req) => {
     return rejected;
 };
 
-export const isValidSignature = (req) => verifyWebhookSignature(req).valid;
-
 // Meios que o Mercado Pago NÃO consegue cobrar de forma recorrente. Um pagamento
 // por aqui é sempre avulso, por definição.
 const NON_RECURRING_PAYMENT_TYPES = new Set(['bank_transfer', 'ticket', 'atm']);

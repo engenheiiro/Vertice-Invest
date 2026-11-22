@@ -10,7 +10,7 @@ const fetchB3DailyCloses = vi.fn();
 vi.mock('../services/b3DailyFileService.js', () => ({ fetchB3DailyCloses: (...a) => fetchB3DailyCloses(...a) }));
 
 const {
-    B3_TIP_OUTCOME, collectB3Candles, collectB3CandlesDetailed,
+    B3_TIP_OUTCOME, collectB3CandlesDetailed,
     isB3Coverable, lastBusinessDayUpTo, missingBusinessDays,
 } = await import('../services/b3HistoryFallback.js');
 
@@ -55,7 +55,7 @@ describe('janela de dias', () => {
     });
 });
 
-describe('collectB3Candles', () => {
+describe('collectB3CandlesDetailed — candles', () => {
     it('baixa UM arquivo por dia, não um por ticker', async () => {
         fetchB3DailyCloses.mockResolvedValue(arquivo({
             ITSA4: { close: 12.84, volume: 100 },
@@ -63,11 +63,11 @@ describe('collectB3Candles', () => {
             BOVA11: { close: 172.4, volume: 300 },
         }));
 
-        const out = await collectB3Candles([
+        const out = (await collectB3CandlesDetailed([
             { key: 'ITSA4', ticker: 'ITSA4', type: 'STOCK', lastCandleDate: '2026-09-03' },
             { key: 'PETR4', ticker: 'PETR4', type: 'STOCK', lastCandleDate: '2026-09-03' },
             { key: 'BOVA11', ticker: 'BOVA11', type: 'ETF', lastCandleDate: '2026-09-03' },
-        ], '2026-09-04');
+        ], '2026-09-04')).candles;
 
         expect(fetchB3DailyCloses).toHaveBeenCalledTimes(1);
         expect(out.get('ITSA4')).toEqual([{ date: '2026-09-04', close: 12.84, volume: 100 }]);
@@ -78,24 +78,24 @@ describe('collectB3Candles', () => {
     // seria pior que a lacuna: entraria na série como preço real.
     it('ticker ausente no arquivo não vira candle', async () => {
         fetchB3DailyCloses.mockResolvedValue(arquivo({ ITSA4: { close: 12.84, volume: 100 } }));
-        const out = await collectB3Candles([
+        const out = (await collectB3CandlesDetailed([
             { key: 'ILIQ11', ticker: 'ILIQ11', type: 'FII', lastCandleDate: '2026-09-03' },
-        ], '2026-09-04');
+        ], '2026-09-04')).candles;
         expect(out.size).toBe(0);
     });
 
     it('dia sem arquivo publicado não quebra nada', async () => {
         fetchB3DailyCloses.mockResolvedValue(null);
-        const out = await collectB3Candles([
+        const out = (await collectB3CandlesDetailed([
             { key: 'ITSA4', ticker: 'ITSA4', type: 'STOCK', lastCandleDate: '2026-09-03' },
-        ], '2026-09-04');
+        ], '2026-09-04')).candles;
         expect(out.size).toBe(0);
     });
 
     it('ativo fora da B3 nem chega a pedir o arquivo', async () => {
-        const out = await collectB3Candles([
+        const out = (await collectB3CandlesDetailed([
             { key: 'AAPL', ticker: 'AAPL', type: 'STOCK_US', lastCandleDate: '2026-09-03' },
-        ], '2026-09-04');
+        ], '2026-09-04')).candles;
         expect(fetchB3DailyCloses).not.toHaveBeenCalled();
         expect(out.size).toBe(0);
     });
@@ -105,7 +105,7 @@ describe('collectB3Candles', () => {
     // transforme um run em maratona de download.
     it('respeita o teto de dias por alvo', async () => {
         fetchB3DailyCloses.mockResolvedValue(arquivo({ ITSA4: { close: 12.84, volume: 100 } }));
-        await collectB3Candles([
+        await collectB3CandlesDetailed([
             { key: 'ITSA4', ticker: 'ITSA4', type: 'STOCK', lastCandleDate: '2026-01-02' },
         ], '2026-09-04', { maxDays: 3 });
         expect(fetchB3DailyCloses).toHaveBeenCalledTimes(3);
@@ -168,9 +168,4 @@ describe('desfecho da ponta', () => {
         expect(tipOutcome.size).toBe(0);
     });
 
-    it('a versão enxuta continua devolvendo só os candles', async () => {
-        fetchB3DailyCloses.mockResolvedValue(arquivo({ ITSA4: { close: 12.84, volume: 100 } }));
-        const out = await collectB3Candles(alvo('ITSA4', 'ITSA4'), '2026-09-04');
-        expect(out.get('ITSA4')).toEqual([{ date: '2026-09-04', close: 12.84, volume: 100 }]);
-    });
 });

@@ -37,6 +37,3 @@ export const getPasswordError = (password) => {
   }
   return null;
 };
-
-/** Conveniência booleana para uso em validadores (ex.: Zod refine). */
-export const isStrongPassword = (password) => getPasswordError(password) === null;

@@ -46,7 +46,7 @@ vi.mock('../config/logger.js', () => ({
 }));
 
 const { timeSeriesWorker } = await import('../services/workers/timeSeriesWorker.js');
-const { getEscalations, resetSourceStats } = await import('../utils/sourceHealth.js');
+const { getEscalations, _resetSourceStats } = await import('../utils/sourceHealth.js');
 
 // 2026-09-04 é sexta; o worker roda "hoje" e cobra o candle desse pregão.
 const HOJE = new Date('2026-09-04T21:30:00.000Z');
@@ -86,7 +86,7 @@ const gravados = () => mocks.historyUpdateOne.mock.calls
 
 beforeEach(() => {
     vi.clearAllMocks();
-    resetSourceStats();
+    _resetSourceStats();
     vi.useFakeTimers();
     vi.setSystemTime(HOJE);
     mocks.getBenchmarkHistory.mockResolvedValue([]);

@@ -4,7 +4,7 @@
  * bloqueio de senhas comuns/previsíveis (case-insensitive).
  */
 import { describe, it, expect } from 'vitest';
-import { BCRYPT_MAX_PASSWORD_BYTES, getPasswordError, isStrongPassword } from '../utils/passwordPolicy.js';
+import { BCRYPT_MAX_PASSWORD_BYTES, getPasswordError } from '../utils/passwordPolicy.js';
 
 describe('getPasswordError — rejeita senhas fracas', () => {
   it('curta demais (< 8)', () => {
@@ -37,10 +37,6 @@ describe('getPasswordError — aceita senhas fortes', () => {
   it('senha válida retorna null (sem exigir caractere especial)', () => {
     expect(getPasswordError('GoodPass123')).toBeNull();
     expect(getPasswordError('Vertice2026X')).toBeNull();
-  });
-  it('isStrongPassword reflete o resultado', () => {
-    expect(isStrongPassword('GoodPass123')).toBe(true);
-    expect(isStrongPassword('fraca')).toBe(false);
   });
 });
 

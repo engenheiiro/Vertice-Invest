@@ -22,7 +22,7 @@ import {
 } from '../services/cryptoCandleRepairService.js';
 import MarketAsset from '../models/MarketAsset.js';
 import AssetHistory from '../models/AssetHistory.js';
-import { getEscalations, resetSourceStats } from '../utils/sourceHealth.js';
+import { getEscalations, _resetSourceStats } from '../utils/sourceHealth.js';
 
 const yahoo = vi.hoisted(() => ({ chart: vi.fn() }));
 
@@ -199,7 +199,7 @@ describe('repairCryptoCandleGaps — símbolo do provedor', () => {
    * uma chamada bem-sucedida a um buraco fechado.
    */
   it('registra o caminho da série para o painel de fontes', async () => {
-    resetSourceStats();
+    _resetSourceStats();
     comSerie('BTC', ['2026-09-03', '2026-09-05']);
     const spy = vi.spyOn(externalMarketService, 'fetchDailyCloseFromHourly')
       .mockResolvedValue({ date: '2026-09-04', close: 79000, volume: 0 });
@@ -215,7 +215,7 @@ describe('repairCryptoCandleGaps — símbolo do provedor', () => {
   });
 
   it('buraco que a barra horária não cobre fica registrado como sem fechamento', async () => {
-    resetSourceStats();
+    _resetSourceStats();
     comSerie('BTC', ['2026-09-03', '2026-09-05']);
     const spy = vi.spyOn(externalMarketService, 'fetchDailyCloseFromHourly').mockResolvedValue(null);
 

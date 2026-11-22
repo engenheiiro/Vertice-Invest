@@ -109,9 +109,3 @@ export const findTickerCollisions = (catalogs = SEEDED_CATALOGS) => {
 
     return { crossClass, sameClass, total: owners.size };
 };
-
-/**
- * Uma linha por colisão, pronta para entrar em mensagem de erro ou log.
- */
-export const describeCollision = ({ ticker, owners }) =>
-    `${ticker}: ${owners.map((o) => `${o.type} (${o.source}) = ${o.name || '—'}`).join(' × ')}`;

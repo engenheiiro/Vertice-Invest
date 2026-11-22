@@ -23,7 +23,7 @@ vi.mock('../models/MarketAsset.js', () => ({ default: { find: vi.fn() } }));
 
 const DividendEvent = (await import('../models/DividendEvent.js')).default;
 const { fillPaymentDatesForTicker } = await import('../services/dividendPaymentDateService.js');
-const { getEscalations, resetSourceStats } = await import('../utils/sourceHealth.js');
+const { getEscalations, _resetSourceStats } = await import('../utils/sourceHealth.js');
 
 const dia = (iso) => new Date(`${iso}T00:00:00.000Z`);
 const chain = (rows = []) => {
@@ -204,7 +204,7 @@ describe('trilha por assunto (painel de fontes)', () => {
     };
     const trilha = (ticker) => getEscalations().find((e) => e.chain === 'paymentDate' && e.subject === ticker);
 
-    beforeEach(() => resetSourceStats());
+    beforeEach(() => _resetSourceStats());
 
     it('resolvido registra a fonte que resolveu', async () => {
         um(0.1);

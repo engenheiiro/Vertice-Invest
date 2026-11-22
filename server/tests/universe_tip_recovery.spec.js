@@ -57,7 +57,7 @@ vi.mock('../config/logger.js', () => ({
 }));
 
 const { lastClosedSessionDay, recoverUniverseTipWithB3 } = await import('../services/workers/timeSeriesWorker.js');
-const { getEscalations, recordEscalation, resetSourceStats } = await import('../utils/sourceHealth.js');
+const { getEscalations, recordEscalation, _resetSourceStats } = await import('../utils/sourceHealth.js');
 
 const PREGAO = '2026-09-09';   // quarta — o último pregão FECHADO
 const VESPERA = '2026-09-08';  // terça
@@ -97,7 +97,7 @@ const cenario = ({ ponta = VESPERA, arquivoDoDia = arquivo(['ITSA4']), assets = 
 const escaladaDe = (ticker) => getEscalations().find((e) => e.subject === ticker && e.chain === 'candle');
 
 beforeEach(() => {
-    resetSourceStats();
+    _resetSourceStats();
     vi.clearAllMocks();
 });
 

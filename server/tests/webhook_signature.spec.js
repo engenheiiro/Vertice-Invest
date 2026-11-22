@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { isValidSignature } from '../controllers/webhookController.js';
+import { verifyWebhookSignature } from '../controllers/webhookController.js';
 
 // Relógio fixo: quarta-feira 18/11/2026, 14h de Brasília (dia útil, pregão aberto).
 const AGORA = new Date('2026-11-18T14:00:00-03:00');
@@ -29,8 +29,8 @@ describe('assinatura do webhook Mercado Pago', () => {
     process.env.NODE_ENV = 'production';
     process.env.MP_WEBHOOK_SECRET = 'webhook-test-secret';
 
-    expect(isValidSignature(signedRequest())).toBe(true);
-    expect(isValidSignature(signedRequest({ timestamp: Math.floor(Date.now() / 1000) - 301 }))).toBe(false);
+    expect(verifyWebhookSignature(signedRequest()).valid).toBe(true);
+    expect(verifyWebhookSignature(signedRequest({ timestamp: Math.floor(Date.now() / 1000) - 301 })).valid).toBe(false);
   });
 
   it('exige assinatura também quando o recurso chega por query string', () => {
@@ -40,9 +40,9 @@ describe('assinatura do webhook Mercado Pago', () => {
     req.body = {};
     req.query = { id: 'payment-query', topic: 'payment' };
 
-    expect(isValidSignature(req)).toBe(true);
+    expect(verifyWebhookSignature(req).valid).toBe(true);
     req.headers['x-signature'] = '';
-    expect(isValidSignature(req)).toBe(false);
+    expect(verifyWebhookSignature(req).valid).toBe(false);
   });
 
   it('aceita o IPN legado, assinado SEM o trecho de id', () => {
@@ -58,11 +58,11 @@ describe('assinatura do webhook Mercado Pago', () => {
     const manifestSemId = `request-id:${requestId};ts:${timestamp};`;
     const v1 = crypto.createHmac('sha256', process.env.MP_WEBHOOK_SECRET).update(manifestSemId).digest('hex');
 
-    expect(isValidSignature({
+    expect(verifyWebhookSignature({
       body: {},
       query: { id: '169690657395', topic: 'payment' },
       headers: { 'x-request-id': requestId, 'x-signature': `ts=${timestamp},v1=${v1}` },
-    })).toBe(true);
+    }).valid).toBe(true);
   });
 
   it('aceita o id na query como data.id (formato moderno)', () => {
@@ -73,7 +73,7 @@ describe('assinatura do webhook Mercado Pago', () => {
     req.body = {};
     req.query = { 'data.id': 'preapp-1', type: 'subscription_preapproval' };
 
-    expect(isValidSignature(req)).toBe(true);
+    expect(verifyWebhookSignature(req).valid).toBe(true);
   });
 
   it('aceita id alfanumérico assinado em minúsculas', () => {
@@ -83,7 +83,7 @@ describe('assinatura do webhook Mercado Pago', () => {
     const req = signedRequest({ id: 'f50bf4a85e5d48b1af74e905c2304555' });
     req.body = { data: { id: 'F50BF4A85E5D48B1AF74E905C2304555' } };
 
-    expect(isValidSignature(req)).toBe(true);
+    expect(verifyWebhookSignature(req).valid).toBe(true);
   });
 
   it('continua rejeitando assinatura forjada com outro segredo', () => {
@@ -94,10 +94,10 @@ describe('assinatura do webhook Mercado Pago', () => {
     const forjada = crypto.createHmac('sha256', 'segredo-do-atacante')
       .update(`id:123;request-id:req-1;ts:${timestamp};`).digest('hex');
 
-    expect(isValidSignature({
+    expect(verifyWebhookSignature({
       body: { data: { id: '123' } },
       query: {},
       headers: { 'x-request-id': 'req-1', 'x-signature': `ts=${timestamp},v1=${forjada}` },
-    })).toBe(false);
+    }).valid).toBe(false);
   });
 });

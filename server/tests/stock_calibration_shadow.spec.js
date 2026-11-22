@@ -7,7 +7,6 @@ import {
   getStockMetricApplicability,
 } from '../config/stockCalibration.js';
 import {
-  buildCohesiveShadowTop10,
   buildCompetitiveCohesiveShadowTop10s,
   calibrateStockCandidate,
   composeCohesiveShadowScore,
@@ -255,52 +254,6 @@ describe('Top 10 shadow coeso', () => {
     });
 
     expect(document.validateSync()).toBeUndefined();
-  });
-
-  it('retorna uma única lista pública, ordenada, única e limitada a 10', () => {
-    const candidates = Array.from({ length: 12 }, (_, index) => ({
-      ticker: `T${String(index).padStart(2, '0')}3`,
-      name: `Ativo ${index}`,
-      sector: 'Teste',
-      durability: 90 - index,
-      entry: 80 - index,
-      resilience: 85 - index,
-      dataConfidence: 100,
-    }));
-    candidates.push({ ...candidates[0], durability: 10, entry: 10, resilience: 10 });
-
-    const result = buildCohesiveShadowTop10(candidates, 'DEFENSIVE');
-    expect(result.ranking).toHaveLength(10);
-    expect(new Set(result.ranking.map(item => item.ticker)).size).toBe(10);
-    expect(result.ranking.map(item => item.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-    expect(result.ranking.every((item, index, rows) => index === 0 || rows[index - 1].score >= item.score)).toBe(true);
-    expect(result.ranking[0]).not.toHaveProperty('durability');
-    expect(result.ranking[0]).not.toHaveProperty('entry');
-    expect(result.ranking[0]).not.toHaveProperty('resilience');
-    expect(result.adminAudit[0]).toHaveProperty('axes');
-  });
-
-  it('não força quota de BUY para completar o Top 10', () => {
-    const candidates = Array.from({ length: 10 }, (_, index) => ({
-      ticker: `W${index}3`, durability: 40, entry: 30, resilience: 50, dataConfidence: 100,
-    }));
-    const result = buildCohesiveShadowTop10(candidates, 'DEFENSIVE');
-    expect(result.ranking).toHaveLength(10);
-    expect(result.ranking.every(item => item.action === 'WAIT')).toBe(true);
-  });
-
-  it('não publica candidato setorial sem cobertura mínima', () => {
-    const result = buildCohesiveShadowTop10([
-      {
-        ticker: 'READY3', durability: 80, entry: 80, resilience: 80,
-        coverage: { readyForSectorCalibration: true },
-      },
-      {
-        ticker: 'GAP3', durability: 100, entry: 100, resilience: 100,
-        coverage: { readyForSectorCalibration: false },
-      },
-    ], 'DEFENSIVE');
-    expect(result.ranking.map(item => item.ticker)).toEqual(['READY3']);
   });
 
   it('faz draft dos tres perfis sem repetir ticker', () => {

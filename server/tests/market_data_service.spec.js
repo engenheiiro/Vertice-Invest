@@ -10,7 +10,7 @@ import AssetHistory from '../models/AssetHistory.js';
 import UserAsset from '../models/UserAsset.js';
 import { externalMarketService } from '../services/externalMarketService.js';
 import { marketDataService } from '../services/marketDataService.js';
-import { getSuspectQuotes, resetSourceStats } from '../utils/sourceHealth.js';
+import { getSuspectQuotes, _resetSourceStats } from '../utils/sourceHealth.js';
 
 vi.mock('../models/MarketAsset.js', () => ({
   default: { find: vi.fn(), findOne: vi.fn(), bulkWrite: vi.fn() },
@@ -599,7 +599,7 @@ describe('refreshQuotesBatch — variação contestada', () => {
     vi.setSystemTime(new Date('2026-09-03T21:30:00.000Z'));
     // O registro de suspeitas é do MÓDULO e sobrevive entre testes: sem zerar,
     // a linha do XPIN11 de um teste vira prova falsa no seguinte.
-    resetSourceStats();
+    _resetSourceStats();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -874,7 +874,7 @@ describe('refreshQuotesBatch — quem estava errado no salto', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-05T12:00:00.000Z'));
-    resetSourceStats();
+    _resetSourceStats();
   });
   afterEach(() => vi.useRealTimers());
 

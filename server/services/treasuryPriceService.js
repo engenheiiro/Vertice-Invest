@@ -395,7 +395,7 @@ export const fetchTesouroDiretoQuotes = async ({ force = false } = {}) => {
 };
 
 /** Descarta o memo do JSON (testes). */
-export const clearTesouroDiretoMemo = () => { tdMemo = { at: 0, quotes: null }; };
+export const _clearTesouroDiretoMemo = () => { tdMemo = { at: 0, quotes: null }; };
 
 /**
  * Quais pontos do JSON entram: só títulos que JÁ têm série (o CSV é quem cria

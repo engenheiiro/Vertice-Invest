@@ -28,7 +28,7 @@ vi.mock('../config/logger.js', () => ({
 
 const { healWalletCandleGaps, ensureWalletDayCandles } = await import('../services/walletDayCandleService.js');
 const { externalMarketService } = await import('../services/externalMarketService.js');
-const { getEscalations, resetSourceStats } = await import('../utils/sourceHealth.js');
+const { getEscalations, _resetSourceStats } = await import('../utils/sourceHealth.js');
 
 const CARTEIRA = [
   { ticker: 'BOVA11', type: 'ETF', quantity: 7 },
@@ -142,7 +142,7 @@ describe('healWalletCandleGaps', () => {
  */
 describe('ensureWalletDayCandles — o que o painel aprende com a cadeia', () => {
   beforeEach(() => {
-    resetSourceStats();
+    _resetSourceStats();
     mocks.aggregate.mockResolvedValue([]);
   });
 

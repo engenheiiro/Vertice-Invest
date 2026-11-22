@@ -41,20 +41,6 @@ export const generateBackupCodes = (count = 8) => {
   return { plain, hashed: plain.map(hashCode) };
 };
 
-/**
- * Verifica e CONSOME um código de backup (uso único).
- * Retorna { ok, remaining } — `remaining` é a nova lista de hashes sem o usado.
- */
-export const consumeBackupCode = (code, hashedCodes = []) => {
-  if (!code || !Array.isArray(hashedCodes) || hashedCodes.length === 0) {
-    return { ok: false, remaining: hashedCodes || [] };
-  }
-  const h = hashCode(code);
-  const idx = hashedCodes.indexOf(h);
-  if (idx === -1) return { ok: false, remaining: hashedCodes };
-  return { ok: true, remaining: hashedCodes.filter((_, i) => i !== idx) };
-};
-
 // --- Anti-replay e bloqueio por conta do segundo fator ---
 //
 // Antes: `verifyTotp` só respondia "o código confere". O mesmo código podia ser

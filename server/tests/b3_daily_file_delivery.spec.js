@@ -21,7 +21,7 @@ vi.mock('../config/logger.js', () => ({
 }));
 
 const { clearB3Memo, fetchB3DailyCloses } = await import('../services/b3DailyFileService.js');
-const { getSourceStats, resetSourceStats } = await import('../utils/sourceHealth.js');
+const { getSourceStats, _resetSourceStats } = await import('../utils/sourceHealth.js');
 
 const b3 = () => getSourceStats().find((s) => s.id === 'b3');
 
@@ -33,7 +33,7 @@ const csv = (dia) => ['Status do Arquivo: Final', CAB, linha(dia)].join('\n');
 const semArquivo = { status: 400, data: {} };
 
 beforeEach(() => {
-    resetSourceStats();
+    _resetSourceStats();
     clearB3Memo();
     mocks.get.mockReset();
 });

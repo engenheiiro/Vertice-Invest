@@ -56,30 +56,3 @@ export const DAY_CHANGE_REASON = {
     /** Sem candle do dia-âncora: variação da sessão, como o provedor reporta. */
     PROVIDER_SESSION: 'PROVIDER_SESSION',
 };
-
-/**
- * Motivos que NÃO merecem etiqueta na tela.
- *
- * Os dois respondem exatamente o que a linha promete ("quanto mudou desde o
- * fechamento anterior"), então rotulá-los transformaria informação em ruído e
- * apagaria o valor dos outros nove — que são justamente as exceções.
- */
-export const DEFAULT_DAY_CHANGE_REASONS = new Set([
-    DAY_CHANGE_REASON.ANCHOR_CLOSE,
-    DAY_CHANGE_REASON.PREVIOUS_CLOSE,
-]);
-
-export const isDefaultDayChangeReason = (reason) => DEFAULT_DAY_CHANGE_REASONS.has(reason);
-
-/**
- * Motivos em que o ZERO é nosso, não do mercado: a posição existe e se moveu (ou
- * pode ter se movido), mas não temos como medir. A UI mantém essas linhas
- * VISÍVEIS em vez de agrupá-las num contador — esconder o que não sabemos é a
- * opção desonesta.
- */
-export const ZEROED_BY_DATA_REASONS = new Set([
-    DAY_CHANGE_REASON.STALE_QUOTE,
-    DAY_CHANGE_REASON.NO_QUOTE,
-    DAY_CHANGE_REASON.MATURED,
-    DAY_CHANGE_REASON.FIXED_INCOME_MTM_PENDING,
-]);
