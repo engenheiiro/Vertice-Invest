@@ -62,7 +62,7 @@ export const loadAnalytics = (): boolean => {
     // `arguments` (não rest) é exigência do gtag.js: ele identifica os comandos
     // pelo objeto `arguments` cru empilhado no dataLayer. Um array de rest params
     // é empilhado como dado comum e o comando nunca é executado — falha silenciosa.
-    // eslint-disable-next-line prefer-rest-params
+    // eslint-disable-next-line prefer-rest-params -- o gtag.js exige o objeto arguments cru, não rest params
     w.gtag = function gtag() { w.dataLayer.push(arguments); };
     w.gtag('js', new Date());
     // `send_page_view: false` porque quem conta página aqui é o FunnelTracker,

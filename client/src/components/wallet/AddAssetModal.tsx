@@ -91,7 +91,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
             document.documentElement.style.overflow = '';
         }
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- priceFetch/search mudam a cada render; o reset é só ao abrir/fechar
     }, [isOpen]);
 
     // Focus trap + Esc (A3/A9): foca o primeiro campo ao abrir, cicla Tab dentro
@@ -234,7 +234,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose })
         } else {
             setCashSelection(prev => prev || (reserves.length > 0 ? '' : NEW_RESERVE));
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- reage só à troca de tipo; mudar reserves não pode trocar a escolha feita
     }, [transactionType, form.type]);
 
     const handleTickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {

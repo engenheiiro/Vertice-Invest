@@ -178,7 +178,7 @@ export const AdminPanel = () => {
 
     // Recarrega a acurácia só quando um FILTRO muda. `loadAccuracy` é recriada a
     // cada render e grava estado — como dependência, buscaria em loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAccuracy recriada a cada render buscaria em loop
     useEffect(() => { loadAccuracy(); }, [accuracyWindow, accuracyAsset, accuracyProfile]);
 
     // --- HANDLERS ---

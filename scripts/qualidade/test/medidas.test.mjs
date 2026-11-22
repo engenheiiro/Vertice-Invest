@@ -18,8 +18,10 @@ test('supressão sem motivo é contada; com " -- motivo" não', () => {
     `// ${DISABLE}-next-line no-console`,
     `// ${DISABLE}-next-line no-console -- log de boot, roda uma vez`,
     `/* ${DISABLE} */`,
+    `// ${DISABLE}-next-line prefer-rest-params -- o gtag exige arguments`,
+    `// ${DISABLE}-next-line no-console -- x`,
   ].join('\n');
-  assert.deepEqual(md.contarSupressoes(texto), { eslintDisable: 3, eslintDisableSemMotivo: 2, tsDiretivas: 0 });
+  assert.deepEqual(md.contarSupressoes(texto), { eslintDisable: 5, eslintDisableSemMotivo: 3, tsDiretivas: 0 });
 });
 
 test('diretivas do TypeScript contam à parte', () => {

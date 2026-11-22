@@ -119,7 +119,7 @@ export const GoalDetailModal: React.FC<GoalDetailModalProps> = ({ isOpen, onClos
     // Deps propositalmente curtas: `updateMutation.mutate` invalida ['goal', id],
     // o refetch devolve um objeto `goal` novo e, com `goal`/`updateMutation` nas
     // deps, o efeito voltaria a rodar — laço infinito de mutação e toast.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- goal/updateMutation nas deps geram laço de mutação e toast
   }, [goal?.progressPct, goal?.lastCelebratedMilestone]);
 
   const chartData = data?.trajectory || [];

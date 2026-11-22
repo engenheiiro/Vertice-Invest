@@ -59,7 +59,7 @@ export const SmartContributionModal: React.FC<SmartContributionModalProps> = ({ 
         // Redistribui quando muda o APORTE ou a preferência de reserva. A função é
         // recriada a cada render e escreve estado — como dependência, recalcularia
         // em loop.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- calculateDistribution é recriada e escreve estado: entraria em laço
     }, [amount, prioritizeReserve, isOpen]);
 
     useEffect(() => {

@@ -248,7 +248,7 @@ export const AllocationChart = React.memo(({ initialViewMode = 'CURRENT', autoOp
             dividendGoalInputRef.current?.focus();
         }, 50);
         return () => clearTimeout(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- openEditor/onAutoOpenHandled mudam a cada render; abre só no pedido
     }, [autoOpenDividendGoal]);
 
     // Valores monetários respeitam o modo privacidade (••••••); percentuais/proporções

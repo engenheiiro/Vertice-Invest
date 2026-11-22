@@ -104,7 +104,7 @@ export const RebalanceModal: React.FC<RebalanceModalProps> = ({ isOpen, onClose 
             document.documentElement.style.overflow = '';
         }
         return () => { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- refaz o plano só ao abrir ou trocar o perfil, não a cada fetchPlan novo
     }, [isOpen, riskProfile]);
 
     useEffect(() => {

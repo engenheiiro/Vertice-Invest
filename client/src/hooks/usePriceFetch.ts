@@ -123,7 +123,7 @@ export function usePriceFetch({ isOpen, form, setForm }: UsePriceFetchArgs) {
     return () => {
       if (priceFetchTimeoutRef.current) clearTimeout(priceFetchTimeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- busca só quando data/ticker/tipo mudam; callbacks e cache são estáveis por ref
   }, [form.date, form.ticker, form.type, isOpen]);
 
   // Desmontagem invalida a busca em voo (nenhum setState após unmount).

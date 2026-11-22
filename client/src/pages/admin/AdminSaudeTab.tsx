@@ -179,7 +179,7 @@ export const AdminSaudeTab = () => {
         // (cada ciclo custa 2 chamadas dentro do orçamento do adminLimiter).
         const timer = setInterval(load, 120000);
         return () => clearInterval(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- load recriada a cada render reiniciaria o intervalo de 2 min
     }, []);
 
     const handleRunNow = async () => {

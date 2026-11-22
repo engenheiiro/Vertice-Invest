@@ -32,7 +32,9 @@ export function contarLinhasLongas(texto, limite = LIMITE_LINHA) {
 
 /** Motivo de supressão = " -- texto" na mesma linha (convenção do próprio ESLint). */
 export function temMotivo(trecho) {
-  return /\s--\s+\S{3,}/.test(trecho);
+  // Ao menos 3 caracteres de texto depois de "--": "-- o gtag exige…" vale
+  // (a 1ª palavra pode ser curta); "--" sozinho ou "-- x" não.
+  return /\s--\s+\S.{2,}/.test(trecho);
 }
 
 export function contarSupressoes(texto) {

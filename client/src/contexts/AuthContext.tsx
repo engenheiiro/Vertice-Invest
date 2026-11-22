@@ -147,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Bootstrap de sessão: roda UMA vez na montagem. `logout` só é usado no caminho
     // de erro (storedUser corrompido) e é recriado a cada render — incluí-lo faria
     // a inicialização inteira (refresh token + CSRF) repetir a cada render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap roda uma vez; logout recriado repetiria refresh e CSRF
   }, []);
 
   const login = (userData: User, token: string) => {

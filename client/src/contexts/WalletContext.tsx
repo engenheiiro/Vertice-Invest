@@ -297,7 +297,7 @@ export interface WalletContextType {
 // `useWallet()` sem saber se está na área logada ou numa visita anônima.
 // (o alerta de fast-refresh pede o contexto em arquivo separado; separá-lo daqui
 //  arrastaria os tipos que ~30 arquivos importam deste módulo)
-// eslint-disable-next-line react-refresh/only-export-components
+// eslint-disable-next-line react-refresh/only-export-components -- contexto compartilhado com o PublicWalletProvider; separar arrasta ~30 imports
 export const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

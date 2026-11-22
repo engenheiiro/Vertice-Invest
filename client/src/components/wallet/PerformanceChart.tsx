@@ -110,7 +110,7 @@ export const PerformanceChart = React.memo(() => {
         // `loadPerformance` é recriada a cada render; como dependência ela anularia
         // justamente o cuidado descrito acima, refazendo a chamada cara a cada
         // render em vez de só quando o escopo/carteira muda.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadPerformance recriada a cada render refaria a chamada cara
     }, [isDemoMode, activeWalletId, isWalletScopeReady]);
 
     // --- RECONCILIAÇÃO COM OS KPIs ---
