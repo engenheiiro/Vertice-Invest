@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -45,5 +46,24 @@ describe('Modal (UI base — M11 / A3 / A4)', () => {
     );
     await userEvent.click(screen.getByLabelText('Fechar'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+  it('não rouba o foco do campo quando o pai re-renderiza com outro onClose (defeito: foco voltava ao "Fechar" a cada tecla)', async () => {
+    // No jsdom offsetParent é sempre null e o foco inicial nunca acontece; simula layout.
+    const spy = vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockReturnValue(document.body);
+    const Host = () => {
+      const [valor, setValor] = useState('');
+      return (
+        <Modal isOpen onClose={() => {}} title="Aporte">
+          <input aria-label="valor" value={valor} onChange={(e) => setValor(e.target.value)} />
+        </Modal>
+      );
+    };
+    render(<Host />);
+    const campo = screen.getByLabelText('valor');
+    await userEvent.click(campo);
+    await userEvent.type(campo, '123');
+    expect(campo).toHaveFocus();
+    expect(campo).toHaveValue('123');
+    spy.mockRestore();
   });
 });

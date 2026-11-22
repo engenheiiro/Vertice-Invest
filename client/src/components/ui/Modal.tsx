@@ -35,6 +35,10 @@ export const Modal = ({
 }: ModalProps) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // onClose num ref: o pai costuma passar função nova a cada render, e com ela
+  // nas dependências o efeito rodava a cada tecla e devolvia o foco ao "Fechar".
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -61,7 +65,7 @@ export const Modal = ({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -85,7 +89,7 @@ export const Modal = ({
       document.documentElement.style.overflow = prevHtmlOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
