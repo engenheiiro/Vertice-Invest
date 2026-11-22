@@ -31,6 +31,30 @@ export const getDailyFactorForDate = (date, currentConfigRate, cdiCurve = EMPTY_
     return Math.pow(1 + (rate / 100), 1/252);
 };
 
+// Valor da posição na MOEDA NATIVA para o KPI live (antes do câmbio).
+const liveNativeValue = (asset, { currentCdi, selic, ipca, calcDate, cdiCurve, treasuryPricing, marketMap }) => {
+    if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
+        // Fonte única de valorização (idêntica ao getWalletData) — antes este
+        // caminho ignorava o rendimento (val = qty), divergindo do KPI.
+        return valueFixedIncomeAsset(asset, {
+            cdiRate: currentCdi, selic, ipca, calcDate, cdiCurve,
+            history: treasuryPricing.historyFor(asset),
+        }).value;
+    }
+    const mData = marketMap.get(asset.ticker);
+    // Sem cotação marca no CUSTO médio, como o rebuild e o snapshot diário
+    // (`computeEquityAt`) — zerar o saldo aqui e manter o custo fazia o
+    // ponto live despencar contra o snapshot de ontem.
+    return mData?.price > 0
+        ? safeValue(asset.quantity, mData.price)
+        : safeFloat(asset.totalCost);
+};
+
+const liveDividendTotals = (divData, sinceDayKey) => ({
+    totalDividends: divData?.total ?? 0,
+    dividendsSinceAnchor: sinceDayKey ? (divData?.sinceTotal ?? 0) : 0,
+});
+
 // HELPER: Calcula KPIs em tempo real (versão leve do getWalletData)
 // `sinceDayKey` = dia do snapshot-âncora da cota live: devolve também os proventos
 // com ex-date DEPOIS dele (`dividendsSinceAnchor`), a renda que `computeLiveQuota`
@@ -61,8 +85,7 @@ export const calculateLiveKPIS = async (userId, currentCdi, walletId, { sinceDay
         marketDataService.getMarketDataMap(tickers),
         loadTreasuryPricing(activeAssets),
     ]);
-    const totalDividends = divData?.total ?? 0;
-    const dividendsSinceAnchor = sinceDayKey ? (divData?.sinceTotal ?? 0) : 0;
+    const { totalDividends, dividendsSinceAnchor } = liveDividendTotals(divData, sinceDayKey);
 
     const usdRate = usdConfig?.dollar || 5.75;
     const selic = usdConfig?.selic;
@@ -70,26 +93,10 @@ export const calculateLiveKPIS = async (userId, currentCdi, walletId, { sinceDay
     const calcDate = brazilToday();
     const cdiCurve = await loadCdiCurveForAssets(activeAssets, { currentRate: currentCdi });
 
+    const valuationCtx = { currentCdi, selic, ipca, calcDate, cdiCurve, treasuryPricing, marketMap };
     for (const asset of activeAssets) {
         const multiplier = isDollarized(asset) ? usdRate : 1;
-
-        let val;
-        if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-            // Fonte única de valorização (idêntica ao getWalletData) — antes este
-            // caminho ignorava o rendimento (val = qty), divergindo do KPI.
-            val = valueFixedIncomeAsset(asset, {
-                cdiRate: currentCdi, selic, ipca, calcDate, cdiCurve,
-                history: treasuryPricing.historyFor(asset),
-            }).value;
-        } else {
-            const mData = marketMap.get(asset.ticker);
-            // Sem cotação marca no CUSTO médio, como o rebuild e o snapshot diário
-            // (`computeEquityAt`) — zerar o saldo aqui e manter o custo fazia o
-            // ponto live despencar contra o snapshot de ontem.
-            val = mData?.price > 0
-                ? safeValue(asset.quantity, mData.price)
-                : safeFloat(asset.totalCost);
-        }
+        const val = liveNativeValue(asset, valuationCtx);
 
         totalEquity += safeMult(val, multiplier);
         // Custo com o câmbio de cada compra congelado — o Valor Aplicado não pode
@@ -160,7 +167,10 @@ export const computePendingFlowBRL = async ({ userId, walletId, anchor, currentU
     return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
 };
 
-export const computeWalletMetrics = async ({ userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd, pendingFlow = null, dividendsSinceAnchor = null }) => {
+export const computeWalletMetrics = async ({
+    userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd,
+    pendingFlow = null, dividendsSinceAnchor = null,
+}) => {
     const now = new Date();
     let weightedRentability = 0;
     let dataQuality = 'AUDITED'; // Default Audited

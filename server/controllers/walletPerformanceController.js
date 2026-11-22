@@ -17,6 +17,92 @@ import {
 } from '../utils/timeSeriesDownsample.js';
 import { calculateLiveKPIS, computePendingFlowBRL, getDailyFactorForDate } from './walletKpis.js';
 
+// Ponto live (hoje) anexado à série quando o último snapshot não é de hoje.
+// Muta `history` — mesma ordem de leituras da versão monolítica.
+const appendLivePoint = async (history, { userId, walletId, config, today, todayStr }) => {
+    const lastSnapshot = history[history.length - 1];
+    const lastSnapshotDate = toDateKey(brazilDateOnly(lastSnapshot.date));
+    if (lastSnapshotDate === todayStr) return;
+
+    // Mesma âncora do KPI (getWalletData): regra única compartilhada. Vem
+    // antes do KPI live porque o recorte de proventos da cota depende dela.
+    const anchor = selectAnchorSnapshot([...history].reverse());
+    const anchorDayKey = anchor ? (anchor.dayKey || snapshotDayKey(anchor)) : null;
+    // CDI pela mesma cadeia do card e do snapshot (CDI → Selic → fallback).
+    const liveData = await calculateLiveKPIS(
+        userId, resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK), walletId,
+        { sinceDayKey: anchorDayKey },
+    );
+    if (!liveData || !(liveData.totalEquity > 0)) return;
+
+    // Fluxo de caixa desde o âncora (aportes/resgates) — Modified Dietz.
+    const periodFlow = await computePendingFlowBRL({
+        userId,
+        walletId,
+        anchor,
+        currentUsd: config?.dollar || 5.75,
+    });
+
+    // Fonte única da cota live — idêntica ao KPI (weightedRentability).
+    // Com a renda do período (proventos com ex-date desde o âncora),
+    // como o card — sem ela o ponto live afundava no dia-ex.
+    const liveQuotaPrice = computeLiveQuota(anchor, liveData.totalEquity, periodFlow, liveData.dividendsSinceAnchor);
+
+    history.push({
+        date: today,
+        totalEquity: liveData.totalEquity,
+        totalInvested: liveData.totalInvested,
+        totalDividends: liveData.totalDividends,
+        quotaPrice: liveQuotaPrice,
+        isLive: true
+    });
+};
+
+const buildIbovMap = (ibovHistory) => {
+    const ibovMap = new Map();
+    if (ibovHistory && Array.isArray(ibovHistory)) {
+        ibovHistory.forEach(h => ibovMap.set(h.date, h.close || h.adjClose));
+    }
+    return ibovMap;
+};
+
+// Fechamento do Ibov no primeiro dia da série (ou o primeiro pregão depois dele).
+const resolveBaseIbov = (ibovMap, ibovHistory, startDateStr) => {
+    const baseIbov = ibovMap.get(startDateStr);
+    if (baseIbov) return baseIbov;
+    const fallback = ibovHistory?.find(h => h.date >= startDateStr);
+    return fallback ? (fallback.close || fallback.adjClose) : 120000;
+};
+
+// Fatores do CDI e do IPCA+6% no intervalo de `daysDelta` dias úteis.
+const benchmarkPeriodFactors = (daysDelta, currentDate, { currentRate, benchmarkCdiCurve, totalIpcaRate }) => ({
+    cdi: daysDelta > 0 ? Math.pow(getDailyFactorForDate(currentDate, currentRate, benchmarkCdiCurve), daysDelta) : 1,
+    ipca: daysDelta > 0 ? Math.pow(Math.pow(1 + (totalIpcaRate / 100), 1/252), daysDelta) : 1,
+});
+
+// Fechamento do Ibov para o ponto; o ponto live usa a cotação do macro.
+const ibovCloseForPoint = (point, dateStr, ibovMap, config, lastKnownIbov) => {
+    let currentIbov = ibovMap.get(dateStr);
+    if (point.isLive && !currentIbov) {
+        currentIbov = config?.ibov;
+    }
+    // Dia sem cotação (feriado, dado faltante): repete o último fechamento
+    // conhecido — o índice "anda de lado" em vez de saltar.
+    if (!currentIbov) currentIbov = lastKnownIbov;
+    return currentIbov;
+};
+
+const pointReturns = (point, baseIbov, currentIbov) => ({
+    ibovPercent: baseIbov && currentIbov ? ((currentIbov / baseIbov) - 1) * 100 : 0,
+    walletTWRR: point.quotaPrice ? ((point.quotaPrice/100)-1)*100 : 0,
+    walletROI: point.totalInvested > 0
+        ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100
+        : 0,
+});
+
+// null preservado: safeFloat(null) viraria 0 ("sem risco" onde não houve medição).
+const floatOrNull = (value) => (value === null ? null : safeFloat(value));
+
 // --- CORREÇÃO DE RENTABILIDADE (LIVE POINT + FILTRO AVANÇADO) ---
 /**
  * Série de rentabilidade (carteira × CDI × IPCA+6% × Ibov) + métricas de risco.
@@ -45,58 +131,13 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         // dia extra de CDI no benchmark.
         const today = brazilToday();
         const todayStr = toDateKey(today);
-        const lastSnapshot = history[history.length - 1];
-        const lastSnapshotDate = toDateKey(brazilDateOnly(lastSnapshot.date));
-
-        if (lastSnapshotDate !== todayStr) {
-            // Mesma âncora do KPI (getWalletData): regra única compartilhada. Vem
-            // antes do KPI live porque o recorte de proventos da cota depende dela.
-            const anchor = selectAnchorSnapshot([...history].reverse());
-            const anchorDayKey = anchor ? (anchor.dayKey || snapshotDayKey(anchor)) : null;
-            // CDI pela mesma cadeia do card e do snapshot (CDI → Selic → fallback).
-            const liveData = await calculateLiveKPIS(
-                userId, resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK), walletId,
-                { sinceDayKey: anchorDayKey },
-            );
-
-            if (liveData && liveData.totalEquity > 0) {
-
-                // Fluxo de caixa desde o âncora (aportes/resgates) — Modified Dietz.
-                const periodFlow = await computePendingFlowBRL({
-                    userId,
-                    walletId,
-                    anchor,
-                    currentUsd: config?.dollar || 5.75,
-                });
-
-                // Fonte única da cota live — idêntica ao KPI (weightedRentability).
-                // Com a renda do período (proventos com ex-date desde o âncora),
-                // como o card — sem ela o ponto live afundava no dia-ex.
-                const liveQuotaPrice = computeLiveQuota(anchor, liveData.totalEquity, periodFlow, liveData.dividendsSinceAnchor);
-
-                history.push({
-                    date: today,
-                    totalEquity: liveData.totalEquity,
-                    totalInvested: liveData.totalInvested,
-                    totalDividends: liveData.totalDividends,
-                    quotaPrice: liveQuotaPrice,
-                    isLive: true
-                });
-            }
-        }
+        await appendLivePoint(history, { userId, walletId, config, today, todayStr });
 
         const ibovHistory = await marketDataService.getBenchmarkHistory('^BVSP');
-        const ibovMap = new Map();
-        if (ibovHistory && Array.isArray(ibovHistory)) {
-            ibovHistory.forEach(h => ibovMap.set(h.date, h.close || h.adjClose));
-        }
+        const ibovMap = buildIbovMap(ibovHistory);
 
         const startDateStr = snapshotDayKey(history[0]);
-        let baseIbov = ibovMap.get(startDateStr);
-        if (!baseIbov) {
-             const fallback = ibovHistory?.find(h => h.date >= startDateStr);
-             baseIbov = fallback ? (fallback.close || fallback.adjClose) : 120000;
-        }
+        const baseIbov = resolveBaseIbov(ibovMap, ibovHistory, startDateStr);
         // Último fechamento conhecido do índice, para dias sem cotação. Antes o
         // código caía no `baseIbov` (o fechamento do PRIMEIRO dia da série): além
         // de zerar o % daquele dia, virava a nova referência do passo seguinte e
@@ -119,6 +160,7 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         const ipcaRate = config?.ipca || 4.5;
         const realRate = 6.0;
         const totalIpcaRate = ipcaRate + realRate; // ex: 10.5% a.a.
+        const factorCtx = { currentRate, benchmarkCdiCurve, totalIpcaRate };
 
         // Benchmarks cashflow-aware (modo R$): o capital cresce pelo índice e
         // recebe os MESMOS aportes/resgates nas datas reais — comparável à
@@ -133,24 +175,16 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
 
             const daysDelta = countBusinessDays(previousDate, currentDate);
 
-            const periodFactorCDI = daysDelta > 0 ? Math.pow(getDailyFactorForDate(currentDate, currentRate, benchmarkCdiCurve), daysDelta) : 1;
-            const periodFactorIPCA = daysDelta > 0 ? Math.pow(Math.pow(1 + (totalIpcaRate / 100), 1/252), daysDelta) : 1;
+            const { cdi: periodFactorCDI, ipca: periodFactorIPCA } = benchmarkPeriodFactors(daysDelta, currentDate, factorCtx);
             accumulatedCDI *= periodFactorCDI;
             accumulatedIPCA *= periodFactorIPCA;
             previousDate = currentDate;
 
             // IBOV Acumulado
-            let currentIbov = ibovMap.get(dateStr);
-            if (point.isLive && !currentIbov) {
-                currentIbov = config?.ibov;
-            }
-            // Dia sem cotação (feriado, dado faltante): repete o último fechamento
-            // conhecido — o índice "anda de lado" em vez de saltar.
-            if (!currentIbov) currentIbov = lastKnownIbov;
+            const currentIbov = ibovCloseForPoint(point, dateStr, ibovMap, config, lastKnownIbov);
             if (currentIbov) lastKnownIbov = currentIbov;
 
-            const ibovPercent = baseIbov && currentIbov ? ((currentIbov / baseIbov) - 1) * 100 : 0;
-            const walletTWRR = point.quotaPrice ? ((point.quotaPrice/100)-1)*100 : 0;
+            const { ibovPercent, walletTWRR, walletROI } = pointReturns(point, baseIbov, currentIbov);
 
             // --- Valores cashflow-aware dos benchmarks (modo R$) ---
             const periodFactorIbov = (prevIbovForVal > 0 && currentIbov) ? (currentIbov / prevIbovForVal) : 1;
@@ -164,10 +198,6 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
             }
             prevInvested = point.totalInvested || 0;
             if (currentIbov) prevIbovForVal = currentIbov;
-
-            const walletROI = point.totalInvested > 0
-                ? ((point.totalEquity - point.totalInvested + point.totalDividends) / point.totalInvested) * 100
-                : 0;
 
             return {
                 date: dateStr,
@@ -204,13 +234,13 @@ export const buildWalletPerformancePayload = async (userId, walletId) => {
         return {
             history: downsampleTimeSeries(result, { maxPoints: DEFAULT_PERFORMANCE_POINTS }),
             stats: {
-                sharpe: sharpe === null ? null : safeFloat(sharpe),
+                sharpe: floatOrNull(sharpe),
                 sharpeSample,
                 sharpeSkippedGaps,
                 sharpeConfidence: confidence,
-                sharpeStandardError: standardError === null ? null : safeFloat(standardError),
+                sharpeStandardError: floatOrNull(standardError),
                 regimeBreakAt,
-                beta: beta === null ? null : safeFloat(beta),
+                beta: floatOrNull(beta),
                 betaSample
             }
         };

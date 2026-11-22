@@ -218,6 +218,21 @@ describe('POST /wallet/add — lançamentos', () => {
         expect(financialService.syncDividends).not.toHaveBeenCalled();
     });
 
+    it('vencimento do catálogo fora do formato dd/mm/aaaa não vira data na posição', async () => {
+        const position = positionDoc({ ticker: 'TESOURO SELIC 2029', type: 'FIXED_INCOME', currency: 'BRL' });
+        financialService.recalculatePosition.mockResolvedValue(position);
+        TreasuryBond.findOne.mockReturnValue(chain({ title: 'Tesouro Selic 2029', index: 'SELIC', maturityDate: '2029-03-01' }));
+
+        const { res } = await call(ctrl.addAssetTransaction, {
+            body: { ticker: 'Tesouro Selic 2029', type: 'FIXED_INCOME', quantity: 1, price: 1000, date: '2026-11-03' },
+        });
+
+        expect(res.statusCode).toBe(201);
+        expect(position.fixedIncomeIndex).toBe('SELIC');
+        expect(position.maturityDate).toBeUndefined();
+        expect(position.save).toHaveBeenCalledWith({ session });
+    });
+
     it('renda fixa com índice e vencimento informados não consulta o catálogo', async () => {
         const position = positionDoc({ ticker: 'CDB BANCO X', type: 'FIXED_INCOME', currency: 'BRL' });
         financialService.recalculatePosition.mockResolvedValue(position);

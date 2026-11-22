@@ -252,6 +252,96 @@ const fetchWalletMarketContext = async (userId, liveTickers, walletId, activeAss
     };
 };
 
+// Auto-heal seguido de reprocessamento. `{ payload }` quando reprocessou; `null`
+// quando nada foi curado ou o limite de profundidade já foi atingido.
+const rebuildAfterHeal = async (userId, walletId, depth) => {
+    const healed = await autoHealPositions(userId, walletId);
+    if (!healed) return null;
+    // (6.2) Reprocessa com o estado curado, mas só até o limite de
+    // profundidade — nunca recursa infinitamente.
+    if (depth < MAX_WALLET_HEAL_DEPTH) {
+        return { payload: await buildWalletPayload(userId, walletId, depth + 1) };
+    }
+    logger.warn(`buildWalletPayload: limite de auto-heal (${MAX_WALLET_HEAL_DEPTH}) atingido para ${userId}; renderizando estado atual.`);
+    return null;
+};
+
+const macroInputsFrom = (config) => ({
+    usdRate: safeFloat(config?.dollar || 5.75),
+    usdChange: safeFloat(config?.dollarChange || 0),
+    currentCdi: resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK),
+});
+
+// O fluxo do período (aportes/resgates desde o âncora) sai AGORA, não no fim.
+// Ele depende do snapshot-âncora e do câmbio — os dois já na mão — e de mais
+// nada que o laço de ativos produza. Awaitado só lá embaixo, ele enfileirava
+// três idas ao banco na cauda da requisição, com tudo o mais já pronto.
+//
+// A condição é a MESMA que `computeWalletMetrics` aplica: fora dela o valor
+// não é consumido, e disparar mesmo assim trocaria uma espera por um
+// desperdício. `Promise.resolve(0)` mantém o tipo e não deixa promessa
+// rejeitada sem dono.
+const startPendingFlow = ({ userId, walletId, snapshots, usdRate, loadUsdRate }) => {
+    const flowAnchor = selectAnchorSnapshot(snapshots);
+    const pendingFlow = flowAnchor?.quotaPrice
+        ? computePendingFlowBRL({
+            userId, walletId, anchor: flowAnchor, currentUsd: usdRate, loadUsdRate,
+        })
+        : Promise.resolve(0);
+    // Promessa que sai na frente precisa de dono desde já. Se a requisição
+    // morrer no meio (uma exceção no laço de ativos, por exemplo), ninguém
+    // chega ao `await` lá embaixo e a rejeição vira `unhandledRejection` — que
+    // no Node derruba o processo inteiro por causa de UMA carteira. Este
+    // `catch` só marca a rejeição como tratada; quem aguarda a promessa
+    // continua recebendo o erro normalmente.
+    pendingFlow.catch(() => {});
+    return pendingFlow;
+};
+
+// Fechamentos e câmbio do dia-âncora (só chamado quando há dia-âncora).
+const loadAnchorInputs = (activeAssets, anchorDayKey, loadUsdRate) => Promise.all([
+    loadClosesForDay(activeAssets, anchorDayKey),
+    loadUsdRate()
+        .then((resolve) => safeFloat(resolve(anchorDayKey)))
+        .catch(() => 0),
+]);
+
+// Processa cada ativo e acumula os totais (mesma ordem/aritmética da versão monolítica).
+const processActiveAssets = (activeAssets, assetCtx, { receivedByTicker, dayDividendsByTicker }) => {
+    const processedAssets = [];
+    let totalEquity = 0;
+    let totalInvested = 0;
+    let totalDayVariation = 0;
+    for (const asset of activeAssets) {
+        const { processed, totalValueBr, totalCostBr, dayChangeValueBr } = processWalletAsset(asset, assetCtx);
+        // Proventos recebidos (all-time, BRL) deste ativo — alimenta a
+        // Rentabilidade total (preço + proventos) na Detalhamento por Classe,
+        // distinta da Variação (só preço).
+        processed.dividendsReceived = safeCurrency(receivedByTicker[asset.ticker] || 0);
+        // Provento com data-ex DENTRO da janela do dia (posterior ao dia-âncora).
+        // Não entra em `dayChangeValue`: somá-lo quebraria a identidade
+        // "patrimônio de ontem + variação de hoje = hoje", que é medida só em
+        // preço. Existe para a tela poder explicar a queda do dia-ex, que sem
+        // ele aparece como prejuízo puro.
+        processed.dayDividends = safeCurrency(dayDividendsByTicker[asset.ticker] || 0);
+        processedAssets.push(processed);
+        totalEquity = safeAdd(totalEquity, totalValueBr);
+        totalInvested = safeAdd(totalInvested, totalCostBr);
+        totalDayVariation = safeAdd(totalDayVariation, dayChangeValueBr);
+    }
+    return { processedAssets, totalEquity, totalInvested, totalDayVariation };
+};
+
+const dayVariationPercentOf = (safeTotalEquity, safeTotalDayVariation) => {
+    if (!(safeTotalEquity > 0)) return 0;
+    const denom = safeSub(safeTotalEquity, safeTotalDayVariation);
+    return denom !== 0 ? percentOf(safeTotalDayVariation, denom) : 0;
+};
+
+// null preservado de propósito: safeFloat(null) viraria 0 e a UI
+// exibiria "sem risco" onde não houve medição.
+const floatOrNull = (value) => (value === null ? null : safeFloat(value));
+
 /**
  * Monta o payload completo da carteira (assets processados + KPIs + targets +
  * meta) para um (userId, walletId). Fonte ÚNICA da verdade: tanto a rota
@@ -264,15 +354,8 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
 
     // Auto-Heal se não houver ativos mas houver transações (reconstrução forçada).
     if (activeAssets.length === 0) {
-        const healed = await autoHealPositions(userId, walletId);
-        if (healed) {
-            // (6.2) Reprocessa com o estado curado, mas só até o limite de
-            // profundidade — nunca recursa infinitamente.
-            if (_depth < MAX_WALLET_HEAL_DEPTH) {
-                return buildWalletPayload(userId, walletId, _depth + 1);
-            }
-            logger.warn(`buildWalletPayload: limite de auto-heal (${MAX_WALLET_HEAL_DEPTH}) atingido para ${userId}; renderizando estado atual.`);
-        }
+        const rebuilt = await rebuildAfterHeal(userId, walletId, _depth);
+        if (rebuilt) return rebuilt.payload;
     }
 
     if (userAssets.length === 0) {
@@ -291,9 +374,7 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
             dayDividendsTotal, dayDividendsByTicker, dayDividendsSinceKey, snapshots, riskSnapshots, treasuryPricing } =
             await fetchWalletMarketContext(userId, liveTickers, walletId, activeAssets);
 
-        const usdRate = safeFloat(config?.dollar || 5.75);
-        const usdChange = safeFloat(config?.dollarChange || 0);
-        const currentCdi = resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK);
+        const { usdRate, usdChange, currentCdi } = macroInputsFrom(config);
         // Curva histórica do CDI junto do macro: `processWalletAsset` já repassa
         // `macroRates` inteiro a `valueFixedIncomeAsset`, então a renda fixa do card
         // rende pela taxa vigente em cada dia — a mesma régua do rebuild. Carteira
@@ -322,64 +403,18 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         // `usdRateLoaderOnce`.
         const loadUsdRate = usdRateLoaderOnce(usdRate);
 
-        // O fluxo do período (aportes/resgates desde o âncora) sai AGORA, não no fim.
-        // Ele depende do snapshot-âncora e do câmbio — os dois já na mão — e de mais
-        // nada que o laço de ativos produza. Awaitado só lá embaixo, ele enfileirava
-        // três idas ao banco na cauda da requisição, com tudo o mais já pronto.
-        //
-        // A condição é a MESMA que `computeWalletMetrics` aplica: fora dela o valor
-        // não é consumido, e disparar mesmo assim trocaria uma espera por um
-        // desperdício. `Promise.resolve(0)` mantém o tipo e não deixa promessa
-        // rejeitada sem dono.
-        const flowAnchor = selectAnchorSnapshot(snapshots);
-        const pendingFlow = flowAnchor?.quotaPrice
-            ? computePendingFlowBRL({
-                userId, walletId, anchor: flowAnchor, currentUsd: usdRate, loadUsdRate,
-            })
-            : Promise.resolve(0);
-        // Promessa que sai na frente precisa de dono desde já. Se a requisição
-        // morrer no meio (uma exceção no laço de ativos, por exemplo), ninguém
-        // chega ao `await` lá embaixo e a rejeição vira `unhandledRejection` — que
-        // no Node derruba o processo inteiro por causa de UMA carteira. Este
-        // `catch` só marca a rejeição como tratada; quem aguarda a promessa
-        // continua recebendo o erro normalmente.
-        pendingFlow.catch(() => {});
+        const pendingFlow = startPendingFlow({ userId, walletId, snapshots, usdRate, loadUsdRate });
 
         const [anchorCloses, anchorUsdRate] = anchorDayKey
-            ? await Promise.all([
-                loadClosesForDay(activeAssets, anchorDayKey),
-                loadUsdRate()
-                    .then((resolve) => safeFloat(resolve(anchorDayKey)))
-                    .catch(() => 0),
-            ])
+            ? await loadAnchorInputs(activeAssets, anchorDayKey, loadUsdRate)
             : [new Map(), 0];
 
-        // Processa cada ativo e acumula os totais (mesma ordem/aritmética da versão monolítica).
         const assetCtx = {
             assetMap, usdRate, usdChange, macroRates, isTodayBusinessDay, treasuryPricing,
             todayKey: brazilTodayStr, anchorDayKey, anchorCloses, anchorUsdRate,
         };
-        const processedAssets = [];
-        let totalEquity = 0;
-        let totalInvested = 0;
-        let totalDayVariation = 0;
-        for (const asset of activeAssets) {
-            const { processed, totalValueBr, totalCostBr, dayChangeValueBr } = processWalletAsset(asset, assetCtx);
-            // Proventos recebidos (all-time, BRL) deste ativo — alimenta a
-            // Rentabilidade total (preço + proventos) na Detalhamento por Classe,
-            // distinta da Variação (só preço).
-            processed.dividendsReceived = safeCurrency(receivedByTicker[asset.ticker] || 0);
-            // Provento com data-ex DENTRO da janela do dia (posterior ao dia-âncora).
-            // Não entra em `dayChangeValue`: somá-lo quebraria a identidade
-            // "patrimônio de ontem + variação de hoje = hoje", que é medida só em
-            // preço. Existe para a tela poder explicar a queda do dia-ex, que sem
-            // ele aparece como prejuízo puro.
-            processed.dayDividends = safeCurrency(dayDividendsByTicker[asset.ticker] || 0);
-            processedAssets.push(processed);
-            totalEquity = safeAdd(totalEquity, totalValueBr);
-            totalInvested = safeAdd(totalInvested, totalCostBr);
-            totalDayVariation = safeAdd(totalDayVariation, dayChangeValueBr);
-        }
+        const { processedAssets, totalEquity, totalInvested, totalDayVariation } =
+            processActiveAssets(activeAssets, assetCtx, { receivedByTicker, dayDividendsByTicker });
 
         const currentUnrealized = safeSub(totalEquity, totalInvested);
         const totalCapitalGain = safeAdd(currentUnrealized, totalRealizedProfit);
@@ -399,18 +434,8 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
         );
         processedAssets.forEach((a, i) => { a.dayChangeValue = reconciledDayValues[i]; });
 
-        let totalResultPercent = 0;
-        if (safeTotalInvested > 0) {
-            totalResultPercent = percentOf(safeTotalResult, safeTotalInvested);
-        }
-
-        let dayVariationPercent = 0;
-        if (safeTotalEquity > 0) {
-            const denom = safeSub(safeTotalEquity, safeTotalDayVariation);
-            if (denom !== 0) {
-                dayVariationPercent = percentOf(safeTotalDayVariation, denom);
-            }
-        }
+        const totalResultPercent = safeTotalInvested > 0 ? percentOf(safeTotalResult, safeTotalInvested) : 0;
+        const dayVariationPercent = dayVariationPercentOf(safeTotalEquity, safeTotalDayVariation);
 
         const { weightedRentability, dataQuality, sharpeRatio, sharpeConfidence, sharpeStandardError, sharpeSample, beta } =
             await computeWalletMetrics({
@@ -441,15 +466,13 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
                 projectedDividends: safeCurrency(projectedMonthly),
                 weightedRentability: safeFloat(weightedRentability),
                 dataQuality: dataQuality,
-                // null preservado de propósito: safeFloat(null) viraria 0 e a UI
-                // exibiria "sem risco" onde não houve medição.
-                sharpeRatio: sharpeRatio === null ? null : safeFloat(sharpeRatio),
+                sharpeRatio: floatOrNull(sharpeRatio),
                 // Acompanham o indicador para que a UI não transmita uma precisão
                 // que a amostra não sustenta.
                 sharpeConfidence,
-                sharpeStandardError: sharpeStandardError === null ? null : safeFloat(sharpeStandardError),
+                sharpeStandardError: floatOrNull(sharpeStandardError),
                 sharpeSample,
-                beta: beta === null ? null : safeFloat(beta)
+                beta: floatOrNull(beta)
             },
             ...targets,
             meta: { usdRate, lastUpdate: new Date() }

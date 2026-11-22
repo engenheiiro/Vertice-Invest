@@ -15,10 +15,89 @@ import { resolveAssetCurrency, resolveTransactionCurrency, needsCurrencyFallback
 import logger from '../config/logger.js';
 import AppError from '../utils/AppError.js';
 
+// Carimba a moeda NATIVA do lançamento. Só dá para fazer depois do
+// recálculo: é `recalculatePosition` que resolve a moeda autoritativa
+// (cadastro explícito > MarketAsset > BRL), e um ETF só se distingue
+// por ela (BOVA11 é R$, VOO é US$). Mesma sessão → atômico com o resto.
+const stampTransactionCurrency = async (newTx, updatedAsset, session) => {
+    const txCurrency = resolveAssetCurrency(updatedAsset);
+    if (newTx.currency !== txCurrency) {
+        newTx.currency = txCurrency;
+        await newTx.save({ session });
+    }
+};
+
+// Vencimento do catálogo do Tesouro (string "dd/mm/aaaa") → Date, ou null.
+const parseBondMaturity = (raw) => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(raw).trim());
+    if (!m) return null;
+    const parsed = new Date(`${m[3]}-${m[2]}-${m[1]}T00:00:00.000Z`);
+    return isNaN(parsed.getTime()) ? null : parsed;
+};
+
+// C2: vencimento — da UI (form) ou, quando ausente, do catálogo
+// (string "dd/mm/aaaa"). Nunca reescreve um vencimento já salvo.
+const applyMaturityDate = (updatedAsset, maturityDate, bond) => {
+    if (maturityDate) {
+        const md = new Date(maturityDate);
+        if (!isNaN(md.getTime())) updatedAsset.maturityDate = md;
+        return;
+    }
+    if (!updatedAsset.maturityDate && bond?.maturityDate) {
+        const parsed = parseBondMaturity(bond.maturityDate);
+        if (parsed) updatedAsset.maturityDate = parsed;
+    }
+};
+
+// Pós-fixados/indexados (Selic/CDI/IPCA): o rendimento é índice vivo +
+// spread, não a taxa cheia. Persiste índice+spread p/ accrual correto
+// (corrige o bug do Tesouro Selic render só o spread como prefixado).
+const applyFixedIncomeIndexing = async (updatedAsset, { ticker, fixedIncomeIndex, fixedIncomeSpread, maturityDate }, session) => {
+    const idx = fixedIncomeIndex;
+    const spread = fixedIncomeSpread;
+    // Catálogo é a fonte autoritativa de índice E vencimento — busca
+    // uma vez quando falta qualquer um dos dois (evita 2 queries).
+    let bond = null;
+    if (!idx || (!maturityDate && !updatedAsset.maturityDate)) {
+        bond = await TreasuryBond.findOne({ title: new RegExp(`^${escapeRegex(ticker)}$`, 'i') }).session(session);
+    }
+    const indexing = resolveFixedIncomeIndexing({ index: idx, spread, bond });
+    if (indexing) {
+        updatedAsset.fixedIncomeIndex = indexing.index;
+        if (indexing.spread !== null) updatedAsset.fixedIncomeSpread = indexing.spread;
+    }
+    applyMaturityDate(updatedAsset, maturityDate, bond);
+};
+
+// Taxa, índice, vencimento, nome, reserva e início da posição de RF/caixa
+// recém-recalculada, gravados na MESMA sessão do lançamento.
+const applyFixedIncomeOrCashMetadata = async (updatedAsset, fields, session) => {
+    const { type, name, fixedIncomeRate, isReserve, transactionType, txDate } = fields;
+    if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
+    if (type === 'FIXED_INCOME') await applyFixedIncomeIndexing(updatedAsset, fields, session);
+    if (name) updatedAsset.name = name;
+    // C1: CASH é reserva por natureza; FIXED_INCOME segue a escolha do
+    // usuário ("Guardar como Reserva separada"). Só grava no primeiro
+    // aporte (posição nova) ou quando o flag vem explícito — aportes
+    // seguintes não devem silenciosamente reclassificar a posição.
+    if (type === 'CASH') {
+        updatedAsset.isReserve = true;
+    } else if (type === 'FIXED_INCOME' && isReserve !== undefined) {
+        updatedAsset.isReserve = !!isReserve;
+    }
+    if (transactionType === 'BUY' && (!updatedAsset.startDate || txDate < updatedAsset.startDate)) {
+        updatedAsset.startDate = txDate;
+    }
+    await updatedAsset.save({ session });
+};
+
 export const addAssetTransaction = async (req, res, next) => {
     const userId = req.user.id;
     const walletId = req.walletId;
-    const { ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, name, usSubType, currency, isReserve, maturityDate } = req.body;
+    const {
+        ticker, type, quantity, price, date, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread,
+        name, usSubType, currency, isReserve, maturityDate,
+    } = req.body;
     // `<input type=date>` envia YYYY-MM-DD. Parsing nativo interpreta isso como
     // meia-noite UTC e desloca para o dia anterior em Brasília; tratamos como dia
     // civil e ancoramos ao meio-dia UTC (parseCalendarDate). Sem data, vale o dia
@@ -45,67 +124,17 @@ export const addAssetTransaction = async (req, res, next) => {
             });
             await newTx.save({ session });
             updatedAsset = await financialService.recalculatePosition(userId, ticker.toUpperCase(), type, session, currency, walletId);
-            // Carimba a moeda NATIVA do lançamento. Só dá para fazer depois do
-            // recálculo: é `recalculatePosition` que resolve a moeda autoritativa
-            // (cadastro explícito > MarketAsset > BRL), e um ETF só se distingue
-            // por ela (BOVA11 é R$, VOO é US$). Mesma sessão → atômico com o resto.
-            if (updatedAsset) {
-                const txCurrency = resolveAssetCurrency(updatedAsset);
-                if (newTx.currency !== txCurrency) {
-                    newTx.currency = txCurrency;
-                    await newTx.save({ session });
-                }
-            }
-            if (updatedAsset && (type === 'FIXED_INCOME' || type === 'CASH')) {
-                if (fixedIncomeRate) updatedAsset.fixedIncomeRate = fixedIncomeRate;
-                // Pós-fixados/indexados (Selic/CDI/IPCA): o rendimento é índice vivo +
-                // spread, não a taxa cheia. Persiste índice+spread p/ accrual correto
-                // (corrige o bug do Tesouro Selic render só o spread como prefixado).
-                if (type === 'FIXED_INCOME') {
-                    const idx = fixedIncomeIndex;
-                    const spread = fixedIncomeSpread;
-                    // Catálogo é a fonte autoritativa de índice E vencimento — busca
-                    // uma vez quando falta qualquer um dos dois (evita 2 queries).
-                    let bond = null;
-                    if (!idx || (!maturityDate && !updatedAsset.maturityDate)) {
-                        bond = await TreasuryBond.findOne({ title: new RegExp(`^${escapeRegex(ticker)}$`, 'i') }).session(session);
-                    }
-                    const indexing = resolveFixedIncomeIndexing({ index: idx, spread, bond });
-                    if (indexing) {
-                        updatedAsset.fixedIncomeIndex = indexing.index;
-                        if (indexing.spread !== null) updatedAsset.fixedIncomeSpread = indexing.spread;
-                    }
-                    // C2: vencimento — da UI (form) ou, quando ausente, do catálogo
-                    // (string "dd/mm/aaaa"). Nunca reescreve um vencimento já salvo.
-                    if (maturityDate) {
-                        const md = new Date(maturityDate);
-                        if (!isNaN(md.getTime())) updatedAsset.maturityDate = md;
-                    } else if (!updatedAsset.maturityDate && bond?.maturityDate) {
-                        const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(bond.maturityDate).trim());
-                        if (m) {
-                            const parsed = new Date(`${m[3]}-${m[2]}-${m[1]}T00:00:00.000Z`);
-                            if (!isNaN(parsed.getTime())) updatedAsset.maturityDate = parsed;
-                        }
-                    }
-                }
-                if (name) updatedAsset.name = name;
-                // C1: CASH é reserva por natureza; FIXED_INCOME segue a escolha do
-                // usuário ("Guardar como Reserva separada"). Só grava no primeiro
-                // aporte (posição nova) ou quando o flag vem explícito — aportes
-                // seguintes não devem silenciosamente reclassificar a posição.
-                if (type === 'CASH') {
-                    updatedAsset.isReserve = true;
-                } else if (type === 'FIXED_INCOME' && isReserve !== undefined) {
-                    updatedAsset.isReserve = !!isReserve;
-                }
-                if (transactionType === 'BUY' && (!updatedAsset.startDate || txDate < updatedAsset.startDate)) {
-                    updatedAsset.startDate = txDate;
-                }
-                await updatedAsset.save({ session });
+            if (!updatedAsset) return;
+            await stampTransactionCurrency(newTx, updatedAsset, session);
+            if (type === 'FIXED_INCOME' || type === 'CASH') {
+                await applyFixedIncomeOrCashMetadata(updatedAsset, {
+                    ticker, type, name, fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, maturityDate, isReserve,
+                    transactionType, txDate,
+                }, session);
             }
             // Exterior: override manual do sub-tipo no cadastro. A auto-heurística
             // já rodou em recalculatePosition; aqui o usuário tem a última palavra.
-            if (updatedAsset && type === 'STOCK_US' && usSubType) {
+            if (type === 'STOCK_US' && usSubType) {
                 updatedAsset.usSubType = usSubType;
                 updatedAsset.usSubTypeManual = true;
                 await updatedAsset.save({ session });
@@ -135,6 +164,39 @@ export const addAssetTransaction = async (req, res, next) => {
     res.status(201).json({ message: "Transação registrada.", asset: updatedAsset });
 };
 
+// Etiquetas, nome e sub-tipo de Exterior editados pelo usuário.
+const applyAssetLabelEdits = (asset, { tags, name, usSubType }) => {
+    if (tags !== undefined) asset.tags = tags;
+    // Renomear cofrinho (Reserva/Caixa) ou título de Renda Fixa.
+    if (name !== undefined) asset.name = String(name).trim();
+    // Override manual do sub-tipo de Exterior — só faz sentido para STOCK_US.
+    // Marca usSubTypeManual para que a auto-heurística não sobrescreva depois.
+    if (usSubType !== undefined && asset.type === 'STOCK_US') {
+        asset.usSubType = usSubType;
+        asset.usSubTypeManual = true;
+    }
+};
+
+const INDEXED_FIXED_INCOME = new Set(['SELIC', 'CDI', 'IPCA']);
+
+const reclassifyCashAsFixedIncome = (asset, { fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, maturityDate, isReserve }) => {
+    asset.type = 'FIXED_INCOME';
+    if (fixedIncomeRate !== undefined) asset.fixedIncomeRate = fixedIncomeRate;
+    if (INDEXED_FIXED_INCOME.has(fixedIncomeIndex)) {
+        asset.fixedIncomeIndex = fixedIncomeIndex;
+        asset.fixedIncomeSpread = Number(fixedIncomeSpread) || 0;
+    } else if (fixedIncomeIndex === 'PRE') {
+        asset.fixedIncomeIndex = 'PRE';
+    }
+    if (maturityDate) {
+        const md = new Date(maturityDate);
+        if (!isNaN(md.getTime())) asset.maturityDate = md;
+    }
+    // Ao virar título, passa a ser investimento por padrão (entra no donut
+    // e no grupo "Renda Fixa"), salvo se o usuário pedir p/ manter na reserva.
+    asset.isReserve = isReserve === undefined ? false : !!isReserve;
+};
+
 export const updateAsset = async (req, res, next) => {
     try {
         const { id } = req.params;
@@ -146,15 +208,7 @@ export const updateAsset = async (req, res, next) => {
         const asset = await UserAsset.findOne({ _id: id, user: userId, wallet: req.walletId });
         if (!asset) return res.status(404).json({ message: "Ativo não encontrado" });
 
-        if (tags !== undefined) asset.tags = tags;
-        // Renomear cofrinho (Reserva/Caixa) ou título de Renda Fixa.
-        if (name !== undefined) asset.name = String(name).trim();
-        // Override manual do sub-tipo de Exterior — só faz sentido para STOCK_US.
-        // Marca usSubTypeManual para que a auto-heurística não sobrescreva depois.
-        if (usSubType !== undefined && asset.type === 'STOCK_US') {
-            asset.usSubType = usSubType;
-            asset.usSubTypeManual = true;
-        }
+        applyAssetLabelEdits(asset, { tags, name, usSubType });
 
         // Reclassificar um Caixa/Reserva (CASH) em Renda Fixa (FIXED_INCOME) —
         // para posições cadastradas como "cofrinho" que na verdade são um título.
@@ -163,21 +217,7 @@ export const updateAsset = async (req, res, next) => {
         // reclassificação preserva o patrimônio e só troca a curva de rendimento.
         let reclassified = false;
         if (type === 'FIXED_INCOME' && asset.type === 'CASH') {
-            asset.type = 'FIXED_INCOME';
-            if (fixedIncomeRate !== undefined) asset.fixedIncomeRate = fixedIncomeRate;
-            if (fixedIncomeIndex === 'SELIC' || fixedIncomeIndex === 'CDI' || fixedIncomeIndex === 'IPCA') {
-                asset.fixedIncomeIndex = fixedIncomeIndex;
-                asset.fixedIncomeSpread = Number(fixedIncomeSpread) || 0;
-            } else if (fixedIncomeIndex === 'PRE') {
-                asset.fixedIncomeIndex = 'PRE';
-            }
-            if (maturityDate) {
-                const md = new Date(maturityDate);
-                if (!isNaN(md.getTime())) asset.maturityDate = md;
-            }
-            // Ao virar título, passa a ser investimento por padrão (entra no donut
-            // e no grupo "Renda Fixa"), salvo se o usuário pedir p/ manter na reserva.
-            asset.isReserve = isReserve === undefined ? false : !!isReserve;
+            reclassifyCashAsFixedIncome(asset, { fixedIncomeRate, fixedIncomeIndex, fixedIncomeSpread, maturityDate, isReserve });
             reclassified = true;
         } else if (isReserve !== undefined && (asset.type === 'FIXED_INCOME' || asset.type === 'CASH')) {
             // Alternar "Reserva separada" sem mudar a classe.
@@ -246,51 +286,45 @@ export const resetWallet = async (req, res, next) => {
 
 // PUT /wallet/targets — salva a carteira ideal (alocação-alvo + reserva) DESTA
 // carteira (Fase 2: cada carteira tem sua própria, não mais uma por conta).
+const TARGET_ALLOCATION_KEYS = ['STOCK', 'FII', 'STOCK_US', 'ETF', 'CRYPTO', 'FIXED_INCOME'];
+const TARGET_SUB_ALLOCATION_KEYS = {
+    STOCK: ['STOCK', 'ETF'],
+    FIXED_INCOME: ['IPCA', 'POS', 'PRE'],
+    STOCK_US: ['STOCK', 'REIT', 'ETF', 'DOLLAR'],
+};
+
+// { chave: safeFloat(valor || 0) } para cada chave, na ordem dada.
+const pickTargetFloats = (source, keys) =>
+    Object.fromEntries(keys.map((key) => [key, safeFloat(source[key] || 0)]));
+
+// `$set` da carteira ideal: só os campos enviados, cada um saneado.
+const buildTargetsUpdate = ({ targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation }) => {
+    const update = {};
+    if (targetAllocation !== undefined) {
+        update.targetAllocation = pickTargetFloats(targetAllocation, TARGET_ALLOCATION_KEYS);
+    }
+    if (targetReserve !== undefined) {
+        update.targetReserve = Math.max(0, safeFloat(targetReserve));
+    }
+    if (targetMonthlyDividendIncome !== undefined) {
+        update.targetMonthlyDividendIncome = Math.max(0, safeFloat(targetMonthlyDividendIncome));
+    }
+    if (targetSubAllocation !== undefined) {
+        update.targetSubAllocation = Object.fromEntries(
+            Object.entries(TARGET_SUB_ALLOCATION_KEYS).map(([group, keys]) =>
+                [group, pickTargetFloats(targetSubAllocation[group] || {}, keys)]),
+        );
+    }
+    return update;
+};
+
 export const updateWalletTargets = async (req, res, next) => {
     try {
         const userId = req.user.id;
         const walletId = req.walletId;
         const { targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation } = req.body;
 
-        const update = {};
-        if (targetAllocation !== undefined) {
-            update.targetAllocation = {
-                STOCK: safeFloat(targetAllocation.STOCK || 0),
-                FII: safeFloat(targetAllocation.FII || 0),
-                STOCK_US: safeFloat(targetAllocation.STOCK_US || 0),
-                ETF: safeFloat(targetAllocation.ETF || 0),
-                CRYPTO: safeFloat(targetAllocation.CRYPTO || 0),
-                FIXED_INCOME: safeFloat(targetAllocation.FIXED_INCOME || 0),
-            };
-        }
-        if (targetReserve !== undefined) {
-            update.targetReserve = Math.max(0, safeFloat(targetReserve));
-        }
-        if (targetMonthlyDividendIncome !== undefined) {
-            update.targetMonthlyDividendIncome = Math.max(0, safeFloat(targetMonthlyDividendIncome));
-        }
-        if (targetSubAllocation !== undefined) {
-            const st = targetSubAllocation.STOCK || {};
-            const fi = targetSubAllocation.FIXED_INCOME || {};
-            const us = targetSubAllocation.STOCK_US || {};
-            update.targetSubAllocation = {
-                STOCK: {
-                    STOCK: safeFloat(st.STOCK || 0),
-                    ETF: safeFloat(st.ETF || 0),
-                },
-                FIXED_INCOME: {
-                    IPCA: safeFloat(fi.IPCA || 0),
-                    POS: safeFloat(fi.POS || 0),
-                    PRE: safeFloat(fi.PRE || 0),
-                },
-                STOCK_US: {
-                    STOCK: safeFloat(us.STOCK || 0),
-                    REIT: safeFloat(us.REIT || 0),
-                    ETF: safeFloat(us.ETF || 0),
-                    DOLLAR: safeFloat(us.DOLLAR || 0),
-                },
-            };
-        }
+        const update = buildTargetsUpdate({ targetAllocation, targetReserve, targetMonthlyDividendIncome, targetSubAllocation });
 
         // { _id, user } no filtro: defesa em profundidade além do já validado por
         // resolveWallet (nunca reconfia num walletId cru sem o par correto de user).
