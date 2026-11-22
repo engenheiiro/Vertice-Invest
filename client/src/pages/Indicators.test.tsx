@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 import { Indicators } from './Indicators';
 import { researchService } from '../services/research';
@@ -110,11 +111,11 @@ describe('Tesouro Direto', () => {
     const { container } = renderPage();
     const toggle = await screen.findByRole('button', { name: 'Tesouro Direto' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    // Checado FECHADO: aberto, os filtros ficam dentro do cabeçalho role="button"
-    // (nested-interactive), achado da página registrado em docs/PENDENCIAS.md.
     expect(await axe(container)).toHaveNoViolations();
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    // Aberto, com os filtros à vista: eles ficam ao lado do botão, não dentro (nested-interactive).
+    expect(await axe(container)).toHaveNoViolations();
 
     const table = within(screen.getByRole('table'));
     expect(table.getByText('IPCA + 7.40%')).toBeInTheDocument();
@@ -127,11 +128,12 @@ describe('Tesouro Direto', () => {
     mockedMacro.mockResolvedValue(MACRO);
     renderPage();
     const toggle = await screen.findByRole('button', { name: 'Tesouro Direto' });
-    fireEvent.keyDown(toggle, { key: 'a' });
+    toggle.focus();
+    await userEvent.keyboard('a');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.keyDown(toggle, { key: 'Enter' });
+    await userEvent.keyboard('{Enter}');
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(toggle, { key: ' ' });
+    await userEvent.keyboard(' ');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 

@@ -158,16 +158,16 @@ export const Indicators = () => {
 
                 {/* --- CONTÊINER 1: TESOURO DIRETO --- */}
                 <div className="bg-base border border-slate-800 rounded-2xl overflow-hidden shadow-2xl relative z-0 mb-6">
-                    <div 
-                        className="p-6 border-b border-slate-800 bg-card flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-panel transition-colors"
-                        onClick={() => setIsTreasuryOpen(!isTreasuryOpen)}
-                        onKeyDown={onToggleKey(() => setIsTreasuryOpen(!isTreasuryOpen))}
-                        role="button"
-                        tabIndex={0}
-                        aria-expanded={isTreasuryOpen}
-                        aria-labelledby="treasury-heading"
-                    >
-                        <div className="flex items-center gap-3">
+                    {/* O título é o botão; os filtros ficam ao lado dele, não dentro (botão dentro de botão). */}
+                    <div className="p-6 border-b border-slate-800 bg-card flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-panel transition-colors">
+                        <button
+                            type="button"
+                            onClick={() => setIsTreasuryOpen(!isTreasuryOpen)}
+                            aria-expanded={isTreasuryOpen}
+                            aria-controls="treasury-table"
+                            aria-labelledby="treasury-heading"
+                            className="flex items-center gap-3 text-left"
+                        >
                             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
                                 <ShieldCheck size={20} className="text-emerald-500" />
                             </div>
@@ -182,11 +182,11 @@ export const Indicators = () => {
                                     )}
                                 </p>
                             </div>
-                        </div>
+                        </button>
 
                         <div className="flex items-center gap-4">
                             {isTreasuryOpen && (
-                                <div role="presentation" className="hidden md:flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+                                <div className="hidden md:flex items-center gap-2 bg-slate-900/50 p-1 rounded-lg border border-slate-800 animate-fade-in">
                                     <Filter size={14} className="text-slate-500 ml-2" />
                                     {['ALL', 'IPCA', 'PREFIXADO', 'SELIC'].map((ft) => (
                                         <button
@@ -203,14 +203,15 @@ export const Indicators = () => {
                                     ))}
                                 </div>
                             )}
-                            <div className="p-2 bg-slate-800 rounded-lg text-slate-400">
+                            <button type="button" tabIndex={-1} aria-hidden="true" onClick={() => setIsTreasuryOpen(!isTreasuryOpen)}
+                                className="p-2 bg-slate-800 rounded-lg text-slate-400">
                                 {isTreasuryOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </div>
+                            </button>
                         </div>
                     </div>
 
                     {isTreasuryOpen && (
-                        <div className="overflow-x-auto relative z-10 animate-fade-in">
+                        <div id="treasury-table" className="overflow-x-auto relative z-10 animate-fade-in">
                             <table className="w-full text-left border-collapse min-w-[800px]">
                                 <thead className="bg-panel text-[10px] font-black text-slate-500 uppercase tracking-widest sticky top-0 z-30 shadow-sm">
                                     <tr>
@@ -377,13 +378,13 @@ const IndicatorCard = ({ label, value, suffix = '', desc, color = 'text-white', 
             </div>
             
             <div className="relative z-10">
-                <h3 className={`text-xl font-black ${color} tracking-tight`}>
+                <p className={`text-xl font-black ${color} tracking-tight`}>
                     {isCurrency 
                         ? `${currencyPrefix} ${value?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) || '0,00'}` 
                         : value?.toLocaleString('pt-BR') || '0.00'
                     }
                     {suffix}
-                </h3>
+                </p>
                 
                 <div className="flex items-center justify-between mt-1">
                     <span className="text-[10px] text-slate-600 font-medium">{desc}</span>
