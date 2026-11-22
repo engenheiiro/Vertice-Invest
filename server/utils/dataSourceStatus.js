@@ -244,110 +244,95 @@ export const buildSuspectView = (suspects = []) => {
  * outros dois estados (recuperado por reserva, escalada conhecida) são o sistema
  * funcionando como projetado.
  */
-export const buildEscalationView = (escalations = [], sourceStats = []) => {
-    const rotulo = new Map(sourceStats.map((s) => [s.id, s.short || s.label]));
-    const bySource = new Map();
-    const chains = {};
+const emptyChainSummary = (chain, vocabulario) => ({
+    chain,
+    total: 0, unresolved: 0, expected: 0,
+    /**
+     * Dos `unresolved`, quantos ninguém PODERIA ter resolvido.
+     *
+     * Papel que não negociou não tem fechamento em fonte alguma. Contado
+     * junto, ele afogava o alarme: em 08/09/2026 a linha dizia "49 sem
+     * fechamento em fonte nenhuma" em vermelho, e os 49 eram ilíquidos
+     * num dia em que o arquivo da B3 estava publicado e perfeito. O que
+     * sobra depois desta subtração é o conjunto com consequência.
+     */
+    unresolvedExpected: 0,
+    byResolver: [],
+    items: [],
+    truncated: 0,
+    /**
+     * QUANDO foi a escalada mais recente desta cadeia.
+     *
+     * Sem ela a linha do painel é uma afirmação sem tempo — "43 ativos
+     * precisaram de reserva" — cercada de cards que falam do agora
+     * ("Recebendo · agora"). Um estouro de sete horas atrás lia-se como
+     * estando acontecendo, e a única régua na tela ("desde o último
+     * reinício") só aparecia no texto do estado VAZIO, que é justamente
+     * o que ninguém precisa ler.
+     *
+     * Calculado aqui, e não pegando `items[0].at`: a lista é ordenada
+     * por "sem resolver primeiro, depois mais recente", então o primeiro
+     * item pode ser uma escalada antiga que ninguém resolveu.
+     */
+    lastAt: null,
+    /**
+     * O VOCABULÁRIO da cadeia — as frases prontas, escritas aqui e não na
+     * tela. O painel nasceu falando só de cotações, então "ativo" e
+     * "preço" estavam escritos no componente; com câmbio, indicadores e
+     * fechamento medidos pelo mesmo mecanismo, a mesma frase passaria a
+     * dizer "2 ativo(s) sem preço" para o dólar e o Bitcoin. Quem sabe o
+     * nome das coisas é a cadeia.
+     */
+    vocabulary: { ...vocabulario },
+});
 
-    // Cadeia instrumentada começa vazia, não ausente: "nada escalou" é notícia
-    // boa e precisa aparecer como tal. Cadeia sem ledger não entra de jeito
-    // nenhum — ver LEDGERED_CHAINS.
-    for (const [chain, vocabulario] of LEDGERED_CHAINS) {
-        chains[chain] = {
-            chain,
-            total: 0,
-            unresolved: 0,
-            expected: 0,
-            /**
-             * Dos `unresolved`, quantos ninguém PODERIA ter resolvido.
-             *
-             * Papel que não negociou não tem fechamento em fonte alguma. Contado
-             * junto, ele afogava o alarme: em 08/09/2026 a linha dizia "49 sem
-             * fechamento em fonte nenhuma" em vermelho, e os 49 eram ilíquidos
-             * num dia em que o arquivo da B3 estava publicado e perfeito. O que
-             * sobra depois desta subtração é o conjunto com consequência.
-             */
-            unresolvedExpected: 0,
-            byResolver: [],
-            items: [],
-            truncated: 0,
-            /**
-             * QUANDO foi a escalada mais recente desta cadeia.
-             *
-             * Sem ela a linha do painel é uma afirmação sem tempo — "43 ativos
-             * precisaram de reserva" — cercada de cards que falam do agora
-             * ("Recebendo · agora"). Um estouro de sete horas atrás lia-se como
-             * estando acontecendo, e a única régua na tela ("desde o último
-             * reinício") só aparecia no texto do estado VAZIO, que é justamente
-             * o que ninguém precisa ler.
-             *
-             * Calculado aqui, e não pegando `items[0].at`: a lista é ordenada
-             * por "sem resolver primeiro, depois mais recente", então o primeiro
-             * item pode ser uma escalada antiga que ninguém resolveu.
-             */
-            lastAt: null,
-            /**
-             * O VOCABULÁRIO da cadeia — as frases prontas, escritas aqui e não na
-             * tela. O painel nasceu falando só de cotações, então "ativo" e
-             * "preço" estavam escritos no componente; com câmbio, indicadores e
-             * fechamento medidos pelo mesmo mecanismo, a mesma frase passaria a
-             * dizer "2 ativo(s) sem preço" para o dólar e o Bitcoin. Quem sabe o
-             * nome das coisas é a cadeia.
-             */
-            vocabulary: { ...vocabulario },
-        };
-    }
+const tallyChain = (alvo, ev) => {
+    alvo.total += 1;
+    if (!ev.resolvedBy) alvo.unresolved += 1;
+    if (ev.expected) alvo.expected += 1;
+    if (!ev.resolvedBy && ev.expected) alvo.unresolvedExpected += 1;
+    if (ev.at && (!alvo.lastAt || new Date(ev.at) > new Date(alvo.lastAt))) alvo.lastAt = ev.at;
+};
 
-    const porResolver = new Map();
-
-    for (const ev of escalations) {
-        const alvo = chains[ev.chain];
-        if (!alvo) continue;
-        alvo.total += 1;
-        if (!ev.resolvedBy) alvo.unresolved += 1;
-        if (ev.expected) alvo.expected += 1;
-        if (!ev.resolvedBy && ev.expected) alvo.unresolvedExpected += 1;
-        if (ev.at && (!alvo.lastAt || new Date(ev.at) > new Date(alvo.lastAt))) alvo.lastAt = ev.at;
-
-        const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
-        porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
-
-        // A fonte que a rotina decidiu NÃO consultar não entra nas contas de
-        // desempenho: não foi alcançada, não perdeu nada e não ficou com órfão.
-        // Somá-la ali era o que dava ao Yahoo 523 `missed` num dia em que ele não
-        // recebeu nenhuma dessas chamadas — a régua de staleness é que o poupou.
-        //
-        // Mas ela precisa CONTAR em algum lugar, e é por isso que `skipped` existe
-        // aqui: sem ele a fonte sumia do mapa, o card caía no ramo de "reached
-        // igual a zero" e afirmava "esta fonte trouxe o fechamento de todos" ao
-        // lado de uma linha dizendo que mil ativos ficaram sem fechamento na
-        // série. Silêncio por não ter sido chamada e silêncio por não ter tido o
-        // que fazer são estados opostos, e o painel tem que saber qual é qual.
-        const naoConsultadas = new Set(ev.skipped || []);
-        for (const id of ev.tried || []) {
-            if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0, orphanedExpected: 0, skipped: 0 });
-            const conta = bySource.get(id);
-            if (naoConsultadas.has(id)) { conta.skipped += 1; continue; }
-            conta.reached += 1;
-            if (ev.resolvedBy === id) conta.rescued += 1;
-            else conta.missed += 1;
-            // `missed` junta duas coisas opostas: o assunto que a fonte SEGUINTE
-            // salvou (aí a falha é desta fonte) e o que ninguém salvou (aí o que
-            // faltou foi papel negociando). Separar é o que permite não acusar
-            // uma reserva por ter sido chamada só para ticker morto.
-            if (!ev.resolvedBy) {
-                conta.orphaned += 1;
-                // Dos órfãos, quantos eram ausência ESPERADA (ticker morto, papel
-                // sem pregão) — é o que separa "só recebeu assunto morto" (calmo)
-                // de "só recebeu assunto que ninguém resolveu, e não era esperado"
-                // (falha real). Sem isso, `soAssuntoMorto` em `buildSourceStatuses`
-                // via `orphaned === reached` também ficava calmo quando a causa era
-                // SEM_ARQUIVO — o arquivo da B3 não veio, não o papel sem negócio.
-                if (ev.expected) conta.orphanedExpected += 1;
-            }
+// A fonte que a rotina decidiu NÃO consultar não entra nas contas de
+// desempenho: não foi alcançada, não perdeu nada e não ficou com órfão.
+// Somá-la ali era o que dava ao Yahoo 523 `missed` num dia em que ele não
+// recebeu nenhuma dessas chamadas — a régua de staleness é que o poupou.
+//
+// Mas ela precisa CONTAR em algum lugar, e é por isso que `skipped` existe
+// aqui: sem ele a fonte sumia do mapa, o card caía no ramo de "reached
+// igual a zero" e afirmava "esta fonte trouxe o fechamento de todos" ao
+// lado de uma linha dizendo que mil ativos ficaram sem fechamento na
+// série. Silêncio por não ter sido chamada e silêncio por não ter tido o
+// que fazer são estados opostos, e o painel tem que saber qual é qual.
+const tallySources = (bySource, ev) => {
+    const naoConsultadas = new Set(ev.skipped || []);
+    for (const id of ev.tried || []) {
+        if (!bySource.has(id)) bySource.set(id, { reached: 0, rescued: 0, missed: 0, orphaned: 0, orphanedExpected: 0, skipped: 0 });
+        const conta = bySource.get(id);
+        if (naoConsultadas.has(id)) { conta.skipped += 1; continue; }
+        conta.reached += 1;
+        if (ev.resolvedBy === id) conta.rescued += 1;
+        else conta.missed += 1;
+        // `missed` junta duas coisas opostas: o assunto que a fonte SEGUINTE
+        // salvou (aí a falha é desta fonte) e o que ninguém salvou (aí o que
+        // faltou foi papel negociando). Separar é o que permite não acusar
+        // uma reserva por ter sido chamada só para ticker morto.
+        if (!ev.resolvedBy) {
+            conta.orphaned += 1;
+            // Dos órfãos, quantos eram ausência ESPERADA (ticker morto, papel
+            // sem pregão) — é o que separa "só recebeu assunto morto" (calmo)
+            // de "só recebeu assunto que ninguém resolveu, e não era esperado"
+            // (falha real). Sem isso, `soAssuntoMorto` em `buildSourceStatuses`
+            // via `orphaned === reached` também ficava calmo quando a causa era
+            // SEM_ARQUIVO — o arquivo da B3 não veio, não o papel sem negócio.
+            if (ev.expected) conta.orphanedExpected += 1;
         }
     }
+};
 
+const fillResolvers = (chains, porResolver, sourceStats) => {
+    const rotulo = new Map(sourceStats.map((s) => [s.id, s.short || s.label]));
     for (const [chave, count] of porResolver) {
         const [chain, id] = chave.split('|');
         if (!chains[chain]) continue;
@@ -364,18 +349,20 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
             return ordem.indexOf(a.id) - ordem.indexOf(b.id);
         });
     }
+};
 
-    // Não resolvido primeiro, depois o mais recente: o teto da lista corta o que
-    // sobra, e o que sobra tem que ser o menos importante.
-    //
-    // Três pesos, não dois: entre "ninguém resolveu" e "a reserva resolveu" mora
-    // a ausência ESPERADA, que ninguém tinha como resolver. Com dois pesos, 49
-    // papéis sem pregão empurravam para fora da amostra justamente o ativo que
-    // ficou sem fechamento por falha de fonte.
-    //
-    // A régua é IMPORTADA, e não recopiada: é a mesma que decide quem o teto do
-    // ledger descarta. Duas cópias que discordem fazem a tela e o registro terem
-    // opiniões diferentes sobre o que é dispensável — e o alarme some no meio.
+// Não resolvido primeiro, depois o mais recente: o teto da lista corta o que
+// sobra, e o que sobra tem que ser o menos importante.
+//
+// Três pesos, não dois: entre "ninguém resolveu" e "a reserva resolveu" mora
+// a ausência ESPERADA, que ninguém tinha como resolver. Com dois pesos, 49
+// papéis sem pregão empurravam para fora da amostra justamente o ativo que
+// ficou sem fechamento por falha de fonte.
+//
+// A régua é IMPORTADA, e não recopiada: é a mesma que decide quem o teto do
+// ledger descarta. Duas cópias que discordem fazem a tela e o registro terem
+// opiniões diferentes sobre o que é dispensável — e o alarme some no meio.
+const fillSamples = (chains, escalations) => {
     const ordenados = [...escalations].sort((a, b) => {
         const pesoA = escalationDiscardRank(a);
         const pesoB = escalationDiscardRank(b);
@@ -387,17 +374,31 @@ export const buildEscalationView = (escalations = [], sourceStats = []) => {
         if (!alvo) continue;
         if (alvo.items.length >= ESCALATION_SAMPLE) { alvo.truncated += 1; continue; }
         alvo.items.push({
-            subject: ev.subject,
-            tried: ev.tried,
-            skipped: ev.skipped || [],
-            resolvedBy: ev.resolvedBy,
-            reason: ev.reason,
-            expected: ev.expected,
-            count: ev.count,
-            at: ev.at,
+            subject: ev.subject, tried: ev.tried, skipped: ev.skipped || [], resolvedBy: ev.resolvedBy,
+            reason: ev.reason, expected: ev.expected, count: ev.count, at: ev.at,
         });
     }
+};
 
+export const buildEscalationView = (escalations = [], sourceStats = []) => {
+    const bySource = new Map();
+    // Cadeia instrumentada começa vazia, não ausente: "nada escalou" é notícia
+    // boa e precisa aparecer como tal. Cadeia sem ledger não entra de jeito
+    // nenhum — ver LEDGERED_CHAINS.
+    const chains = Object.fromEntries([...LEDGERED_CHAINS].map(([chain, vocab]) => [chain, emptyChainSummary(chain, vocab)]));
+    const porResolver = new Map();
+
+    for (const ev of escalations) {
+        const alvo = chains[ev.chain];
+        if (!alvo) continue;
+        tallyChain(alvo, ev);
+        const chaveResolver = `${ev.chain}|${ev.resolvedBy || ''}`;
+        porResolver.set(chaveResolver, (porResolver.get(chaveResolver) || 0) + 1);
+        tallySources(bySource, ev);
+    }
+
+    fillResolvers(chains, porResolver, sourceStats);
+    fillSamples(chains, escalations);
     return { bySource, chains };
 };
 

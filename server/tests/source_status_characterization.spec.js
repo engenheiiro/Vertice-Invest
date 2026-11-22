@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { buildSourceStatuses } from '../utils/dataSourceStatus.js';
+import { buildEscalationView, buildSourceStatuses } from '../utils/dataSourceStatus.js';
 import { _resetSourceStats, getSourceStats } from '../utils/sourceHealth.js';
 
 // Caracterização de buildSourceStatuses, gravada sobre a função monolítica ANTES
@@ -71,15 +71,21 @@ const escaladas = (r, fontes) => {
 
 describe('buildSourceStatuses — caracterização antes da decomposição', () => {
     let saidas;
+    let vistas;
     beforeAll(() => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(NOW);
         _resetSourceStats();
         const catalogo = getSourceStats();
         const r = rng(20260904);
+        vistas = [];
         saidas = Array.from({ length: 400 }, () => {
             const fontes = catalogo.map((s) => variarFonte(r, s));
-            return buildSourceStatuses(facts(r), fontes, escaladas(r, fontes));
+            const fatos = facts(r);
+            const eventos = escaladas(r, fontes);
+            const vista = buildEscalationView(eventos, fontes);
+            vistas.push({ bySource: [...vista.bySource], chains: vista.chains });
+            return buildSourceStatuses(fatos, fontes, eventos);
         });
     });
     afterAll(() => { vi.useRealTimers(); });
@@ -91,6 +97,10 @@ describe('buildSourceStatuses — caracterização antes da decomposição', () 
     it('a grade passa por todos os vereditos (cobertura dos ramos)', () => {
         const vereditos = new Set(saidas.flat().map((s) => `${s.status}|${s.idleReason}|${String(s.detail).replace(/\d+%?/g, '#')}`));
         expect([...vereditos].sort()).toMatchSnapshot();
+    });
+
+    it('a visão de escaladas (bySource + chains) produz a mesma saída (digest)', () => {
+        expect(createHash('sha256').update(JSON.stringify(vistas)).digest('hex')).toMatchSnapshot();
     });
 
     it('amostra legível (diff útil quando o digest muda)', () => {

@@ -30,6 +30,8 @@ exports[`buildSourceStatuses — caracterização antes da decomposição > a gr
 ]
 `;
 
+exports[`buildSourceStatuses — caracterização antes da decomposição > a visão de escaladas (bySource + chains) produz a mesma saída (digest) 1`] = `"954801fe5e085f31df9aecf9488a037c33fbcbf26cbd51958a0dcbd96b95154b"`;
+
 exports[`buildSourceStatuses — caracterização antes da decomposição > amostra legível (diff útil quando o digest muda) 1`] = `
 [
   {
