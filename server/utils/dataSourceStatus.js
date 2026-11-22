@@ -21,6 +21,7 @@
 
 import { cadenceLabel, nextRunLabel } from './sourceSchedule.js';
 import { escalationDiscardRank, LEDGERED_CHAINS } from './sourceHealth.js';
+import { isSettledFinding } from './quoteSanity.js';
 
 export const SOURCE_STATUS = { OK: 'OK', WARN: 'WARN', CRITICAL: 'CRITICAL', UNKNOWN: 'UNKNOWN' };
 
@@ -219,7 +220,7 @@ export const buildSuspectView = (suspects = []) => {
          * as outras cinco é como um alarme perde a credibilidade — o dono abre a
          * lista, vê sete, checa duas que já estavam resolvidas e para de abrir.
          */
-        settled: (s.findings || []).some((f) => f.arbitration === 'NOVO_CONFIRMADO'),
+        settled: (s.findings || []).some(isSettledFinding),
         count: s.count ?? 1,
         at: s.at,
     }));

@@ -83,7 +83,6 @@ export const isMfaLocked = (user, now = Date.now()) => {
   return Number.isFinite(until) && until > now;
 };
 
-export const hashBackupCode = (code) => hashCode(code);
 
 const RESET_FAILURES = { mfaFailedAttempts: 0, mfaLockedUntil: null };
 

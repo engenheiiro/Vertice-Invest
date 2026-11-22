@@ -105,7 +105,3 @@ export function getFiiSegmentStyle(sector?: string | null): FiiSegmentStyle | nu
     return SEGMENT_STYLES[fiiSectorLabel(sector)] || null;
 }
 
-/** Ícone do segmento de um FII, ou `null` quando o segmento não é reconhecido. */
-export function getFiiSegmentIcon(sector?: string | null): LucideIcon | null {
-    return getFiiSegmentStyle(sector)?.icon || null;
-}

@@ -46,4 +46,3 @@ export const clearUserCache = () => cache.clear();
 
 // Exposto para testes/observabilidade.
 export const _cacheSize = () => cache.size;
-export const TTL_MS_VALUE = TTL_MS;

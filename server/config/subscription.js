@@ -87,9 +87,6 @@ export const isRetiredPlan = (planKey) => RETIRED_PLAN_KEYS.includes(basePlanOf(
 export const PUBLIC_PLAN_KEYS = Object.keys(PLANS)
     .filter((key) => !isTestPlan(key) && !isRetiredPlan(key));
 
-// Só o mensal vira assinatura recorrente — é o único ciclo que a troca de plano
-// (cancelar preapproval e recriar) sabe operar.
-export const PUBLIC_MONTHLY_PLAN_KEYS = PUBLIC_PLAN_KEYS.filter((key) => !isAnnualPlan(key));
 
 // --- HIERARQUIA DE PLANOS ---
 // Ordem de poder. Fonte única do "plano X é pelo menos Y" no backend — o gate de

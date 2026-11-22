@@ -25,19 +25,6 @@ export interface TutorialStep {
     badge: string;
 }
 
-/** Lista canônica de todos os ids de alvo usados pelo tutorial (para testes). */
-export const TUTORIAL_TARGET_IDS = [
-    'tour-nav-links',
-    'tour-nav-mobile',
-    'tour-equity',
-    'tour-radar',
-    'tour-allocation',
-    'tour-dividends',
-    'tour-wallet-kpis',
-    'tour-wallet-actions',
-    'tour-wallet-charts',
-    'tour-wallet-tabs',
-] as const;
 
 // Números da carteira simulada saem de DEMO_KPIS — a mesma fonte que alimenta os
 // cards ao fundo. Escritos à mão no texto, eles divergiam do que o usuário via na

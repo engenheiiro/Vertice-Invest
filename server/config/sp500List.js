@@ -524,10 +524,3 @@ export const SP500_STOCKS = [
   { ticker: 'VERA', name: 'Vera Therapeutics', sector: 'Healthcare', subsector: 'Biotechnology' },
 ]
 
-export const SP500_TICKERS = SP500_STOCKS.map(s => s.ticker)
-
-export const SP500_BY_SECTOR = SP500_STOCKS.reduce((acc, stock) => {
-  if (!acc[stock.sector]) acc[stock.sector] = []
-  acc[stock.sector].push(stock)
-  return acc
-}, {})

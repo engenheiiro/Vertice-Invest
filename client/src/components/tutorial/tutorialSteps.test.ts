@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { DASHBOARD_STEPS, WALLET_STEPS, TUTORIAL_TARGET_IDS } from './tutorialSteps';
+import { DASHBOARD_STEPS, WALLET_STEPS } from './tutorialSteps';
+
+// Lista canônica dos ids de alvo do tutorial. Mora aqui porque só o teste a usa:
+// ela trava que todo passo aponta para um alvo conhecido e que todo alvo existe.
+const TUTORIAL_TARGET_IDS: readonly string[] = [
+    'tour-nav-links',
+    'tour-nav-mobile',
+    'tour-equity',
+    'tour-radar',
+    'tour-allocation',
+    'tour-dividends',
+    'tour-wallet-kpis',
+    'tour-wallet-actions',
+    'tour-wallet-charts',
+    'tour-wallet-tabs',
+];
 
 const ALLOWED_TABS = ['OVERVIEW', 'PERFORMANCE', 'DIVIDENDS', 'STATEMENT'];
 

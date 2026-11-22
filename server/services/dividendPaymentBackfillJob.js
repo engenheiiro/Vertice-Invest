@@ -30,7 +30,6 @@ const RODANDO = 'RUNNING';
 const CONCLUIDO = 'DONE';
 const ERRO = 'ERROR';
 
-export const BACKFILL_STATUS = { OCIOSO, RODANDO, CONCLUIDO, ERRO };
 
 let estado = {
     status: OCIOSO,

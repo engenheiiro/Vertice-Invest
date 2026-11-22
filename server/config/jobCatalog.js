@@ -209,7 +209,6 @@ export const JOB_CATALOG = {
     },
 };
 
-export const getJobMeta = (jobId) => JOB_CATALOG[jobId] || null;
 
 export const getJobLabel = (jobId) => JOB_CATALOG[jobId]?.label || jobId;
 
@@ -222,8 +221,3 @@ export const getJobMaxRuntimeMinutes = (jobId) => {
 /** O mesmo teto na unidade do watchdog. */
 export const getJobMaxRuntimeMs = (jobId) => getJobMaxRuntimeMinutes(jobId) * 60 * 1000;
 
-/** Jobs que a sentinela cobra presença (exclui anuais e disparos manuais). */
-export const monitoredJobIds = () =>
-    Object.entries(JOB_CATALOG)
-        .filter(([, meta]) => meta.monitored !== false && Number.isFinite(meta.maxSilenceHours))
-        .map(([id]) => id);

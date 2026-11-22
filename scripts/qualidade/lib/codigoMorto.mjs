@@ -15,6 +15,16 @@ const RE_EXPORT = /export\s+(?:async\s+)?(?:function\*?|const|let|class)\s+(\w+)
 
 const semExtensao = (f) => f.replace(/\.(js|jsx|ts|tsx|mjs)$/, '');
 
+/**
+ * Nome pelo qual o arquivo é importado: `ui/index.ts` é importado como `'../ui'`,
+ * pelo nome da PASTA. Pelo nome do arquivo ("index"), o barrel parecia sem
+ * import nenhum e foi apagado por engano (12 telas quebraram no tsc).
+ */
+const nomeImportavel = (caminho) => {
+  const nome = path.posix.basename(semExtensao(caminho));
+  return nome === 'index' ? path.posix.basename(path.posix.dirname(caminho)) : nome;
+};
+
 /** basename → arquivos que importam algo com esse nome. */
 function indiceDeImportadores(corpus) {
   const indice = new Map();
@@ -55,8 +65,7 @@ export function encontrarCodigoMorto(corpus, fontes, { ehTeste, entradas }) {
   const mortos = [];
   for (const arquivo of fontes) {
     if (entradas.has(arquivo.caminho)) continue;
-    const nome = path.posix.basename(semExtensao(arquivo.caminho));
-    const importadores = [...(indice.get(nome) || [])]
+    const importadores = [...(indice.get(nomeImportavel(arquivo.caminho)) || [])]
       .filter((g) => g !== arquivo.caminho)
       .map((g) => porCaminho.get(g));
     if (importadores.length === 0) { mortos.push(`${arquivo.caminho} (arquivo sem import)`); continue; }

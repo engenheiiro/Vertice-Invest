@@ -167,13 +167,6 @@ export const deriveDividendFromGap = ({
     return { amount: gap, exDate: priceDate, ratio };
 };
 
-export const DIVIDEND_GAP_LIMITS = {
-    MIN_GAP,
-    MIN_GAP_RATIO,
-    MAX_GAP_RATIO,
-    PLAUSIBILITY_MAX_MULTIPLE,
-    PLAUSIBILITY_MIN_DIVISOR,
-};
 
 /**
  * Janela em que um provento provisório e um oficial são considerados o MESMO

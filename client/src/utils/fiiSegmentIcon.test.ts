@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getFiiSegmentIcon, getFiiSegmentStyle } from './fiiSegmentIcon';
+import { getFiiSegmentStyle } from './fiiSegmentIcon';
+
+const iconeDe = (sector?: string | null) => getFiiSegmentStyle(sector)?.icon ?? null;
 
 // O mapa de ícones é indexado pelo RÓTULO de `fiiSectorLabel`, não pelo texto da
 // fonte. É o acoplamento frágil do desenho: renomear um rótulo em
@@ -30,27 +32,27 @@ const CANON = [
         'Saude',
 ];
 
-describe('getFiiSegmentIcon', () => {
+describe('ícone do segmento (getFiiSegmentStyle().icon)', () => {
     it.each(CANON)('resolve um ícone para "%s"', (sector) => {
-        expect(getFiiSegmentIcon(sector)).toBeTruthy();
+        expect(iconeDe(sector)).toBeTruthy();
     });
 
     it('dá ícones distintos a segmentos de risco distinto', () => {
         // O caso que motivou a troca: HGCR11 (papel) e HGBS11 (shoppings) tinham
         // o mesmo chip "HG".
-        expect(getFiiSegmentIcon('Papel')).not.toBe(getFiiSegmentIcon('Shoppings'));
+        expect(iconeDe('Papel')).not.toBe(iconeDe('Shoppings'));
     });
 
     it('trata sinônimos da mesma coisa como o mesmo ícone', () => {
-        expect(getFiiSegmentIcon('Recebiveis')).toBe(getFiiSegmentIcon('Papel'));
-        expect(getFiiSegmentIcon('Escritorios')).toBe(getFiiSegmentIcon('Lajes Corporativas'));
+        expect(iconeDe('Recebiveis')).toBe(iconeDe('Papel'));
+        expect(iconeDe('Escritorios')).toBe(iconeDe('Lajes Corporativas'));
     });
 
     it('devolve null sem segmento ou fora do canon — a linha cai nas iniciais', () => {
-        expect(getFiiSegmentIcon('')).toBeNull();
-        expect(getFiiSegmentIcon(undefined)).toBeNull();
-        expect(getFiiSegmentIcon(null)).toBeNull();
-        expect(getFiiSegmentIcon('Segmento Novo do Fundamentus')).toBeNull();
+        expect(iconeDe('')).toBeNull();
+        expect(iconeDe(undefined)).toBeNull();
+        expect(iconeDe(null)).toBeNull();
+        expect(iconeDe('Segmento Novo do Fundamentus')).toBeNull();
     });
 });
 

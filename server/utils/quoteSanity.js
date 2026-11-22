@@ -378,15 +378,3 @@ export const resolveContestedChange = ({ price, ownClose = null }) => {
     return { change: Math.abs(pct) < 0.005 ? 0 : pct, previousClose: base };
 };
 
-/** Rótulos de tela, em português de dono. A tela não conhece os códigos. */
-export const SUSPECT_LABEL = {
-    SALTO_NA_FONTE: 'Salto fora do normal',
-    SALTO_VS_BANCO: 'Preço distante do que tínhamos',
-    VARIACAO_INCOERENTE: 'Variação não bate com o preço',
-};
-
-/** Rótulos do veredito da nossa série, quando ela conseguiu desempatar. */
-export const ARBITRATION_LABEL = {
-    NOVO_CONFIRMADO: 'Corrigido — o errado era o preço guardado',
-    GUARDADO_CONFIRMADO: 'Nossa série não confirma o preço novo',
-};

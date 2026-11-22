@@ -46,7 +46,6 @@ export const MAX_ATTACHMENTS_PER_TICKET = 8;
 // teste de unidade nenhum.
 export const MAX_ATTACHMENT_BYTES = 900_000;
 
-export const ALLOWED_ATTACHMENT_MIME = ['image/png', 'image/jpeg', 'image/webp'];
 
 // Assinatura única do atendimento para o usuário — a tela e o JSON dizem o mesmo.
 export const SUPPORT_DISPLAY_NAME = 'Suporte Vértice';

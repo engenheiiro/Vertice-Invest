@@ -149,13 +149,6 @@ export const startRuntimeMetrics = () => {
   memorySamplerTimer.unref?.();
 };
 
-/** Encerra a coleta contínua. Existe para os testes e para o shutdown limpo. */
-export const stopRuntimeMetrics = () => {
-  if (memorySamplerTimer) clearInterval(memorySamplerTimer);
-  memorySamplerTimer = null;
-  if (eventLoopHistogram) eventLoopHistogram.disable();
-  eventLoopHistogram = null;
-};
 
 const nsToMs = (value) => {
   const numeric = Number(value);

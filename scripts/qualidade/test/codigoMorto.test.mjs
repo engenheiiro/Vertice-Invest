@@ -24,6 +24,15 @@ test('código morto: arquivo sem import, export sem uso e export só de teste', 
   ]);
 });
 
+test('barrel index.ts importado pela pasta não é arquivo morto', () => {
+  const corpus = [
+    { caminho: 'client/src/pages/Dashboard.tsx', texto: "import { Card } from '../components/ui';" },
+    { caminho: 'client/src/components/ui/index.ts', texto: "export { Card } from './Card';" },
+  ];
+  const r = encontrarCodigoMorto(corpus, [corpus[1]], { ehTeste, entradas: new Set() });
+  assert.deepEqual(r, []);
+});
+
 test('export usado dentro do próprio arquivo não é morto', () => {
   const corpus = [
     { caminho: 'server/index.js', texto: "import { b } from './m.js';" },

@@ -324,11 +324,3 @@ export const assessBankCollectionForPersistence = (collection, issuers = BANK_IF
   };
 };
 
-export const BCB_IFDATA_CONSTANTS = Object.freeze({
-  BASE_URL,
-  DATASET_URL,
-  METHODOLOGY_VERSION,
-  REPORTS,
-  HARD_PLAUSIBILITY_RANGES,
-  REVIEW_RANGES,
-});
