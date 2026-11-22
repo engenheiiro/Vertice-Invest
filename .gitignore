@@ -126,3 +126,7 @@ server/backups/
 
 # Artefatos do check/catraca (scripts/qualidade)
 .qualidade/
+
+# Cópias de backup e rascunhos locais (nunca versionados)
+.backups/
+tmp/
