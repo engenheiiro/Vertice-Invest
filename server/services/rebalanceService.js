@@ -19,10 +19,9 @@ import { marketDataService } from './marketDataService.js';
 import { countBusinessDays } from '../utils/dateUtils.js';
 import { safeFloat, safeUnitPrice, safeCurrency, safeDiv, safeValue, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import {
-    STOCK_SUB_KEYS, FI_SUB_KEYS, US_SUB_KEYS, SUB_LABELS,
-    fixedIncomeSubKey, usSubKeyOf, stockSubKeyOf, hasSubMetas,
-    currentValueBySub, splitNeedBySubMeta, subGaps, foldEtfIntoStock,
+    SUB_LABELS, fixedIncomeSubKey, usSubKeyOf, stockSubKeyOf, foldEtfIntoStock,
 } from '../utils/subAllocation.js';
+import { gapHeadline, planBuysForGap } from './rebalanceBuySide.js';
 import { BUY_THRESHOLD, CAPITAL_GAINS_TAX, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { isDollarized } from '../utils/assetCurrency.js';
 import { positionCostBRL } from '../utils/fxRate.js';
@@ -51,8 +50,6 @@ const CLASS_LABELS = {
 // Drift mínimo (em % do patrimônio) para uma classe ser considerada fora da meta.
 // Evita gerar microvendas/microcompras por flutuação de mercado.
 const MIN_GAP_PCT = 1;
-// Quantos ativos no máximo entram do lado da compra por classe (não pulverizar).
-const MAX_BUYS_PER_CLASS = 4;
 
 // C1: classe EFETIVA de alocação do ativo. Um ativo de Reserva (flag isReserve,
 // ou CASH por natureza em posições ainda não migradas) conta como CASH — sai da
@@ -61,13 +58,6 @@ const MAX_BUYS_PER_CLASS = 4;
 // como reserva) para "acertar a alocação". O `type` real segue preservado para a
 // valuation (RF-reserva ainda rende como renda fixa), só a CLASSE muda.
 const reserveBucket = (asset) => resolveAllocationBucket(asset);
-
-const tierFromScore = (score) => {
-    if (score == null) return null;
-    if (score >= 55) return 'GOLD';
-    if (score >= 40) return 'SILVER';
-    return 'BRONZE';
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // I/O — valuation da carteira (valor de mercado atual por ativo e por classe)
@@ -339,6 +329,101 @@ export const estimateCapitalGainsTax = (asset, sellValueBr) => {
 // Núcleo PURO — recebe insumos já calculados e devolve o plano. Fácil de testar.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Enriquece holdings com score/teses do motor. A classe de cada holding é o próprio
+// `type` (ETF nacional é classe própria; ETFs internacionais têm type STOCK_US).
+const enrichHoldings = (assets, scoreByTicker) => assets.map((a) => {
+    const s = scoreByTicker[a.ticker];
+    return {
+        ...a,
+        score: s?.score ?? null,
+        action: s?.action ?? null,
+        bull: s?.bull ?? [],
+        bear: s?.bear ?? [],
+    };
+});
+
+// A reserva (CASH) é uma meta em VALOR fixo; o restante (investível) é distribuído
+// pelos percentuais de classe, igual ao Aporte Inteligente.
+const buildClassGaps = ({ valueByClass, totalEquity, targetAllocation, idealReserve, investable, covered }) => ALL_CLASSES.map((cls) => {
+    const currentValue = safeCurrency(valueByClass[cls] || 0);
+    const idealValue =
+        cls === 'CASH' ? safeCurrency(idealReserve) : safeCurrency(investable * ((targetAllocation[cls] || 0) / 100));
+    return {
+        class: cls,
+        label: CLASS_LABELS[cls],
+        currentValue,
+        idealValue,
+        currentPct: safeFloat((currentValue / totalEquity) * 100),
+        targetPct: cls === 'CASH' ? safeFloat((idealValue / totalEquity) * 100) : safeFloat(targetAllocation[cls] || 0),
+        gapValue: safeCurrency(idealValue - currentValue),
+        coverage: cls === 'CASH' || cls === 'FIXED_INCOME' || covered.has(cls) ? 'full' : 'allocation-only',
+    };
+});
+
+const sellReasons = (gap, h) => {
+    const reasons = [gapHeadline(gap, 'acima')];
+    if (h.score == null) {
+        reasons.push('Sem cobertura quant — corte por alocação');
+    } else if (h.action === 'WAIT' || h.score < BUY_THRESHOLD) {
+        reasons.push(`Score ${Math.round(h.score)} (AGUARDAR)`);
+        if (h.bear?.[0]) reasons.push(h.bear[0]);
+    } else {
+        reasons.push(`Reduzir excesso (mantém posição, score ${Math.round(h.score)})`);
+    }
+    return reasons;
+};
+
+// Rótulo de sub-tipo (ramificação) para Ações BR/RF/Exterior — espelha o lado
+// compra. Em Ações BR só marcamos ETFs nacionais (ação individual fica sem tag).
+const sellSubLabel = (gapClass, h) => {
+    if (gapClass === 'FIXED_INCOME') return SUB_LABELS.FIXED_INCOME[fixedIncomeSubKey(h.fixedIncomeIndex, h.fixedIncomeRate)];
+    if (gapClass === 'STOCK_US') return SUB_LABELS.STOCK_US[usSubKeyOf(h.usSubType)];
+    if (gapClass === 'STOCK' && stockSubKeyOf(h.rawType) === 'ETF') return SUB_LABELS.STOCK.ETF;
+    return null;
+};
+
+// Holdings da classe ordenados por prioridade de corte: pior qualidade primeiro.
+// Sem score → 60 (neutro): cortado depois de scored ruins, antes de scored bons.
+// Desempate: trima a maior posição primeiro (reduz concentração).
+const planSellsForGap = (gap, enriched, minGapValue, sells) => {
+    let excess = -gap.gapValue;
+    const holdings = enriched
+        .filter((a) => a.type === gap.class)
+        .sort((a, b) => {
+            const sa = a.score ?? 60;
+            const sb = b.score ?? 60;
+            if (sa !== sb) return sa - sb;
+            return b.valueBr - a.valueBr;
+        });
+
+    for (const h of holdings) {
+        if (excess <= minGapValue) break;
+        const amount = safeCurrency(Math.min(excess, h.valueBr));
+        if (amount <= 0) continue;
+
+        const quantity = h.priceBr > 0 ? safeFloat(amount / h.priceBr) : 0;
+        const estTax = estimateCapitalGainsTax(h, amount);
+        const isFull = amount >= h.valueBr - 0.01;
+        const reasons = sellReasons(gap, h);
+
+        sells.push({
+            ticker: h.ticker,
+            class: h.type,
+            type: h.type,
+            subLabel: sellSubLabel(gap.class, h),
+            amount,
+            quantity,
+            positionValue: h.valueBr,
+            isFullExit: isFull,
+            score: h.score,
+            action: h.action,
+            estTax,
+            reasons,
+        });
+        excess = safeCurrency(excess - amount);
+    }
+};
+
 export const buildRebalancePlan = ({
     valuation,
     targetAllocation,
@@ -370,42 +455,14 @@ export const buildRebalancePlan = ({
     };
     if (!totalEquity || totalEquity <= 0) return emptyPlan;
 
-    // Enriquece holdings com score/teses do motor. A classe de cada holding é o próprio
-    // `type` (ETF nacional é classe própria; ETFs internacionais têm type STOCK_US).
-    const enriched = assets.map((a) => {
-        const s = scoreByTicker[a.ticker];
-        return {
-            ...a,
-            score: s?.score ?? null,
-            action: s?.action ?? null,
-            bull: s?.bull ?? [],
-            bear: s?.bear ?? [],
-        };
-    });
+    const enriched = enrichHoldings(assets, scoreByTicker);
     const heldTickers = new Set(enriched.map((a) => a.ticker));
 
     // --- Metas e gaps por classe ---
-    // A reserva (CASH) é uma meta em VALOR fixo; o restante (investível) é distribuído
-    // pelos percentuais de classe, igual ao Aporte Inteligente.
     const idealReserve = Math.min(targetReserve || 0, totalEquity);
     const investable = Math.max(0, totalEquity - idealReserve);
     const minGapValue = (MIN_GAP_PCT / 100) * totalEquity;
-
-    const classGaps = ALL_CLASSES.map((cls) => {
-        const currentValue = safeCurrency(valueByClass[cls] || 0);
-        const idealValue =
-            cls === 'CASH' ? safeCurrency(idealReserve) : safeCurrency(investable * ((targetAllocation[cls] || 0) / 100));
-        return {
-            class: cls,
-            label: CLASS_LABELS[cls],
-            currentValue,
-            idealValue,
-            currentPct: safeFloat((currentValue / totalEquity) * 100),
-            targetPct: cls === 'CASH' ? safeFloat((idealValue / totalEquity) * 100) : safeFloat(targetAllocation[cls] || 0),
-            gapValue: safeCurrency(idealValue - currentValue),
-            coverage: cls === 'CASH' || cls === 'FIXED_INCOME' || covered.has(cls) ? 'full' : 'allocation-only',
-        };
-    });
+    const classGaps = buildClassGaps({ valueByClass, totalEquity, targetAllocation, idealReserve, investable, covered });
 
     const sells = [];
     const buys = [];
@@ -413,214 +470,14 @@ export const buildRebalancePlan = ({
     // --- LADO VENDA: classes acima da meta ---
     for (const gap of classGaps) {
         if (gap.gapValue >= -minGapValue) continue; // não está sobrealocada
-        let excess = -gap.gapValue;
-
-        // Holdings da classe ordenados por prioridade de corte: pior qualidade primeiro.
-        // Sem score → 60 (neutro): cortado depois de scored ruins, antes de scored bons.
-        // Desempate: trima a maior posição primeiro (reduz concentração).
-        const holdings = enriched
-            .filter((a) => a.type === gap.class)
-            .sort((a, b) => {
-                const sa = a.score ?? 60;
-                const sb = b.score ?? 60;
-                if (sa !== sb) return sa - sb;
-                return b.valueBr - a.valueBr;
-            });
-
-        for (const h of holdings) {
-            if (excess <= minGapValue) break;
-            const amount = safeCurrency(Math.min(excess, h.valueBr));
-            if (amount <= 0) continue;
-
-            const quantity = h.priceBr > 0 ? safeFloat(amount / h.priceBr) : 0;
-            const estTax = estimateCapitalGainsTax(h, amount);
-            const isFull = amount >= h.valueBr - 0.01;
-
-            const reasons = [];
-            reasons.push(`${gap.label} ${gap.currentPct.toFixed(0)}% acima da meta de ${gap.targetPct.toFixed(0)}%`);
-            if (h.score == null) {
-                reasons.push('Sem cobertura quant — corte por alocação');
-            } else if (h.action === 'WAIT' || h.score < BUY_THRESHOLD) {
-                reasons.push(`Score ${Math.round(h.score)} (AGUARDAR)`);
-                if (h.bear?.[0]) reasons.push(h.bear[0]);
-            } else {
-                reasons.push(`Reduzir excesso (mantém posição, score ${Math.round(h.score)})`);
-            }
-
-            // Rótulo de sub-tipo (ramificação) para Ações BR/RF/Exterior — espelha o lado
-            // compra. Em Ações BR só marcamos ETFs nacionais (ação individual fica sem tag).
-            let subLabel = null;
-            if (gap.class === 'FIXED_INCOME') subLabel = SUB_LABELS.FIXED_INCOME[fixedIncomeSubKey(h.fixedIncomeIndex, h.fixedIncomeRate)];
-            else if (gap.class === 'STOCK_US') subLabel = SUB_LABELS.STOCK_US[usSubKeyOf(h.usSubType)];
-            else if (gap.class === 'STOCK' && stockSubKeyOf(h.rawType) === 'ETF') subLabel = SUB_LABELS.STOCK.ETF;
-
-            sells.push({
-                ticker: h.ticker,
-                class: h.type,
-                type: h.type,
-                subLabel,
-                amount,
-                quantity,
-                positionValue: h.valueBr,
-                isFullExit: isFull,
-                score: h.score,
-                action: h.action,
-                estTax,
-                reasons,
-            });
-            excess = safeCurrency(excess - amount);
-        }
+        planSellsForGap(gap, enriched, minGapValue, sells);
     }
 
     // --- LADO COMPRA: classes abaixo da meta ---
+    const buyCtx = { enriched, heldTickers, covered, idealBuysByClass, usdRate, targetSubAllocation };
     for (const gap of classGaps) {
         if (gap.gapValue <= minGapValue) continue; // não está subalocada
-        const need = gap.gapValue;
-
-        // Reserva e Renda Fixa não têm ranking de tickers → sugestão genérica.
-        if (gap.class === 'CASH' || gap.class === 'FIXED_INCOME') {
-            // Ramificação: se a Renda Fixa tem sub-metas, quebra o aporte por sub-tipo
-            // (IPCA / Pós-fixado / Prefixado) para o usuário saber quanto vai em cada um.
-            let subBreakdown = null;
-            if (gap.class === 'FIXED_INCOME' && hasSubMetas(targetSubAllocation.FIXED_INCOME)) {
-                subBreakdown = splitNeedBySubMeta(need, targetSubAllocation.FIXED_INCOME, FI_SUB_KEYS)
-                    .map((x) => ({ ...x, label: SUB_LABELS.FIXED_INCOME[x.sub] }));
-            }
-            buys.push({
-                ticker: null,
-                label: gap.label,
-                class: gap.class,
-                type: gap.class,
-                kind: 'GENERIC',
-                amount: safeCurrency(need),
-                quantity: null,
-                subBreakdown,
-                reasons: [
-                    `${gap.label} ${gap.currentPct.toFixed(0)}% abaixo da meta de ${gap.targetPct.toFixed(0)}%`,
-                    gap.class === 'CASH' ? 'Reforçar reserva de emergência'
-                        : subBreakdown ? 'Aportar em Renda Fixa por sub-meta (escolha os títulos)'
-                        : 'Aportar em Renda Fixa (escolha o título)',
-                ],
-            });
-            continue;
-        }
-
-        // Candidatos: (a) REFORÇO de holdings ainda BUY; (b) NOVOS top picks do perfil.
-        const reinforce = enriched
-            .filter((a) => a.type === gap.class && a.score != null && a.score >= BUY_THRESHOLD)
-            .map((a) => ({
-                ticker: a.ticker,
-                kind: 'REINFORCE',
-                score: a.score,
-                priceBr: a.priceBr,
-                bull: a.bull,
-                usSubType: a.usSubType || null,
-                rawType: a.rawType ?? a.type,
-            }));
-
-        // Exterior/Cripto/Ouro normalmente são dolarizados, mas ETFs locais de
-        // exposição internacional (IVVB11 etc.) já chegam cotados em BRL.
-        const usdClass = gap.class === 'STOCK_US' || gap.class === 'CRYPTO' || gap.class === 'OURO';
-        // Ações BR também recebe candidatos do ranking de ETFs NACIONAIS (sub-tipo ETF).
-        const idealSources =
-            gap.class === 'STOCK'
-                ? [...(covered.has('STOCK') ? idealBuysByClass.STOCK || [] : []),
-                   ...(covered.has('ETF') ? idealBuysByClass.ETF || [] : [])]
-                : gap.class === 'STOCK_US'
-                    ? ((covered.has('STOCK_US') || covered.has('ETF')) ? idealBuysByClass.STOCK_US || [] : [])
-                    : covered.has(gap.class) ? idealBuysByClass[gap.class] || [] : [];
-        const news = idealSources
-            .filter((r) => !heldTickers.has(r.ticker))
-            .map((r) => ({
-                ticker: r.ticker,
-                kind: 'NEW',
-                score: r.score,
-                priceBr: safeFloat((r.currentPrice || 0) * (usdClass && r.currency !== 'BRL' ? usdRate : 1)),
-                bull: r.bull,
-                usSubType: r.usSubType || null,
-                rawType: r.type,
-                currency: r.currency || null,
-            }));
-
-        // Dedup (reforço tem prioridade), ordena por score desc, limita o nº de tickers.
-        const seen = new Set();
-        const candidates = [...reinforce, ...news]
-            .filter((c) => {
-                if (seen.has(c.ticker)) return false;
-                seen.add(c.ticker);
-                return true;
-            })
-            .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-            .slice(0, MAX_BUYS_PER_CLASS);
-
-        if (candidates.length === 0) {
-            // Classe subalocada sem ranking disponível → aporte manual.
-            buys.push({
-                ticker: null,
-                label: gap.label,
-                class: gap.class,
-                type: gap.class,
-                kind: 'GENERIC',
-                amount: safeCurrency(need),
-                quantity: null,
-                reasons: [
-                    `${gap.label} ${gap.currentPct.toFixed(0)}% abaixo da meta de ${gap.targetPct.toFixed(0)}%`,
-                    covered.has(gap.class) ? 'Sem recomendações de compra no ranking atual' : 'Sem ranking publicado para a classe',
-                ],
-            });
-            continue;
-        }
-
-        // Ramificação de Ações BR (Ações/ETFs) e do Exterior (Stocks/REITs/ETFs/Dólar):
-        // enviesa o peso de cada candidato pelo sub-gap do seu sub-tipo — prioriza o mais
-        // defasado da meta. Sem sub-metas (ou sem sub-gap positivo) → só por score.
-        const subCfg =
-            gap.class === 'STOCK_US' ? { keys: US_SUB_KEYS, metas: targetSubAllocation.STOCK_US, subKeyOf: (c) => usSubKeyOf(c.usSubType) }
-            : gap.class === 'STOCK' ? { keys: STOCK_SUB_KEYS, metas: targetSubAllocation.STOCK, subKeyOf: (c) => stockSubKeyOf(c.rawType) }
-            : null;
-        let subWeightByTicker = null;
-        if (subCfg && hasSubMetas(subCfg.metas)) {
-            const currentBySub = currentValueBySub(enriched, gap.class);
-            const gapsBySub = subGaps(gap.idealValue, currentBySub, subCfg.metas, subCfg.keys);
-            const biased = candidates.map((c) => (c.score ?? 0) * gapsBySub[subCfg.subKeyOf(c)]);
-            if (biased.some((w) => w > 0)) {
-                subWeightByTicker = new Map(candidates.map((c, i) => [c.ticker, biased[i]]));
-            }
-        }
-
-        const weightOf = (c) => (subWeightByTicker ? subWeightByTicker.get(c.ticker) || 0 : (c.score ?? 0));
-        const rawWeightSum = candidates.reduce((acc, c) => acc + weightOf(c), 0);
-        // Sem pesos válidos (todos 0) → rateio igualitário; senão respeita o zero (sub-tipo no alvo).
-        const weightSum = rawWeightSum > 0 ? rawWeightSum : candidates.length;
-        for (const c of candidates) {
-            const weight = rawWeightSum > 0 ? weightOf(c) / weightSum : 1 / candidates.length;
-            const amount = safeCurrency(need * weight);
-            if (amount <= 0) continue;
-            const quantity = c.priceBr > 0 ? safeFloat(amount / c.priceBr) : null;
-
-            const reasons = [];
-            reasons.push(`${gap.label} ${gap.currentPct.toFixed(0)}% abaixo da meta de ${gap.targetPct.toFixed(0)}%`);
-            const tier = tierFromScore(c.score);
-            reasons.push(`${tier ? tier + ' · ' : ''}COMPRAR (score ${Math.round(c.score ?? 0)})`);
-            if (gap.class === 'STOCK_US' && c.usSubType) reasons.push(`Reforça ${SUB_LABELS.STOCK_US[usSubKeyOf(c.usSubType)]} (sub-meta)`);
-            else if (gap.class === 'STOCK' && stockSubKeyOf(c.rawType) === 'ETF') reasons.push(`Reforça ${SUB_LABELS.STOCK.ETF} (sub-meta)`);
-            if (c.bull?.[0]) reasons.push(c.bull[0]);
-
-            buys.push({
-                ticker: c.ticker,
-                class: gap.class,
-                type: gap.class,
-                kind: c.kind,
-                tier,
-                subLabel: gap.class === 'STOCK_US' ? SUB_LABELS.STOCK_US[usSubKeyOf(c.usSubType)]
-                    : (gap.class === 'STOCK' && stockSubKeyOf(c.rawType) === 'ETF') ? SUB_LABELS.STOCK.ETF
-                    : null,
-                amount,
-                quantity,
-                score: c.score,
-                reasons,
-            });
-        }
+        planBuysForGap(gap, buyCtx, buys);
     }
 
     const totalSell = safeCurrency(sells.reduce((a, s) => a + s.amount, 0));

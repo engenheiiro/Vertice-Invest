@@ -1,0 +1,643 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildRebalancePlan — caracterização (plano completo) > compra sem sub-metas, pesos todos zero (rateio igualitário) e classe fora de cobertura 1`] = `
+"{
+ "riskProfile": "DEFENSIVE",
+ "dataAsOf": null,
+ "totalEquity": 10000,
+ "classGaps": [
+  {
+   "class": "STOCK",
+   "label": "Ações BR",
+   "currentValue": 10000,
+   "idealValue": 4000,
+   "currentPct": 100,
+   "targetPct": 40,
+   "gapValue": -6000,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "FII",
+   "label": "FIIs",
+   "currentValue": 0,
+   "idealValue": 3000,
+   "currentPct": 0,
+   "targetPct": 30,
+   "gapValue": 3000,
+   "coverage": "full"
+  },
+  {
+   "class": "STOCK_US",
+   "label": "Exterior",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "CRYPTO",
+   "label": "Cripto",
+   "currentValue": 0,
+   "idealValue": 3000,
+   "currentPct": 0,
+   "targetPct": 30,
+   "gapValue": 3000,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "FIXED_INCOME",
+   "label": "Renda Fixa",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "full"
+  },
+  {
+   "class": "OURO",
+   "label": "Ouro",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "CASH",
+   "label": "Reserva",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "full"
+  }
+ ],
+ "sells": [
+  {
+   "ticker": "AAAA3",
+   "class": "STOCK",
+   "type": "STOCK",
+   "subLabel": null,
+   "amount": 6000,
+   "quantity": 60,
+   "positionValue": 10000,
+   "isFullExit": false,
+   "score": 90,
+   "action": "BUY",
+   "estTax": 180,
+   "reasons": [
+    "Ações BR 100% acima da meta de 40%",
+    "Reduzir excesso (mantém posição, score 90)"
+   ]
+  }
+ ],
+ "buys": [
+  {
+   "ticker": null,
+   "label": "Cripto",
+   "class": "CRYPTO",
+   "type": "CRYPTO",
+   "kind": "GENERIC",
+   "amount": 3000,
+   "quantity": null,
+   "reasons": [
+    "Cripto 0% abaixo da meta de 30%",
+    "Sem ranking publicado para a classe"
+   ]
+  },
+  {
+   "ticker": "ZERO11",
+   "class": "FII",
+   "type": "FII",
+   "kind": "NEW",
+   "tier": "BRONZE",
+   "subLabel": null,
+   "amount": 1500,
+   "quantity": null,
+   "score": 0,
+   "reasons": [
+    "FIIs 0% abaixo da meta de 30%",
+    "BRONZE · COMPRAR (score 0)"
+   ]
+  },
+  {
+   "ticker": "NADA11",
+   "class": "FII",
+   "type": "FII",
+   "kind": "NEW",
+   "tier": "BRONZE",
+   "subLabel": null,
+   "amount": 1500,
+   "quantity": 150,
+   "score": 0,
+   "reasons": [
+    "FIIs 0% abaixo da meta de 30%",
+    "BRONZE · COMPRAR (score 0)"
+   ]
+  }
+ ],
+ "coveredClasses": [
+  "FII"
+ ],
+ "summary": {
+  "totalSell": 6000,
+  "totalBuy": 6000,
+  "estTaxTotal": 180,
+  "tradeCount": 4
+ }
+}"
+`;
+
+exports[`buildRebalancePlan — caracterização (plano completo) > compra: sub-metas em Ações BR (ETF nacional) e Exterior, dólar convertido, RF com sub-metas, classe sem candidato 1`] = `
+"{
+ "riskProfile": "BOLD",
+ "dataAsOf": null,
+ "totalEquity": 50000,
+ "classGaps": [
+  {
+   "class": "STOCK",
+   "label": "Ações BR",
+   "currentValue": 5000,
+   "idealValue": 15000,
+   "currentPct": 10,
+   "targetPct": 30,
+   "gapValue": 10000,
+   "coverage": "full"
+  },
+  {
+   "class": "FII",
+   "label": "FIIs",
+   "currentValue": 45000,
+   "idealValue": 5000,
+   "currentPct": 90,
+   "targetPct": 10,
+   "gapValue": -40000,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "STOCK_US",
+   "label": "Exterior",
+   "currentValue": 0,
+   "idealValue": 15000,
+   "currentPct": 0,
+   "targetPct": 30,
+   "gapValue": 15000,
+   "coverage": "full"
+  },
+  {
+   "class": "CRYPTO",
+   "label": "Cripto",
+   "currentValue": 0,
+   "idealValue": 5000,
+   "currentPct": 0,
+   "targetPct": 10,
+   "gapValue": 5000,
+   "coverage": "full"
+  },
+  {
+   "class": "FIXED_INCOME",
+   "label": "Renda Fixa",
+   "currentValue": 0,
+   "idealValue": 10000,
+   "currentPct": 0,
+   "targetPct": 20,
+   "gapValue": 10000,
+   "coverage": "full"
+  },
+  {
+   "class": "OURO",
+   "label": "Ouro",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "CASH",
+   "label": "Reserva",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "full"
+  }
+ ],
+ "sells": [
+  {
+   "ticker": "KNRI11",
+   "class": "FII",
+   "type": "FII",
+   "subLabel": null,
+   "amount": 40000,
+   "quantity": 266.6667,
+   "positionValue": 45000,
+   "isFullExit": false,
+   "score": 60,
+   "action": "WAIT",
+   "estTax": 1600,
+   "reasons": [
+    "FIIs 90% acima da meta de 10%",
+    "Score 60 (AGUARDAR)"
+   ]
+  }
+ ],
+ "buys": [
+  {
+   "ticker": "AAPL",
+   "class": "STOCK_US",
+   "type": "STOCK_US",
+   "kind": "NEW",
+   "tier": "GOLD",
+   "subLabel": "Stocks",
+   "amount": 10050.76,
+   "quantity": 9.1371,
+   "score": 88,
+   "reasons": [
+    "Exterior 0% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 88)",
+    "Reforça Stocks (sub-meta)",
+    "Caixa"
+   ]
+  },
+  {
+   "ticker": null,
+   "label": "Renda Fixa",
+   "class": "FIXED_INCOME",
+   "type": "FIXED_INCOME",
+   "kind": "GENERIC",
+   "amount": 10000,
+   "quantity": null,
+   "subBreakdown": [
+    {
+     "sub": "IPCA",
+     "amount": 7000,
+     "label": "IPCA"
+    },
+    {
+     "sub": "POS",
+     "amount": 3000,
+     "label": "Pós-fixado"
+    }
+   ],
+   "reasons": [
+    "Renda Fixa 0% abaixo da meta de 20%",
+    "Aportar em Renda Fixa por sub-meta (escolha os títulos)"
+   ]
+  },
+  {
+   "ticker": "BOVA11",
+   "class": "STOCK",
+   "type": "STOCK",
+   "kind": "NEW",
+   "tier": "GOLD",
+   "subLabel": "ETFs",
+   "amount": 5844.16,
+   "quantity": 48.7013,
+   "score": 75,
+   "reasons": [
+    "Ações BR 10% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 75)",
+    "Reforça ETFs (sub-meta)"
+   ]
+  },
+  {
+   "ticker": null,
+   "label": "Cripto",
+   "class": "CRYPTO",
+   "type": "CRYPTO",
+   "kind": "GENERIC",
+   "amount": 5000,
+   "quantity": null,
+   "reasons": [
+    "Cripto 0% abaixo da meta de 10%",
+    "Sem recomendações de compra no ranking atual"
+   ]
+  },
+  {
+   "ticker": "PLD",
+   "class": "STOCK_US",
+   "type": "STOCK_US",
+   "kind": "NEW",
+   "tier": "GOLD",
+   "subLabel": "REITs",
+   "amount": 4949.24,
+   "quantity": 8.1806,
+   "score": 65,
+   "reasons": [
+    "Exterior 0% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 65)",
+    "Reforça REITs (sub-meta)"
+   ]
+  },
+  {
+   "ticker": "WEGE3",
+   "class": "STOCK",
+   "type": "STOCK",
+   "kind": "NEW",
+   "tier": "GOLD",
+   "subLabel": null,
+   "amount": 2129.87,
+   "quantity": 53.2467,
+   "score": 82,
+   "reasons": [
+    "Ações BR 10% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 82)",
+    "Crescimento"
+   ]
+  },
+  {
+   "ticker": "ITUB4",
+   "class": "STOCK",
+   "type": "STOCK",
+   "kind": "REINFORCE",
+   "tier": "GOLD",
+   "subLabel": null,
+   "amount": 2025.97,
+   "quantity": 81.0388,
+   "score": 78,
+   "reasons": [
+    "Ações BR 10% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 78)",
+    "Banco sólido"
+   ]
+  }
+ ],
+ "coveredClasses": [
+  "STOCK",
+  "ETF",
+  "STOCK_US",
+  "CRYPTO"
+ ],
+ "summary": {
+  "totalSell": 40000,
+  "totalBuy": 40000,
+  "estTaxTotal": 1600,
+  "tradeCount": 8
+ }
+}"
+`;
+
+exports[`buildRebalancePlan — caracterização (plano completo) > patrimônio zero devolve o plano vazio 1`] = `
+"{
+ "riskProfile": "MODERATE",
+ "dataAsOf": null,
+ "totalEquity": 0,
+ "classGaps": [],
+ "sells": [],
+ "buys": [],
+ "coveredClasses": [],
+ "summary": {
+  "totalSell": 0,
+  "totalBuy": 0,
+  "estTaxTotal": 0,
+  "tradeCount": 0
+ }
+}"
+`;
+
+exports[`buildRebalancePlan — caracterização (plano completo) > venda: sem score, AGUARDAR com tese, BUY acima da meta; rótulos RF/Exterior/ETF nacional 1`] = `
+"{
+ "riskProfile": "MODERATE",
+ "dataAsOf": "2026-06-01T00:00:00.000Z",
+ "totalEquity": 100000,
+ "classGaps": [
+  {
+   "class": "STOCK",
+   "label": "Ações BR",
+   "currentValue": 60000,
+   "idealValue": 18000,
+   "currentPct": 60,
+   "targetPct": 20,
+   "gapValue": -42000,
+   "coverage": "full"
+  },
+  {
+   "class": "FII",
+   "label": "FIIs",
+   "currentValue": 0,
+   "idealValue": 27000,
+   "currentPct": 0,
+   "targetPct": 30,
+   "gapValue": 27000,
+   "coverage": "full"
+  },
+  {
+   "class": "STOCK_US",
+   "label": "Exterior",
+   "currentValue": 20000,
+   "idealValue": 0,
+   "currentPct": 20,
+   "targetPct": 0,
+   "gapValue": -20000,
+   "coverage": "full"
+  },
+  {
+   "class": "CRYPTO",
+   "label": "Cripto",
+   "currentValue": 0,
+   "idealValue": 27000,
+   "currentPct": 0,
+   "targetPct": 30,
+   "gapValue": 27000,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "FIXED_INCOME",
+   "label": "Renda Fixa",
+   "currentValue": 20000,
+   "idealValue": 9000,
+   "currentPct": 20,
+   "targetPct": 10,
+   "gapValue": -11000,
+   "coverage": "full"
+  },
+  {
+   "class": "OURO",
+   "label": "Ouro",
+   "currentValue": 0,
+   "idealValue": 0,
+   "currentPct": 0,
+   "targetPct": 0,
+   "gapValue": 0,
+   "coverage": "allocation-only"
+  },
+  {
+   "class": "CASH",
+   "label": "Reserva",
+   "currentValue": 0,
+   "idealValue": 10000,
+   "currentPct": 0,
+   "targetPct": 10,
+   "gapValue": 10000,
+   "coverage": "full"
+  }
+ ],
+ "sells": [
+  {
+   "ticker": "O",
+   "class": "STOCK_US",
+   "type": "STOCK_US",
+   "subLabel": "REITs",
+   "amount": 20000,
+   "quantity": 66.6667,
+   "positionValue": 20000,
+   "isFullExit": true,
+   "score": 40,
+   "action": "WAIT",
+   "estTax": 600,
+   "reasons": [
+    "Exterior 20% acima da meta de 0%",
+    "Score 40 (AGUARDAR)"
+   ]
+  },
+  {
+   "ticker": "WAIT3",
+   "class": "STOCK",
+   "type": "STOCK",
+   "subLabel": null,
+   "amount": 15000,
+   "quantity": 500,
+   "positionValue": 15000,
+   "isFullExit": true,
+   "score": 50,
+   "action": "WAIT",
+   "estTax": 450,
+   "reasons": [
+    "Ações BR 60% acima da meta de 20%",
+    "Score 50 (AGUARDAR)",
+    "Margem em queda"
+   ]
+  },
+  {
+   "ticker": "NULL3",
+   "class": "STOCK",
+   "type": "STOCK",
+   "subLabel": null,
+   "amount": 15000,
+   "quantity": 1000,
+   "positionValue": 15000,
+   "isFullExit": true,
+   "score": null,
+   "action": null,
+   "estTax": 450,
+   "reasons": [
+    "Ações BR 60% acima da meta de 20%",
+    "Sem cobertura quant — corte por alocação"
+   ]
+  },
+  {
+   "ticker": "BOVA11",
+   "class": "STOCK",
+   "type": "STOCK",
+   "subLabel": "ETFs",
+   "amount": 12000,
+   "quantity": 120,
+   "positionValue": 15000,
+   "isFullExit": false,
+   "score": 72,
+   "action": "BUY",
+   "estTax": 0,
+   "reasons": [
+    "Ações BR 60% acima da meta de 20%",
+    "Reduzir excesso (mantém posição, score 72)"
+   ]
+  },
+  {
+   "ticker": "CDB1",
+   "class": "FIXED_INCOME",
+   "type": "FIXED_INCOME",
+   "subLabel": "IPCA",
+   "amount": 11000,
+   "quantity": 11000,
+   "positionValue": 20000,
+   "isFullExit": false,
+   "score": null,
+   "action": null,
+   "estTax": 0,
+   "reasons": [
+    "Renda Fixa 20% acima da meta de 10%",
+    "Sem cobertura quant — corte por alocação"
+   ]
+  }
+ ],
+ "buys": [
+  {
+   "ticker": null,
+   "label": "Cripto",
+   "class": "CRYPTO",
+   "type": "CRYPTO",
+   "kind": "GENERIC",
+   "amount": 27000,
+   "quantity": null,
+   "reasons": [
+    "Cripto 0% abaixo da meta de 30%",
+    "Sem ranking publicado para a classe"
+   ]
+  },
+  {
+   "ticker": "HGLG11",
+   "class": "FII",
+   "type": "FII",
+   "kind": "NEW",
+   "tier": "GOLD",
+   "subLabel": null,
+   "amount": 14400,
+   "quantity": 90,
+   "score": 80,
+   "reasons": [
+    "FIIs 0% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 80)",
+    "Vacância baixa"
+   ]
+  },
+  {
+   "ticker": "XPLG11",
+   "class": "FII",
+   "type": "FII",
+   "kind": "NEW",
+   "tier": "GOLD",
+   "subLabel": null,
+   "amount": 12600,
+   "quantity": 126,
+   "score": 70,
+   "reasons": [
+    "FIIs 0% abaixo da meta de 30%",
+    "GOLD · COMPRAR (score 70)"
+   ]
+  },
+  {
+   "ticker": null,
+   "label": "Reserva",
+   "class": "CASH",
+   "type": "CASH",
+   "kind": "GENERIC",
+   "amount": 10000,
+   "quantity": null,
+   "subBreakdown": null,
+   "reasons": [
+    "Reserva 0% abaixo da meta de 10%",
+    "Reforçar reserva de emergência"
+   ]
+  }
+ ],
+ "coveredClasses": [
+  "STOCK",
+  "FII",
+  "STOCK_US"
+ ],
+ "summary": {
+  "totalSell": 73000,
+  "totalBuy": 64000,
+  "estTaxTotal": 1500,
+  "tradeCount": 9
+ }
+}"
+`;

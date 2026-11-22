@@ -185,6 +185,281 @@ const FALLBACK_MACRO = {
     lastUpdated: new Date()
 };
 
+// --- refreshQuotesBatch, em passos (mesma ordem de leitura, juízo e escrita) ---
+
+// Quem entra na fila de cotação. Aposentado ou desativado fica fora, mesmo com
+// force. Lia só `isActive`, apostando que os dois campos andam juntos — e eles
+// não andam: em 04/09/2026 havia 12 ativos com isBlacklisted=true e
+// isActive=true, e IGBR3/BLUT4 desciam Yahoo → Google → Brapi a cada 15 minutos
+// para falhar nos três, para sempre. `isBlacklisted` é o estado TERMINAL: ele
+// decide sozinho.
+const selectTickersToRefresh = (cleanTickers, assetMap, force, threshold) => {
+    const toUpdate = [];
+    cleanTickers.forEach(ticker => {
+        const asset = assetMap.get(ticker);
+        if (asset && (asset.isBlacklisted || !asset.isActive)) return;
+        if (force) {
+            toUpdate.push(ticker);
+        } else {
+            const isStale = !asset || !asset.updatedAt || asset.updatedAt < threshold;
+            if (isStale || !asset || asset.lastPrice === 0) {
+                toUpdate.push(ticker);
+            }
+        }
+    });
+    return toUpdate;
+};
+
+// Cotação com preço que NÃO vale como pregão: eco do preço gravado (fonte sem
+// data de sessão), sessão velha demais, ou sessão datada sem negócio. Nenhuma
+// vira sucesso — o ativo segue envelhecendo, que é o correto. null = vale.
+const rejectionOf = (service, quote, currentAsset) => {
+    if (service.isEchoQuote(quote, currentAsset)) return 'echo';
+    if (service.isStaleSessionQuote(quote)) return 'stale';
+    if (service.isNoTradeQuote(quote)) return 'noTrade';
+    return null;
+};
+
+// Julgamento de MAGNITUDE, depois dos de presença e idade. Roda contra o preço
+// que AINDA está no banco (a gravação vem depois, no bulkWrite).
+const judgeIncomingQuote = (quote, currentAsset, now) => judgeQuote({
+    type: currentAsset?.type || null,
+    price: quote.price,
+    previousClose: quote.previousClose,
+    change: quote.change,
+    storedPrice: currentAsset?.lastPrice,
+    storedPriceDate: currentAsset?.priceDate || null,
+    storedPriceSource: currentAsset?.priceSource || null,
+    now,
+});
+
+// STOCK_US/ETF: liquidez em VALOR (moeda/dia = volume × preço), consistente com
+// a liquidez financeira dos ativos BR e com o sync de fundamentos US. Evita
+// penalizar ativos caros de baixo giro de papéis no scoringEngine.
+const applyMarketSizeFields = (payload, quote, currentAsset, newPrice) => {
+    if (!(currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US' || currentAsset.type === 'ETF'))) return;
+    if (quote.marketCap) payload.marketCap = quote.marketCap;
+    if (quote.volume) {
+        payload.liquidity = (currentAsset.type === 'STOCK_US' || currentAsset.type === 'ETF')
+            ? quote.volume * newPrice
+            : quote.volume;
+    }
+};
+
+// Enriquece o nome real (Yahoo longName/shortName) quando o atual está vazio ou
+// é o próprio ticker. Não sobrescreve um nome já bom (ex.: override curado).
+const applyRealName = (payload, quote, ticker, currentAsset) => {
+    const realName = (quote.name || '').trim();
+    if (!realName || realName.toUpperCase() === ticker.toUpperCase()) return;
+    const currentName = (currentAsset?.name || '').trim();
+    if (!currentName || currentName.toUpperCase() === ticker.toUpperCase()) {
+        payload.name = realName;
+    }
+};
+
+const buildQuotePayload = (quote, ticker, currentAsset, now) => {
+    const newPrice = quote.price;
+    const payload = {
+        lastPrice: newPrice,
+        change: quote.change || 0,
+        // Data da sessão anda SEMPRE junto do change: gravar um sem o outro é
+        // como o cache volta a mentir sobre a idade do dado.
+        priceDate: sessionDateKey(quote.marketTime),
+        // QUEM trouxe este preço. `lastPrice` tem cinco escritores e até
+        // 07/09/2026 nenhum assinava: RBRL11 passou o fim de semana valendo 58,45
+        // — o preço do RBHG11 — e a apuração não tinha como nomear a fonte.
+        priceSource: quote.source || 'YAHOO',
+        previousClose: Number(quote.previousClose) > 0 ? Number(quote.previousClose) : 0,
+        updatedAt: now,
+        isActive: true,
+        failCount: 0, // Reset do contador de falhas em caso de sucesso
+        lastFailDate: null
+    };
+    applyMarketSizeFields(payload, quote, currentAsset, newPrice);
+    applyRealName(payload, quote, ticker, currentAsset);
+    return payload;
+};
+
+// Cotação com achado do juiz, com a referência ao payload. A âncora do nosso
+// candle é buscada DEPOIS do laço (uma agregação por sessão, não uma consulta
+// por cotação), e é ela que diz se o suspeito é o preço novo ou o guardado.
+const toJudgedEntry = (ticker, quote, currentAsset, achados, payload) => ({
+    ticker,
+    type: currentAsset?.type || null,
+    source: quote.source || null,
+    sessionDate: payload.priceDate,
+    price: quote.price,
+    storedPrice: currentAsset?.lastPrice ?? null,
+    achados,
+    payload,
+});
+
+// Passada única pelas cotações: separa sucesso dos não-sucessos e monta as
+// gravações. Suspeita de magnitude NÃO é falha: o preço é gravado do mesmo
+// jeito (grupamento e desdobramento têm a assinatura de um erro de fonte), e
+// só passa a aparecer NOMEADO no painel de Saúde. Variação contestada fica com
+// o preço da fonte e tem o par (change, previousClose) reancorado depois.
+const collectQuoteResults = (service, quotes, assetMap, now) => {
+    const r = {
+        operations: [], successfulTickers: new Set(),
+        echoedTickers: [], staleTickers: [], noTradeTickers: [], julgados: [], contestados: [],
+    };
+    for (const quote of quotes) {
+        const ticker = service.normalizeSymbol(quote.ticker);
+        const currentAsset = assetMap.get(ticker);
+        if (!(quote.price && quote.price > 0)) continue;
+
+        const rejection = rejectionOf(service, quote, currentAsset);
+        if (rejection === 'echo') {
+            r.echoedTickers.push(ticker);
+            continue;
+        }
+        if (rejection) {
+            (rejection === 'stale' ? r.staleTickers : r.noTradeTickers).push(`${ticker}@${sessionDateKey(quote.marketTime)}`);
+            continue;
+        }
+        r.successfulTickers.add(ticker);
+
+        const achados = judgeIncomingQuote(quote, currentAsset, now);
+        const updatePayload = buildQuotePayload(quote, ticker, currentAsset, now);
+        if (achados.length > 0) {
+            r.julgados.push(toJudgedEntry(ticker, quote, currentAsset, achados, updatePayload));
+            if (contestsChange(achados)) r.contestados.push(r.julgados.at(-1));
+        }
+        r.operations.push({ updateOne: { filter: { ticker: ticker }, update: { $set: updatePayload } } });
+    }
+    return r;
+};
+
+// Uma agregação por SESSÃO (na prática, uma só): o candle anterior vem da mesma
+// fonte que o snapshot diário usa para marcar patrimônio (`dayCloses.js`).
+const loadOwnAnchors = async (precisamDeAncora) => {
+    const porSessao = new Map();
+    for (const c of precisamDeAncora) {
+        if (!c.sessionDate) continue; // sem sessão não há "antes de"
+        if (!porSessao.has(c.sessionDate)) porSessao.set(c.sessionDate, []);
+        porSessao.get(c.sessionDate).push(c);
+    }
+    for (const [sessao, itens] of porSessao) {
+        try {
+            const closes = await loadLatestCloseBefore(itens, sessao);
+            for (const item of itens) {
+                const achado = closes.get(historyStorageKey(item.ticker, item.type));
+                item.ownClose = achado?.close ?? null;
+                item.ownCloseDate = achado?.date ?? null;
+            }
+        } catch (err) {
+            // A âncora é um LUXO comparada à cotação: sem o candle, a variação
+            // contestada cai em zero (o veredito seguro), o desempate não
+            // acontece, e o lote inteiro de preços segue para o banco.
+            logger.warn(`[MarketData] Sem âncora para reancorar variação (${sessao}): ${err.message}`);
+        }
+    }
+};
+
+// --- O NOSSO CANDLE COMO ÁRBITRO DO QUE A FONTE AFIRMOU ---
+// O preço da fonte fica; o par variação/fechamento-anterior, não (XPIN11 estava
+// gravado com +108% contra a nossa série parada em 62,04). A mesma âncora
+// responde, no salto contra o banco, QUEM estava errado.
+const anchorJudgedQuotes = async (julgados) => {
+    const precisamDeAncora = julgados.filter((j) => needsOwnAnchor(j.achados));
+    if (precisamDeAncora.length === 0) return;
+    await loadOwnAnchors(precisamDeAncora);
+    for (const j of precisamDeAncora) {
+        const veredito = arbitrateStoredJump({ type: j.type, price: j.price, storedPrice: j.storedPrice, ownClose: j.ownClose });
+        if (veredito) {
+            j.achados = applyStoredJumpArbitration(j.achados, { verdict: veredito, ownClose: j.ownClose, ownCloseDate: j.ownCloseDate });
+        }
+    }
+};
+
+// O painel só é alimentado AGORA, com os achados já arbitrados: é a diferença
+// entre "RBRL11 saltou 26%" e "o 58,45 guardado é que era do RBHG11".
+const publishSuspects = (julgados) => julgados.map((j) => {
+    recordSuspectQuote({ subject: j.ticker, type: j.type, source: j.source, price: j.price, findings: j.achados });
+    return `${j.ticker} (${j.achados[0].detail})`;
+});
+
+const reanchorContested = (contestados) => {
+    if (contestados.length === 0) return;
+    for (const c of contestados) {
+        const { change, previousClose } = resolveContestedChange({ price: c.price, ownClose: c.ownClose });
+        c.payload.change = change;
+        c.payload.previousClose = previousClose;
+    }
+    logger.warn(
+        `🧭 [MarketData] ${contestados.length} variação(ões) reancorada(s) no nosso fechamento `
+        + `(a fonte se contradisse): ${contestados.map((c) => `${c.ticker}→${c.payload.change.toFixed(2)}%`).join(', ')}`,
+        { reanchored: contestados.map((c) => c.ticker) },
+    );
+};
+
+// --- BLACKLIST DINÂMICA (DETECTAR FALHAS) ---
+// Pedidos que NÃO voltaram com preço válido ganham failCount (regra única em
+// buildQuoteFailureOps). "Sem negócio" fora do pregão é INCONCLUSIVO (ver
+// isExpectedNoTrade): nada é gravado, mas também não conta falha — senão todo
+// fim de semana e feriado somava uma falha a cada papel vivo da B3.
+const failedQuoteAssets = (toUpdate, { successfulTickers, noTradeTickers }, assetMap, now) => {
+    const inconclusiveTickers = new Set(
+        noTradeTickers
+            .filter((e) => isExpectedNoTrade(e.split('@')[1], now))
+            .map((e) => e.split('@')[0]),
+    );
+    return toUpdate
+        .filter(t => !successfulTickers.has(t) && !inconclusiveTickers.has(t))
+        .map(t => assetMap.get(t));
+};
+
+// Sem negócio só é ALERTA num pregão que houve e já começou (isExpectedNoTrade).
+// O resto — madrugada, feriado, fim de semana — vai para debug: auditável no
+// arquivo, sem gastar a atenção de quem lê o terminal.
+const logNoTradeQuotes = (noTradeTickers, now) => {
+    if (noTradeTickers.length === 0) return;
+    const esperados = noTradeTickers.filter((e) => isExpectedNoTrade(e.split('@')[1], now));
+    const alertaveis = noTradeTickers.filter((e) => !isExpectedNoTrade(e.split('@')[1], now));
+    if (alertaveis.length > 0) {
+        logger.warn(
+            `🈳 [MarketData] ${alertaveis.length} ativo(s) com sessão datada mas SEM negócio `
+            + `(volume zero) — não gravada como preço: ${alertaveis.join(', ')}`,
+            { noTrade: alertaveis },
+        );
+    }
+    if (esperados.length > 0) {
+        logger.debug(
+            `🈳 [MarketData] ${esperados.length} ativo(s) sem negócio fora do pregão `
+            + '(mercado fechado ou ainda não aberto) — nada gravado.',
+            { noTradeExpected: esperados },
+        );
+    }
+};
+
+// Cada não-sucesso com nome próprio no log: eco (uma fonte RESPONDEU, com um
+// número que não vale como pregão), sessão antiga (símbolo trocado se parece com
+// isto), sem negócio, e suspeita — que não é falha: o preço FOI gravado.
+const logQuoteAnomalies = ({ echoedTickers, staleTickers, noTradeTickers, suspectTickers, now }) => {
+    if (echoedTickers.length > 0) {
+        logger.warn(
+            `🔁 [MarketData] ${echoedTickers.length} ativo(s) só ecoaram o preço já gravado (fonte sem data de sessão): ${echoedTickers.join(', ')}`,
+            { echoed: echoedTickers },
+        );
+    }
+    if (staleTickers.length > 0) {
+        logger.warn(
+            `🕰️ [MarketData] ${staleTickers.length} ativo(s) com cotação de sessão antiga (> ${RETIRE_RECENT_CANDLE_DAYS}d) — `
+            + `não gravada como preço de hoje: ${staleTickers.join(', ')}`,
+            { stale: staleTickers },
+        );
+    }
+    logNoTradeQuotes(noTradeTickers, now);
+    if (suspectTickers.length > 0) {
+        logger.warn(
+            `📈 [MarketData] ${suspectTickers.length} cotação(ões) fora da magnitude esperada `
+            + `(gravadas; podem ser grupamento/desdobramento): ${suspectTickers.join(' | ')}`,
+            { suspects: suspectTickers },
+        );
+    }
+};
+
 export const marketDataService = {
     normalizeSymbol(ticker) {
         if (!ticker) return '';
@@ -659,36 +934,10 @@ export const marketDataService = {
             // o preço novo com o guardado só faz sentido sabendo de que sessão o
             // guardado é (ver STORED_PRICE_MAX_AGE_DAYS em utils/quoteSanity).
             const dbAssets = await MarketAsset.find({ ticker: { $in: cleanTickers } }).select('ticker name type updatedAt lastPrice priceDate priceSource change isActive isBlacklisted failCount lastFailDate marketCap liquidity');
-            
-            const toUpdate = [];
             const assetMap = new Map();
-            
             dbAssets.forEach(a => assetMap.set(a.ticker, a));
 
-            cleanTickers.forEach(ticker => {
-                const asset = assetMap.get(ticker);
-                
-                // Aposentado ou desativado: fora da fila de cotação, mesmo com force.
-                //
-                // Lia só `isActive`, apostando que os dois campos andam juntos — e eles
-                // não andam. Em 04/09/2026 havia 12 ativos com isBlacklisted=true e
-                // isActive=true (blacklistados por caminhos antigos, que não desativavam),
-                // e por causa disso IGBR3 e BLUT4 eram perguntados a cada 15 minutos,
-                // desciam Yahoo → Google → Brapi e falhavam nos três, para sempre. Papel
-                // aposentado gastando as três fontes é o oposto do que a blacklist existe
-                // para fazer. `isBlacklisted` é o estado TERMINAL: ele decide sozinho.
-                if (asset && (asset.isBlacklisted || !asset.isActive)) return;
-
-                if (force) {
-                    toUpdate.push(ticker);
-                } else {
-                    const isStale = !asset || !asset.updatedAt || asset.updatedAt < threshold;
-                    if (isStale || !asset || asset.lastPrice === 0) {
-                        toUpdate.push(ticker);
-                    }
-                }
-            });
-
+            const toUpdate = selectTickersToRefresh(cleanTickers, assetMap, force, threshold);
             if (toUpdate.length === 0) return;
 
             // O tipo vai junto: sem ele, sigla disputada (STX é Stacks na cripto e
@@ -696,334 +945,26 @@ export const marketDataService = {
             const quotes = await externalMarketService.getQuotes(toUpdate, {
                 typeByTicker: new Map([...assetMap].map(([t, a]) => [t, a?.type || null])),
             });
-            const operations = [];
-            
-            // Set para controle de sucesso/falha
-            const successfulTickers = new Set();
-            // Preço que voltou sem sessão e sem movimento (ver isEchoQuote). Não é
-            // sucesso nem erro de fonte: é ausência de prova de pregão.
-            const echoedTickers = [];
-            // Cotação datada de uma sessão velha demais (ver isStaleSessionQuote).
-            const staleTickers = [];
-            // Cotação datada da sessão certa, em barra sem negócio (ver isNoTradeQuote).
-            const noTradeTickers = [];
-            // Preço que chegou fora da magnitude esperada (ver utils/quoteSanity).
-            // NÃO é caminho de falha: o preço é gravado do mesmo jeito, porque
-            // grupamento e desdobramento têm a mesma assinatura de um erro de
-            // fonte e barrar por magnitude congelaria o ativo para sempre. O que
-            // muda é que ele passa a aparecer NOMEADO no painel de Saúde.
-            const suspectTickers = [];
-            // Cotações com achado do juiz, com a referência ao payload. O registro
-            // no painel (`recordSuspectQuote`) acontece DEPOIS do laço, e não aqui:
-            // parte dos achados só fica completa com o nosso candle na mão — ver
-            // `arbitrateStoredJump`, que decide se o suspeito é o preço novo ou o
-            // que estava guardado. Registrar durante o laço nomearia o inocente.
-            const julgados = [];
-            // Ativos cuja VARIAÇÃO a fonte não sustenta. O preço segue sendo dela;
-            // o par (change, previousClose) é reancorado no nosso próprio candle
-            // logo depois do laço — ver `resolveContestedChange`.
-            const contestados = [];
 
-            for (const quote of quotes) {
-                const ticker = this.normalizeSymbol(quote.ticker);
-                const currentAsset = assetMap.get(ticker);
+            const results = collectQuoteResults(this, quotes, assetMap, now);
+            await anchorJudgedQuotes(results.julgados);
+            const suspectTickers = publishSuspects(results.julgados);
+            reanchorContested(results.contestados);
+            const failedAssets = failedQuoteAssets(toUpdate, results, assetMap, now);
+            results.operations.push(...this.buildQuoteFailureOps(failedAssets, results.successfulTickers));
+            logQuoteAnomalies({ ...results, suspectTickers, now });
 
-                let newPrice = quote.price;
-                let newChange = quote.change || 0;
-
-                if (newPrice && newPrice > 0) {
-                    // Eco não entra em `successfulTickers`: cai no caminho de falha
-                    // logo abaixo e o ativo segue envelhecendo, que é o correto.
-                    // Nada é gravado — o valor é idêntico ao que já está no banco,
-                    // e é justamente o `updatedAt` que não pode ser renovado.
-                    if (this.isEchoQuote(quote, currentAsset)) {
-                        echoedTickers.push(ticker);
-                        continue;
-                    }
-                    // Sessão velha demais: a fonte respondeu e datou honestamente,
-                    // e a data diz que isso não é preço de hoje. Mesmo destino do
-                    // eco — não vira sucesso, e o ativo passa a envelhecer rumo à
-                    // baixa em vez de parecer atualizado para sempre.
-                    if (this.isStaleSessionQuote(quote)) {
-                        staleTickers.push(`${ticker}@${sessionDateKey(quote.marketTime)}`);
-                        continue;
-                    }
-                    // Sessão de ontem, volume zero: a fonte datou uma barra em que
-                    // ninguém negociou. Mesmo destino do eco e da sessão velha —
-                    // não é sucesso, e o ativo volta a envelhecer. Ver isNoTradeQuote.
-                    if (this.isNoTradeQuote(quote)) {
-                        noTradeTickers.push(`${ticker}@${sessionDateKey(quote.marketTime)}`);
-                        continue;
-                    }
-                    successfulTickers.add(ticker);
-
-                    // Julgamento de MAGNITUDE, depois dos de presença e idade.
-                    // Roda contra o preço que AINDA está no banco (a gravação vem
-                    // depois, no bulkWrite), que é justamente a régua que faltava.
-                    const achados = judgeQuote({
-                        type: currentAsset?.type || null,
-                        price: newPrice,
-                        previousClose: quote.previousClose,
-                        change: quote.change,
-                        storedPrice: currentAsset?.lastPrice,
-                        storedPriceDate: currentAsset?.priceDate || null,
-                        storedPriceSource: currentAsset?.priceSource || null,
-                        now,
-                    });
-
-                    const updatePayload = {
-                        lastPrice: newPrice,
-                        change: newChange, 
-                        // Data da sessão anda SEMPRE junto do change: gravar um sem o
-                        // outro é como o cache volta a mentir sobre a idade do dado.
-                        priceDate: sessionDateKey(quote.marketTime),
-                        // QUEM trouxe este preço. `lastPrice` tem cinco escritores e
-                        // até 07/09/2026 nenhum assinava: RBRL11 passou o fim de
-                        // semana valendo 58,45 — o preço do RBHG11 — e a apuração
-                        // não tinha como nomear a fonte. Sem assinatura, todo preço
-                        // errado é anônimo, e preço anônimo não se conserta na raiz.
-                        priceSource: quote.source || 'YAHOO',
-                        previousClose: Number(quote.previousClose) > 0 ? Number(quote.previousClose) : 0,
-                        updatedAt: now,
-                        isActive: true,
-                        failCount: 0, // Reset do contador de falhas em caso de sucesso
-                        lastFailDate: null
-                    };
-                    
-                    if (currentAsset && (currentAsset.type === 'CRYPTO' || currentAsset.type === 'STOCK_US' || currentAsset.type === 'ETF')) {
-                        if (quote.marketCap) updatePayload.marketCap = quote.marketCap;
-                        if (quote.volume) {
-                            // STOCK_US/ETF: liquidez em VALOR (moeda/dia = volume × preço), consistente
-                            // com a liquidez financeira dos ativos BR e com o sync de fundamentos US.
-                            // Evita penalizar ativos caros de baixo giro de papéis no scoringEngine.
-                            updatePayload.liquidity = (currentAsset.type === 'STOCK_US' || currentAsset.type === 'ETF')
-                                ? quote.volume * newPrice
-                                : quote.volume;
-                        }
-                    }
-
-                    // Enriquece o nome real (Yahoo longName/shortName) quando o
-                    // atual está vazio ou é o próprio ticker. Não sobrescreve um
-                    // nome já bom (ex.: override curado).
-                    const realName = (quote.name || '').trim();
-                    if (realName && realName.toUpperCase() !== ticker.toUpperCase()) {
-                        const currentName = (currentAsset?.name || '').trim();
-                        if (!currentName || currentName.toUpperCase() === ticker.toUpperCase()) {
-                            updatePayload.name = realName;
-                        }
-                    }
-
-                    // A âncora do nosso candle é buscada DEPOIS do laço, porque ela
-                    // está no banco (`AssetHistory`) e ir lá por ativo, no meio do
-                    // lote, custaria uma consulta por cotação suspeita. A referência
-                    // ao payload é guardada aqui e tudo se resolve numa passada só,
-                    // com uma agregação por sessão — vale para a variação contestada
-                    // e para o desempate de quem estava errado no salto.
-                    if (achados.length > 0) {
-                        julgados.push({
-                            ticker,
-                            type: currentAsset?.type || null,
-                            source: quote.source || null,
-                            sessionDate: updatePayload.priceDate,
-                            price: newPrice,
-                            storedPrice: currentAsset?.lastPrice ?? null,
-                            achados,
-                            payload: updatePayload,
-                        });
-                        if (contestsChange(achados)) contestados.push(julgados.at(-1));
-                    }
-
-                    operations.push({
-                        updateOne: {
-                            filter: { ticker: ticker },
-                            update: {
-                                $set: updatePayload
-                            }
-                        }
-                    });
-                }
-            }
-
-            // --- O NOSSO CANDLE COMO ÁRBITRO DO QUE A FONTE AFIRMOU ---
-            // O preço da fonte fica (ele é auditável contra o fechamento oficial
-            // da B3 e passa); o par variação/fechamento-anterior, não. XPIN11
-            // estava gravado com +108% e previousClose de 29,82 enquanto a nossa
-            // série mostrava 62,04 parado havia semanas — número que a carteira
-            // exibiria como "variação de hoje".
-            //
-            // Uma agregação por SESSÃO (na prática, uma só): o candle anterior
-            // vem da mesma fonte que o snapshot diário usa para marcar patrimônio,
-            // e usar outra aqui reintroduziria a divergência que `dayCloses.js`
-            // existe para fechar.
-            //
-            // A MESMA âncora responde à outra pergunta que o juiz não resolve
-            // sozinho: no salto contra o banco, QUEM estava errado? Por isso a
-            // consulta cobre todo julgado que precise de candle, e não só os
-            // contestados — é a mesma agregação, com mais tickers no $in.
-            const precisamDeAncora = julgados.filter((j) => needsOwnAnchor(j.achados));
-            if (precisamDeAncora.length > 0) {
-                const porSessao = new Map();
-                for (const c of precisamDeAncora) {
-                    if (!c.sessionDate) continue; // sem sessão não há "antes de"
-                    if (!porSessao.has(c.sessionDate)) porSessao.set(c.sessionDate, []);
-                    porSessao.get(c.sessionDate).push(c);
-                }
-                for (const [sessao, itens] of porSessao) {
-                    try {
-                        const closes = await loadLatestCloseBefore(itens, sessao);
-                        for (const item of itens) {
-                            const achado = closes.get(historyStorageKey(item.ticker, item.type));
-                            item.ownClose = achado?.close ?? null;
-                            item.ownCloseDate = achado?.date ?? null;
-                        }
-                    } catch (err) {
-                        // A âncora é um LUXO comparada à cotação: sem o candle, a
-                        // variação contestada cai em zero (que é o veredito seguro),
-                        // o desempate simplesmente não acontece, e o lote inteiro de
-                        // preços segue para o banco. Deixar a exceção subir custaria
-                        // todas as cotações do lote por uma consulta acessória.
-                        logger.warn(`[MarketData] Sem âncora para reancorar variação (${sessao}): ${err.message}`);
-                    }
-                }
-
-                // Desempate do salto contra o banco, com a nossa série de árbitro.
-                for (const j of precisamDeAncora) {
-                    const veredito = arbitrateStoredJump({
-                        type: j.type,
-                        price: j.price,
-                        storedPrice: j.storedPrice,
-                        ownClose: j.ownClose,
-                    });
-                    if (veredito) {
-                        j.achados = applyStoredJumpArbitration(j.achados, {
-                            verdict: veredito,
-                            ownClose: j.ownClose,
-                            ownCloseDate: j.ownCloseDate,
-                        });
-                    }
-                }
-            }
-
-            // O painel só é alimentado AGORA, com os achados já arbitrados: é a
-            // diferença entre "RBRL11 saltou 26%" e "o 58,45 que estava guardado
-            // é que era do RBHG11, e acabou de ser corrigido".
-            for (const j of julgados) {
-                recordSuspectQuote({
-                    subject: j.ticker,
-                    type: j.type,
-                    source: j.source,
-                    price: j.price,
-                    findings: j.achados,
-                });
-                suspectTickers.push(`${j.ticker} (${j.achados[0].detail})`);
-            }
-
-            if (contestados.length > 0) {
-                for (const c of contestados) {
-                    const { change, previousClose } = resolveContestedChange({
-                        price: c.price,
-                        ownClose: c.ownClose,
-                    });
-                    c.payload.change = change;
-                    c.payload.previousClose = previousClose;
-                }
-                logger.warn(
-                    `🧭 [MarketData] ${contestados.length} variação(ões) reancorada(s) no nosso fechamento `
-                    + `(a fonte se contradisse): ${contestados.map((c) => `${c.ticker}→${c.payload.change.toFixed(2)}%`).join(', ')}`,
-                    { reanchored: contestados.map((c) => c.ticker) },
-                );
-            }
-
-            // --- BLACKLIST DINÂMICA (DETECTAR FALHAS) ---
-            // Tickers solicitados que NÃO retornaram preço válido ganham failCount
-            // (gate de 1/dia, teto de 999, blue chips protegidas). Regra única em
-            // buildQuoteFailureOps — ver comentário lá.
-            //
-            // "Sem negócio" fora do pregão é INCONCLUSIVO (ver isExpectedNoTrade):
-            // nada é gravado, mas também não conta falha — senão todo fim de
-            // semana e feriado somava uma falha a cada papel vivo da B3.
-            const inconclusiveTickers = new Set(
-                noTradeTickers
-                    .filter((e) => isExpectedNoTrade(e.split('@')[1], now))
-                    .map((e) => e.split('@')[0]),
-            );
-            const failedAssets = toUpdate
-                .filter(t => !successfulTickers.has(t) && !inconclusiveTickers.has(t))
-                .map(t => assetMap.get(t));
-            operations.push(...this.buildQuoteFailureOps(failedAssets, successfulTickers));
-
-            // O eco precisa aparecer com nome próprio no log: no report ele some
-            // dentro de "falhou em todas as fontes", que é uma frase diferente —
-            // aqui uma fonte RESPONDEU, com um número que não vale como pregão.
-            if (echoedTickers.length > 0) {
-                logger.warn(
-                    `🔁 [MarketData] ${echoedTickers.length} ativo(s) só ecoaram o preço já gravado (fonte sem data de sessão): ${echoedTickers.join(', ')}`,
-                    { echoed: echoedTickers },
-                );
-            }
-            // Símbolo trocado se parece com isto: o preço chega, datado, e a data é
-            // de meses atrás. O ticker vai com a sessão colada para o log responder
-            // "desde quando" sem ninguém precisar abrir o banco.
-            if (staleTickers.length > 0) {
-                logger.warn(
-                    `🕰️ [MarketData] ${staleTickers.length} ativo(s) com cotação de sessão antiga (> ${RETIRE_RECENT_CANDLE_DAYS}d) — não gravada como preço de hoje: ${staleTickers.join(', ')}`,
-                    { stale: staleTickers },
-                );
-            }
-
-            // O papel que "cota" todo dia sem negociar nenhum precisa aparecer
-            // NOMEADO: ele não some em "falhou em todas as fontes" (uma fonte
-            // respondeu, e com data de ontem) nem no eco (o preço até muda). Sem
-            // esta linha, o único vestígio de HGPO11 & cia. no log era um ativo
-            // saudável sendo cotado a cada 15 minutos.
-            //
-            // Só entra como ALERTA o que aconteceu num pregão que houve e já
-            // começou (ver isExpectedNoTrade). O resto — madrugada, feriado, fim de
-            // semana — é registrado em debug: continua auditável no arquivo, sem
-            // gastar a atenção de quem lê o terminal.
-            if (noTradeTickers.length > 0) {
-                const esperados = noTradeTickers.filter((e) => isExpectedNoTrade(e.split('@')[1], now));
-                const alertaveis = noTradeTickers.filter((e) => !isExpectedNoTrade(e.split('@')[1], now));
-                if (alertaveis.length > 0) {
-                    logger.warn(
-                        `🈳 [MarketData] ${alertaveis.length} ativo(s) com sessão datada mas SEM negócio `
-                        + `(volume zero) — não gravada como preço: ${alertaveis.join(', ')}`,
-                        { noTrade: alertaveis },
-                    );
-                }
-                if (esperados.length > 0) {
-                    logger.debug(
-                        `🈳 [MarketData] ${esperados.length} ativo(s) sem negócio fora do pregão `
-                        + '(mercado fechado ou ainda não aberto) — nada gravado.',
-                        { noTradeExpected: esperados },
-                    );
-                }
-            }
-
-            // Suspeita não é falha, e o log precisa dizer isso: o preço FOI
-            // gravado. Sem a frase, quem lê a linha assume que o ativo ficou sem
-            // cotação e vai procurar um defeito que não existe.
-            if (suspectTickers.length > 0) {
-                logger.warn(
-                    `📈 [MarketData] ${suspectTickers.length} cotação(ões) fora da magnitude esperada `
-                    + `(gravadas; podem ser grupamento/desdobramento): ${suspectTickers.join(' | ')}`,
-                    { suspects: suspectTickers },
-                );
-            }
-
-            if (operations.length > 0) {
-                await MarketAsset.bulkWrite(operations);
+            if (results.operations.length > 0) {
+                await MarketAsset.bulkWrite(results.operations);
             }
 
             // Provento do dia-ex: só detectável DURANTE a sessão em que o gap
             // existe. Depois do bulkWrite para não atrasar a gravação da cotação.
-            //
             // Cotação com variação contestada fica de FORA: o sinal de provento é
-            // justamente a distância entre o `previousClose` da fonte e o nosso
-            // candle bruto — e é esse `previousClose` que acabou de ser
-            // desqualificado. Com XPIN11 (fonte dizendo 29,82 contra o nosso
-            // candle de 62,04) o gap viraria um "provento" de R$ 32,22 por cota.
-            const contestadoSet = new Set(contestados.map((c) => c.ticker));
+            // a distância entre o `previousClose` da fonte e o nosso candle bruto,
+            // e é esse `previousClose` que acabou de ser desqualificado (com
+            // XPIN11 o gap viraria um "provento" de R$ 32,22 por cota).
+            const contestadoSet = new Set(results.contestados.map((c) => c.ticker));
             await this.detectExDateDividends(
                 contestadoSet.size > 0
                     ? quotes.filter((q) => !contestadoSet.has(this.normalizeSymbol(q.ticker)))
@@ -1598,169 +1539,140 @@ export const marketDataService = {
     },
 
     async getMarketData(assetClass) {
-        const isBrasil = assetClass === 'STOCK' || assetClass === 'FII' || assetClass === 'BRASIL_10';
-        const isCrypto = assetClass === 'CRYPTO';
-        const isStockUS = assetClass === 'STOCK_US';
-        // Classe ETF (unificada): ETFs nacionais (type 'ETF') + internacionais
-        // (STOCK_US com usSubType 'ETF'/'GOLD' — ouro é investido via ETF, PR8).
-        const isEtf = assetClass === 'ETF';
-        // Classe REIT (independente): REITs individuais do Exterior (STOCK_US/usSubType 'REIT').
-        const isReit = assetClass === 'REIT';
-        const results = [];
+        const typeFilter = researchTypeFilter(assetClass);
+        if (!typeFilter) return [];
 
-        if (isBrasil || isCrypto || isStockUS || isEtf || isReit) {
-            // Filtro por tipo: BRASIL_10 = STOCK+FII; ETF = union BR+internacional(+ouro);
-            // REIT = só REITs individuais; STOCK_US (Exterior) = ações puras (sem REIT/ETF/
-            // GOLD/DOLLAR, que têm rankings/baldes próprios); demais = direto.
-            let typeFilter;
-            if (assetClass === 'BRASIL_10') {
-                typeFilter = { type: { $in: ['STOCK', 'FII'] } };
-            } else if (isEtf) {
-                typeFilter = { $or: [{ type: 'ETF' }, { type: 'STOCK_US', usSubType: { $in: ['ETF', 'GOLD'] } }] };
-            } else if (isReit) {
-                typeFilter = { type: 'STOCK_US', usSubType: 'REIT' };
-            } else if (isStockUS) {
-                // $nin também casa usSubType ausente/null → tratado como ação (STOCK).
-                typeFilter = { type: 'STOCK_US', usSubType: { $nin: ['REIT', 'ETF', 'GOLD', 'DOLLAR'] } };
-            } else {
-                typeFilter = { type: { $in: [assetClass] } };
-            }
+        // Sem filtro de liquidez aqui — scoringEngine.js gera DiscardLog para tickers insuficientes
+        const dbAssets = await MarketAsset.find({
+            ...typeFilter,
+            isIgnored: false,
+            isBlacklisted: false,
+            isActive: true,
+        });
+        const trackByTicker = await loadTrackRecords(dbAssets);
+        const results = dbAssets.map((asset) => toResearchAsset(asset, trackByTicker));
 
-            // Sem filtro de liquidez aqui — scoringEngine.js gera DiscardLog para tickers insuficientes
-            const extraFilter = {};
-
-            const dbAssets = await MarketAsset.find({
-                ...typeFilter,
-                isIgnored: false,
-                isBlacklisted: false,
-                isActive: true,
-                ...extraFilter
-            });
-
-            // (Fase 3) Carrega a série temporal de fundamentos (track record) em um único
-            // find e resume por ticker. Vazio/insuficiente → summarizeTrackRecord = null →
-            // o scoringEngine não aplica bônus (dimensão DORMENTE até a série acumular).
-            let trackByTicker = new Map();
-            try {
-                const snaps = await FundamentalSnapshot
-                    .find({ ticker: { $in: dbAssets.map(a => a.ticker) } })
-                    .select('ticker history').lean();
-                trackByTicker = new Map(snaps.map(s => [s.ticker, summarizeTrackRecord(s.history)]));
-            } catch (e) {
-                logger.warn(`[MarketData] Falha ao carregar track record: ${e.message}`);
-            }
-
-            for (const asset of dbAssets) {
-                // Filtro de liquidez removido daqui e centralizado no scoringEngine.js para gerar DiscardLog
-
-                // --- MELHORIA CRÍTICA 1: Distinguir dado ausente de dado ruim ---
-                // Campos onde 0 = quase certamente dado não coletado (nunca são exatamente 0 na prática)
-                const _missing = {
-                    pl:            !asset.pl            || asset.pl === 0,
-                    marketCap:     !asset.marketCap     || asset.marketCap === 0,
-                    roe:           !asset.roe            || asset.roe === 0,
-                    netMargin:     !asset.netMargin      || asset.netMargin === 0,
-                    revenueGrowth: !asset.revenueGrowth  || asset.revenueGrowth === 0,
-                    evEbitda:      !asset.evEbitda       || asset.evEbitda === 0,
-                    beta:          !asset.beta           || asset.beta === 0,
-                    // Campos com 0 legítimo — NÃO marcados como ausentes
-                    dy:            false,   // Empresa pode não pagar dividendos
-                    debtToEquity:  false,   // Empresa pode não ter dívida
-                    payout:        false,   // Empresa pode não distribuir
-                };
-
-                // Calcula completude dos dados fundamentalistas (0–100%)
-                const fundamentalFields = ['pl', 'marketCap', 'roe', 'netMargin', 'revenueGrowth', 'evEbitda'];
-                const missingCount = fundamentalFields.filter(f => _missing[f]).length;
-                const dataCompleteness = Math.round(((fundamentalFields.length - missingCount) / fundamentalFields.length) * 100);
-
-                // Calcula quantos dias desde a última atualização de fundamentais
-                const _staleDays = asset.lastFundamentalsDate
-                    ? Math.floor((Date.now() - new Date(asset.lastFundamentalsDate).getTime()) / (1000 * 60 * 60 * 24))
-                    : null;
-
-                // REITs do Exterior: setor de EXIBIÇÃO vira o sub-segmento fino (Varejo,
-                // Industrial/Logística, Saúde…) p/ diversificar o donut — o `sector` no
-                // banco segue "Real Estate" (classificação intacta).
-                const isReitDisplay = asset.type === 'STOCK_US' && asset.usSubType === 'REIT';
-                const displaySector = isReitDisplay ? reitSegmentPT(asset.industry) : asset.sector;
-
-                results.push({
-                    ticker: asset.ticker,
-                    type: asset.type,
-                    allocationClass: asset.allocationClass || null,
-                    currency: asset.currency || (asset.type === 'STOCK_US' ? 'USD' : 'BRL'),
-                    name: asset.name || asset.ticker,
-                    sector: displaySector,
-                    // Metadados da calibração buy-and-hold STOCK. Permanecem no
-                    // topo para não contaminar `metrics` com dados de proveniência.
-                    stockArchetype: asset.stockArchetype || null,
-                    sectorMetrics: asset.sectorMetrics?.toObject
-                        ? asset.sectorMetrics.toObject()
-                        : (asset.sectorMetrics || {}),
-                    fiiSubType: asset.fiiSubType || null,
-                    usSubType: asset.usSubType || null,
-                    price: asset.lastPrice || 0,
-                    dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 },
-                    metrics: {
-                        ticker: asset.ticker,
-                        price: asset.lastPrice,
-                        dy: asset.dy || 0,
-                        pvp: asset.pvp || asset.p_vp || 0,
-                        marketCap: asset.marketCap || 0,
-                        avgLiquidity: asset.avgLiquidity || asset.liquidity || 0,
-                        pl: asset.pl || 0,
-                        roe: asset.roe || 0,
-                        roic: asset.roic || 0,
-                        netMargin: asset.netMargin || 0,
-                        evEbitda: asset.evEbitda || 0,
-                        revenueGrowth: asset.revenueGrowth || 0,
-                        debtToEquity: asset.debtToEquity || 0,
-                        netDebt: asset.netDebt || 0,
-                        payout: asset.payout || 0,
-                        // Financials LTM (cacheados): preenchem o modal "Financials (LTM)".
-                        netRevenue: asset.netRevenue || 0,
-                        netIncome: asset.netIncome || 0,
-                        totalAssets: asset.totalAssets || 0,
-                        patrimLiq: asset.patrimLiq || 0,
-                        vacancy: asset.vacancy || 0,
-                        capRate: asset.capRate || 0,
-                        qtdImoveis: asset.qtdImoveis || 0,
-                        // FFO do FII (0 = fonte não publicou). vpCota alimenta o VP do preço
-                        // justo em calculateIntrinsicValue, que sem ele usa o fallback price/pvp.
-                        ffoYield: asset.ffoYield || 0,
-                        vpCota: asset.vpCota || 0,
-                        ffoCota: asset.ffoCota || 0,
-                        volatility: asset.volatility || 0,
-                        beta: asset.beta || 0,
-                        sma200: asset.sma200 || 0,
-                        ema50: asset.ema50 || 0,
-                        // Passados para o scoringEngine identificar isPapel e setor
-                        sector: asset.sector,
-                        fiiSubType: asset.fiiSubType || null,
-                        // Flags de qualidade de dados
-                        _missing,
-                        _staleDays,
-                        dataCompleteness,
-                        // (Fase 3) Resumo de track record (consistência ao longo do tempo) ou
-                        // null quando não há série suficiente. Consumido pelo scoringEngine.
-                        trackRecord: trackByTicker.get(asset.ticker) || null,
-                        structural: {
-                            quality: 50,
-                            valuation: 50,
-                            risk: 50
-                        }
-                    }
-                });
-            }
-        }
-        
         if (assetClass === 'STOCK' || assetClass === 'BRASIL_10') {
             return deduplicateAssets(results);
         }
         return results;
     }
 };
+
+// Universo de cada classe do ranking. BRASIL_10 = STOCK+FII; ETF (unificada) =
+// ETFs nacionais (type 'ETF') + internacionais (STOCK_US com usSubType 'ETF'/'GOLD'
+// — ouro é investido via ETF, PR8); REIT = só REITs individuais do Exterior;
+// STOCK_US (Exterior) = ações puras (sem REIT/ETF/GOLD/DOLLAR, que têm rankings
+// próprios); STOCK/FII/CRYPTO = direto. null = classe fora do ranking.
+const researchTypeFilter = (assetClass) => {
+    switch (assetClass) {
+    case 'BRASIL_10': return { type: { $in: ['STOCK', 'FII'] } };
+    case 'ETF': return { $or: [{ type: 'ETF' }, { type: 'STOCK_US', usSubType: { $in: ['ETF', 'GOLD'] } }] };
+    case 'REIT': return { type: 'STOCK_US', usSubType: 'REIT' };
+    // $nin também casa usSubType ausente/null → tratado como ação (STOCK).
+    case 'STOCK_US': return { type: 'STOCK_US', usSubType: { $nin: ['REIT', 'ETF', 'GOLD', 'DOLLAR'] } };
+    case 'STOCK':
+    case 'FII':
+    case 'CRYPTO': return { type: { $in: [assetClass] } };
+    default: return null;
+    }
+};
+
+// (Fase 3) Série temporal de fundamentos (track record) em um único find, resumida
+// por ticker. Vazio/insuficiente → summarizeTrackRecord = null → o scoringEngine
+// não aplica bônus (dimensão DORMENTE até a série acumular).
+const loadTrackRecords = async (dbAssets) => {
+    try {
+        const snaps = await FundamentalSnapshot
+            .find({ ticker: { $in: dbAssets.map(a => a.ticker) } })
+            .select('ticker history').lean();
+        return new Map(snaps.map(s => [s.ticker, summarizeTrackRecord(s.history)]));
+    } catch (e) {
+        logger.warn(`[MarketData] Falha ao carregar track record: ${e.message}`);
+        return new Map();
+    }
+};
+
+// Distinguir dado ausente de dado ruim: nestes campos 0 = quase certamente dado
+// não coletado (nunca são exatamente 0 na prática). dy, dívida e payout têm 0
+// legítimo (não paga, não deve, não distribui) e nunca são marcados.
+const ZERO_MEANS_MISSING = ['pl', 'marketCap', 'roe', 'netMargin', 'revenueGrowth', 'evEbitda', 'beta'];
+const FUNDAMENTAL_FIELDS = ['pl', 'marketCap', 'roe', 'netMargin', 'revenueGrowth', 'evEbitda'];
+// Métricas numéricas em que ausência vira 0, na ordem em que o item sempre saiu.
+// Financials LTM (netRevenue…patrimLiq) preenchem o modal "Financials (LTM)";
+// FFO do FII é 0 quando a fonte não publicou, e vpCota alimenta o VP do preço justo
+// em calculateIntrinsicValue (sem ele, fallback price/pvp).
+const ZERO_DEFAULT_METRICS = [
+    'pl', 'roe', 'roic', 'netMargin', 'evEbitda', 'revenueGrowth', 'debtToEquity', 'netDebt', 'payout',
+    'netRevenue', 'netIncome', 'totalAssets', 'patrimLiq', 'vacancy', 'capRate', 'qtdImoveis',
+    'ffoYield', 'vpCota', 'ffoCota', 'volatility', 'beta', 'sma200', 'ema50',
+];
+
+const missingFlagsOf = (asset) => ({
+    ...Object.fromEntries(ZERO_MEANS_MISSING.map((f) => [f, !asset[f] || asset[f] === 0])),
+    dy: false,
+    debtToEquity: false,
+    payout: false,
+});
+
+const buildResearchMetrics = (asset, trackByTicker) => {
+    const _missing = missingFlagsOf(asset);
+    // Completude dos dados fundamentalistas (0–100%)
+    const missingCount = FUNDAMENTAL_FIELDS.filter(f => _missing[f]).length;
+    const dataCompleteness = Math.round(((FUNDAMENTAL_FIELDS.length - missingCount) / FUNDAMENTAL_FIELDS.length) * 100);
+    // Dias desde a última atualização de fundamentais
+    const _staleDays = asset.lastFundamentalsDate
+        ? Math.floor((Date.now() - new Date(asset.lastFundamentalsDate).getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+    return {
+        ticker: asset.ticker,
+        price: asset.lastPrice,
+        dy: asset.dy || 0,
+        pvp: asset.pvp || asset.p_vp || 0,
+        marketCap: asset.marketCap || 0,
+        avgLiquidity: asset.avgLiquidity || asset.liquidity || 0,
+        ...Object.fromEntries(ZERO_DEFAULT_METRICS.map((f) => [f, asset[f] || 0])),
+        // Passados para o scoringEngine identificar isPapel e setor
+        sector: asset.sector,
+        fiiSubType: asset.fiiSubType || null,
+        // Flags de qualidade de dados
+        _missing,
+        _staleDays,
+        dataCompleteness,
+        // (Fase 3) Resumo de track record ou null quando não há série suficiente.
+        trackRecord: trackByTicker.get(asset.ticker) || null,
+        structural: { quality: 50, valuation: 50, risk: 50 },
+    };
+};
+
+// REITs do Exterior: setor de EXIBIÇÃO vira o sub-segmento fino (Varejo,
+// Industrial/Logística, Saúde…) p/ diversificar o donut — o `sector` no banco
+// segue "Real Estate" (classificação intacta).
+const displaySectorOf = (asset) => (
+    asset.type === 'STOCK_US' && asset.usSubType === 'REIT' ? reitSegmentPT(asset.industry) : asset.sector
+);
+
+const plainSectorMetrics = (sectorMetrics) => (
+    sectorMetrics?.toObject ? sectorMetrics.toObject() : (sectorMetrics || {})
+);
+
+const toResearchAsset = (asset, trackByTicker) => ({
+    ticker: asset.ticker,
+    type: asset.type,
+    allocationClass: asset.allocationClass || null,
+    currency: asset.currency || (asset.type === 'STOCK_US' ? 'USD' : 'BRL'),
+    name: asset.name || asset.ticker,
+    sector: displaySectorOf(asset),
+    // Metadados da calibração buy-and-hold STOCK. Permanecem no topo para não
+    // contaminar `metrics` com dados de proveniência.
+    stockArchetype: asset.stockArchetype || null,
+    sectorMetrics: plainSectorMetrics(asset.sectorMetrics),
+    fiiSubType: asset.fiiSubType || null,
+    usSubType: asset.usSubType || null,
+    price: asset.lastPrice || 0,
+    dbFlags: { isBlacklisted: asset.isBlacklisted, isTier1: asset.isTier1 },
+    metrics: buildResearchMetrics(asset, trackByTicker),
+});
 
 const deduplicateAssets = (assets) => {
     const grouped = {};

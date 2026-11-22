@@ -14,23 +14,24 @@ import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { DERIVED_EXPIRY_MS, DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
-import { safeFloat, safeUnitPrice, safeCurrency, safeAdd, safeSub, safeMult, safeDiv, calculateDailyDietz, safeQuantity, safeValue, addQty, subQty, QUANTITY_EPSILON, resolveCurrentCdiRate } from '../utils/mathUtils.js';
+import { safeFloat, safeCurrency, safeAdd, safeMult, safeDiv, calculateDailyDietz, safeValue, addQty, QUANTITY_EPSILON, resolveCurrentCdiRate } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
 import { fillPaymentDatesForTicker } from './dividendPaymentDateService.js';
-import { classifyUsAsset } from '../utils/usClassification.js';
-import { isGoldTicker } from '../utils/goldClassification.js';
 import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
-import { resolveAllocationClass } from '../utils/assetAllocation.js';
 import { loadUsdRateResolver, effectiveFxRate, positionCostBRL } from '../utils/fxRate.js';
 import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixedIncome.js';
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
+import {
+    resolveNativeCurrency, buildFxRateOf, replayPositionLedger, stampFxRates, createPositionAsset, healAllocationClass, applyLedgerToAsset,
+    refreshUsSubType,
+} from './positionRecalc.js';
 
 export const financialService = {
     
@@ -1356,255 +1357,22 @@ export const financialService = {
             marketInfo = await MarketAsset.findOne({ ticker });
         }
 
-        // Mesma precedência de moeda usada na criação da posição (cadastro
-        // explícito > MarketAsset > BRL), só que resolvida antes por necessidade.
-        const nativeCurrency = forcedCurrency || asset?.currency || marketInfo?.currency || 'BRL';
-        let usdRateForDate = null;
-        if (nativeCurrency === 'USD') {
-            // A cotação corrente entra como âncora para lançamentos posteriores ao
-            // último candle da série (compra de hoje, p.ex.).
-            const macro = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).select('dollar').lean().catch(() => null);
-            usdRateForDate = await this._loadUsdRateResolver(macro?.dollar);
-        }
-        const rateOf = (tx) => (nativeCurrency === 'USD' ? effectiveFxRate(tx, 'USD', usdRateForDate) : 1);
-
-        let quantity = 0;
-        let totalCost = 0;
-        let realizedProfit = 0;
-        let fifoRealizedProfit = 0; // NOVO: Lucro Realizado FIFO
-        let taxLots = [];
-        let firstBuyDate = null;
-        // Espelho em BRL de totalCost/realizedProfit: mesma base de preço médio,
-        // cada lançamento convertido pelo câmbio do PRÓPRIO dia. Só assim o
-        // resultado cambial aparece (em vez de se cancelar contra o saldo).
-        let totalCostBrl = 0;
-        let realizedProfitBrl = 0;
-        const fxToStamp = [];
-        // Saldo negativo é checado na VIRADA DE DIA, não só no fim. Com o check
-        // apenas no fim, VENDA 10 em 01/01 + COMPRA 20 em 01/02 passava: a venda
-        // saía com preço médio 0 (lucro realizado fictício = valor inteiro da venda)
-        // e a compra herdava o custo da quantidade negativa (médio 80 em vez de 40),
-        // enquanto o rebuild do histórico zerava o negativo e chegava a outra posição.
-        // Dentro do mesmo dia a ordem de digitação decide (day trade lançado com a
-        // venda primeiro continua aceito, como antes).
+        const nativeCurrency = resolveNativeCurrency(forcedCurrency, asset, marketInfo);
+        const rateOf = await buildFxRateOf(nativeCurrency, (dollar) => this._loadUsdRateResolver(dollar));
         const insufficientBalance = () => txError(400, `Saldo insuficiente para ${ticker}: uma venda ficaria maior que a quantidade comprada até a data dela.`);
-        let currentDayKey = null;
-
-        for (const tx of transactions) {
-            const txDayKey = toDateKeyUtil(tx.date);
-            if (currentDayKey !== null && txDayKey !== currentDayKey && quantity < -QUANTITY_EPSILON) {
-                throw insufficientBalance();
-            }
-            currentDayKey = txDayKey;
-            // Quantidade em 8 casas (cripto); valor monetário continua em 2/4 casas.
-            const txQty = safeQuantity(tx.quantity);
-            const txPrice = safeUnitPrice(tx.price);
-            const txTotal = safeCurrency(txQty * txPrice);
-            const txFx = rateOf(tx);
-            const txTotalBrl = safeCurrency(txTotal * txFx);
-            // Carimba o câmbio nos lançamentos legados EM DÓLAR (auto-heal): a
-            // partir daí o custo em reais não depende mais da reconstrução
-            // histórica. Posição em real não é carimbada — gravar "1" em todo
-            // lançamento do país inteiro seria escrita pura sem informação.
-            if (nativeCurrency === 'USD' && !(Number(tx.fxRate) > 0)) {
-                fxToStamp.push({ id: tx._id, fxRate: txFx });
-            }
-
-            if (tx.type === 'BUY') {
-                quantity = addQty(quantity, txQty);
-                totalCost = safeAdd(totalCost, txTotal);
-                totalCostBrl = safeAdd(totalCostBrl, txTotalBrl);
-                taxLots.push({ quantity: txQty, price: txPrice, date: tx.date, fxRate: txFx });
-                if (!firstBuyDate) firstBuyDate = tx.date;
-            } else if (tx.type === 'SELL') {
-                // Venda que ZERA a posição baixa o custo inteiro, não qtd × médio.
-                // O médio é arredondado (safeUnitPrice, 4 casas acima de 1), e
-                // qtd × médio arredondado deixava um resíduo: COMPRA 1000@10 +
-                // COMPRA 2000@10,01 → médio 10,0067 → a venda de 3000 baixava
-                // 30.020,10 de um custo de 30.020,00. O lucro saía 0,10 menor e o
-                // custo ficava em −0,10, herdado pela próxima compra (999,90 em vez
-                // de 1.000). O zeramento do fim do laço não alcança esse caso porque
-                // a posição reabre antes dele.
-                const closesPosition = quantity > 0
-                    && Math.abs(subQty(quantity, txQty)) <= QUANTITY_EPSILON;
-                const currentAvg = quantity > 0 ? safeUnitPrice(totalCost / quantity) : 0;
-                const costOfSoldShares = closesPosition ? totalCost : safeCurrency(txQty * currentAvg);
-                const profit = safeSub(txTotal, costOfSoldShares);
-                // Baixa proporcional do custo em BRL — preserva o câmbio médio das
-                // compras remanescentes (a venda não reprecifica o que ficou).
-                // Zerando, sai o espelho inteiro pelo mesmo motivo acima.
-                let costOfSoldSharesBrl = 0;
-                if (closesPosition) costOfSoldSharesBrl = totalCostBrl;
-                else if (quantity > 0) costOfSoldSharesBrl = safeCurrency(totalCostBrl * (txQty / quantity));
-
-                realizedProfit = safeAdd(realizedProfit, profit);
-                realizedProfitBrl = safeAdd(realizedProfitBrl, safeSub(txTotalBrl, costOfSoldSharesBrl));
-                quantity = subQty(quantity, txQty);
-                totalCost = safeSub(totalCost, costOfSoldShares);
-                totalCostBrl = safeSub(totalCostBrl, costOfSoldSharesBrl);
-                if (closesPosition) { quantity = 0; totalCost = 0; totalCostBrl = 0; }
-
-                let remainingToSell = txQty;
-                let fifoCostOfSoldShares = 0; // NOVO
-
-                while (remainingToSell > QUANTITY_EPSILON && taxLots.length > 0) {
-                    const oldestLot = taxLots[0];
-                    if (oldestLot.quantity > remainingToSell) {
-                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeCurrency(remainingToSell * oldestLot.price));
-                        oldestLot.quantity = subQty(oldestLot.quantity, remainingToSell);
-                        remainingToSell = 0;
-                    } else {
-                        fifoCostOfSoldShares = safeAdd(fifoCostOfSoldShares, safeCurrency(oldestLot.quantity * oldestLot.price));
-                        remainingToSell = subQty(remainingToSell, oldestLot.quantity);
-                        taxLots.shift();
-                    }
-                }
-
-                const fifoProfit = safeSub(txTotal, fifoCostOfSoldShares);
-                fifoRealizedProfit = safeAdd(fifoRealizedProfit, fifoProfit);
-            }
-        }
-
-        if (taxLots.length > 500) {
-            const lotsToMerge = taxLots.slice(0, 100);
-            const keptLots = taxLots.slice(100);
-            let mergedQty = 0;
-            let mergedCost = 0;
-            let mergedCostBrl = 0;
-
-            lotsToMerge.forEach(l => {
-                mergedQty = addQty(mergedQty, l.quantity);
-                mergedCost = safeAdd(mergedCost, safeCurrency(l.quantity * l.price));
-                mergedCostBrl = safeAdd(mergedCostBrl, safeCurrency(l.quantity * l.price * (l.fxRate || 1)));
-            });
-
-            // safeUnitPrice, não safeFloat (regra 7): as 4 casas zeravam o lote consolidado
-            // de cripto sub-centavo.
-            const mergedPrice = mergedQty > 0 ? safeUnitPrice(mergedCost / mergedQty) : 0;
-            // Câmbio médio ponderado pelo custo — mantém o lote consolidado com o
-            // mesmo valor em reais que os lotes originais somavam.
-            const mergedFx = mergedCost > 0 ? safeFloat(mergedCostBrl / mergedCost) : 1;
-
-            taxLots = [{
-                date: lotsToMerge[lotsToMerge.length - 1].date,
-                quantity: mergedQty,
-                price: mergedPrice,
-                fxRate: mergedFx,
-                _id: false
-            }, ...keptLots];
-        }
-
-        // Erro do USUÁRIO, não do servidor: a sequência de lançamentos vende mais
-        // do que havia (venda datada antes das compras, ou exclusão de uma compra
-        // da qual uma venda posterior depende). Sem status, virava 500 e chegava
-        // como "Erro interno no servidor" — e entrava no painel como falha nossa.
-        if (quantity < -QUANTITY_EPSILON) {
-            throw insufficientBalance();
-        }
-        if (quantity <= QUANTITY_EPSILON) { quantity = 0; totalCost = 0; totalCostBrl = 0; taxLots = []; }
-
-        // Persistência do carimbo de câmbio: fora do laço, em uma escrita só, e
-        // best-effort — falhar aqui não pode derrubar o recálculo da posição
-        // (o valor já foi reconstruído em memória e o próximo recalc tenta de novo).
-        if (fxToStamp.length > 0) {
-            try {
-                await AssetTransaction.bulkWrite(
-                    fxToStamp.map(({ id, fxRate }) => ({
-                        updateOne: { filter: { _id: id }, update: { $set: { fxRate } } },
-                    })),
-                    session ? { session } : {},
-                );
-            } catch (err) {
-                logger.warn(`[FX] Falha ao carimbar câmbio em ${ticker}: ${err.message}`);
-            }
-        }
+        const ledger = replayPositionLedger(transactions, { nativeCurrency, rateOf, insufficientBalance });
+        await stampFxRates(ledger.fxToStamp, session, ticker);
 
         if (!asset) {
-            if (transactions.length > 0) {
-                // marketInfo já foi buscado acima (a moeda dele decide o câmbio).
-                // Ouro não é mais classe própria na carteira: entra como ETF lastreado
-                // (GLD/IAU/GOLD11…). Se o usuário não escolheu o tipo explicitamente
-                // (forcedType), instrumentos de ouro caem na classe ETF.
-                const goldDefault = isGoldTicker(ticker) ? 'ETF' : null;
-                asset = new UserAsset({
-                    user: userId, wallet: walletId, ticker,
-                    type: forcedType || goldDefault || marketInfo?.type || 'STOCK',
-                    // Moeda explícita do cadastro tem prioridade (ETF nacional R$ vs
-                    // internacional US$); senão herda do MarketAsset; senão BRL.
-                    currency: forcedCurrency || marketInfo?.currency || 'BRL',
-                    allocationClass: resolveAllocationClass({
-                        ticker,
-                        type: forcedType || goldDefault || marketInfo?.type || 'STOCK',
-                        allocationClass: marketInfo?.allocationClass,
-                        sector: marketInfo?.sector,
-                    }),
-                });
-
-                // Rede de segurança: ticker sem registro de mercado (ex.: ETF nacional
-                // fora da lista curada, ou ativo digitado direto) ganha um stub para o
-                // refresh de cotações ter um documento para atualizar — senão ficaria
-                // com preço 0 no total da carteira. Caixa/Renda Fixa não têm cotação.
-                if (!marketInfo && !['CASH', 'FIXED_INCOME'].includes(asset.type)) {
-                    await MarketAsset.updateOne(
-                        { ticker },
-                        { $setOnInsert: { ticker, name: asset.name || ticker, type: asset.type, currency: asset.currency || 'BRL', allocationClass: asset.allocationClass || null, isActive: true } },
-                        { upsert: true, session }
-                    ).catch(() => {});
-                }
-            } else { return null; }
+            if (transactions.length === 0) return null;
+            asset = await createPositionAsset({ userId, walletId, ticker, forcedType, forcedCurrency, marketInfo, session });
         } else if (forcedType && asset.type !== forcedType) {
             asset.type = forcedType;
         }
 
-        // Self-heal idempotente de posições anteriores ao campo allocationClass.
-        // O MarketAsset prevalece; a lista curada/ticker e o setor são fallbacks.
-        if (!marketInfo && (asset.type === 'ETF' || !asset.allocationClass)) {
-            marketInfo = await MarketAsset.findOne({ ticker })
-                .select('sector currency name type allocationClass')
-                .lean()
-                .catch(() => null);
-        }
-        asset.allocationClass = resolveAllocationClass({
-            ticker,
-            type: asset.type,
-            allocationClass: marketInfo?.allocationClass || asset.allocationClass,
-            sector: marketInfo?.sector,
-        });
-
-        asset.quantity = quantity;
-        asset.totalCost = safeCurrency(totalCost);
-        asset.realizedProfit = safeCurrency(realizedProfit);
-        asset.fifoRealizedProfit = safeCurrency(fifoRealizedProfit); // NOVO
-        asset.taxLots = taxLots;
-        // Custo/realizado em BRL com o câmbio de cada lançamento congelado.
-        asset.totalCostBrl = safeCurrency(totalCostBrl);
-        asset.realizedProfitBrl = safeCurrency(realizedProfitBrl);
-        asset.updatedAt = new Date();
-        
-        if (firstBuyDate && (asset.type === 'FIXED_INCOME' || asset.type === 'CASH')) {
-            asset.startDate = firstBuyDate;
-        }
-
-        // Exterior: auto-classifica o sub-tipo (Stocks/ETF/REIT/Dólar) quando o
-        // usuário não definiu manualmente. Override manual permanece intocado.
-        if (asset.type === 'STOCK_US') {
-            if (!asset.usSubTypeManual) {
-                if (!marketInfo) {
-                    marketInfo = await MarketAsset.findOne({ ticker }).select('sector currency name').lean().catch(() => null);
-                }
-                asset.usSubType = classifyUsAsset({
-                    ticker,
-                    sector: marketInfo?.sector,
-                    type: asset.type,
-                    currency: asset.currency || marketInfo?.currency,
-                    name: asset.name || marketInfo?.name,
-                });
-            }
-        } else if (asset.usSubType) {
-            // Mudou de classe: o sub-tipo de Exterior deixa de fazer sentido.
-            asset.usSubType = null;
-            asset.usSubTypeManual = false;
-        }
+        marketInfo = await healAllocationClass(asset, ticker, marketInfo);
+        applyLedgerToAsset(asset, ledger);
+        await refreshUsSubType(asset, ticker, marketInfo);
 
         await asset.save({ session });
         return asset;
