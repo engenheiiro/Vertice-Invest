@@ -122,233 +122,288 @@ const novoPlacar = () => ({ total: 0, CASADO: 0, AMBIGUO: 0, SEM_EVENTO: 0, SEM_
  */
 const procedencia = (ev) => (ev.source === 'DERIVED' ? 'DERIVED' : 'PROVIDER');
 
-const run = async () => {
-    await connectScriptDb({ label: 'audit-dividend-payment-sources' });
+const nomeDa = (f) => FONTE[f]?.nome || f;
+const sinal = (n) => `${n >= 0 ? '+' : ''}${n}`;
+const contar = (hist, chave) => { hist[chave] = (hist[chave] || 0) + 1; };
 
-    const desde = new Date(Date.now() - MESES * 30.44 * DIA_MS);
+// ————————————————————————————————————————————————— universo
 
-    // Universo: os tickers com mais eventos recentes, mais TUDO que algum usuário
-    // tem em carteira — é lá que a data errada aparece na tela.
+// Universo: os tickers com mais eventos recentes, mais TUDO que algum usuário
+// tem em carteira — é lá que a data errada aparece na tela.
+//
+// Classe do ativo: sem ela não dá para escolher o endpoint certo da B3, e é
+// ela que restringe o universo ao que estas fontes cobrem — ação e FII da B3.
+// Sem esse corte a amostra se enche de STOCK_US, que nenhuma delas conhece, e
+// a cobertura sai diluída por ativos que jamais estiveram em disputa.
+const carregarUniverso = async (desde) => {
     const emCarteira = (await UserAsset.distinct('ticker')).map((t) => String(t).toUpperCase());
     const porTicker = await DividendEvent.aggregate([
         { $match: { date: { $gte: desde } } },
         { $group: { _id: '$ticker', n: { $sum: 1 } } },
         { $sort: { n: -1 } },
     ]);
-
-    // Classe do ativo: sem ela não dá para escolher o endpoint certo da B3, e é
-    // ela que restringe o universo ao que estas fontes cobrem — ação e FII da B3.
-    // Sem esse corte a amostra se enche de STOCK_US, que nenhuma delas conhece, e
-    // a cobertura sai diluída por ativos que jamais estiveram em disputa.
     const ativosBr = await MarketAsset.find({ type: { $in: ['STOCK', 'FII'] } }).select('ticker type').lean();
     const tipoPorTicker = new Map(ativosBr.map((a) => [a.ticker.toUpperCase(), a.type]));
+    return { emCarteira, porTicker, tipoPorTicker };
+};
 
-    let tickers;
-    if (ALVO) {
-        tickers = ALVO;
-    } else {
-        const candidatos = porTicker.map((t) => t._id).filter((t) => tipoPorTicker.has(t));
-        const prioritarios = candidatos.filter((t) => emCarteira.includes(t));
-        const resto = candidatos.filter((t) => !emCarteira.includes(t));
-        tickers = [...new Set([...prioritarios, ...resto])].slice(0, LIMITE);
+const escolherTickers = ({ emCarteira, porTicker, tipoPorTicker }) => {
+    if (ALVO) return ALVO;
+    const candidatos = porTicker.map((t) => t._id).filter((t) => tipoPorTicker.has(t));
+    const prioritarios = candidatos.filter((t) => emCarteira.includes(t));
+    const resto = candidatos.filter((t) => !emCarteira.includes(t));
+    return [...new Set([...prioritarios, ...resto])].slice(0, LIMITE);
+};
+
+// ————————————————————————————————————————————————— medição
+
+const novaMedicao = () => {
+    const med = {
+        placar: {},          // fonte -> classe -> placar
+        amostraRuim: {},     // fonte -> exemplos de VALOR_DIVERGENTE / AMBIGUO
+        offsets: {},         // fonte -> {offsetDias: n}
+        errosEstimativa: [], // dias entre a estimativa ex+15 e a data real
+        profundidade: {},    // fonte -> [{ticker, eventos, maisAntigo}]
+        falhas: {},          // fonte -> [{ticker, motivo}]
+        divergencias: [],    // mesma linha datada por B3 e Fundamentus com datas diferentes
+        jaConhecido: { conferidos: 0, iguais: 0 }, // fonte × paymentDate que já temos
+    };
+    for (const f of FONTES) {
+        med.placar[f] = {}; med.offsets[f] = {}; med.profundidade[f] = []; med.falhas[f] = []; med.amostraRuim[f] = [];
     }
+    return med;
+};
+
+const registrarCasado = (med, f, nosso, r, casados) => {
+    contar(med.offsets[f], r.offsetDias);
+    casados.set(String(nosso._id), r.dataPagamento);
+    const estimada = estimatedPaymentDate(nosso.date);
+    med.errosEstimativa.push(Math.round((estimada.getTime() - r.dataPagamento.getTime()) / DIA_MS));
+    if (nosso.paymentDate) {
+        med.jaConhecido.conferidos += 1;
+        if (toDateKey(nosso.paymentDate) === toDateKey(r.dataPagamento)) med.jaConhecido.iguais += 1;
+    }
+};
+
+const registrarAmostraRuim = (med, f, ticker, nosso, r) => {
+    if (med.amostraRuim[f].length >= 12) return;
+    const base = `${ticker} ex=${toDateKey(nosso.date)} nosso=${nosso.amount}`;
+    if (r.desfecho === 'VALOR_DIVERGENTE') med.amostraRuim[f].push(`${base} fonte=[${r.candidatos.join(', ')}]`);
+    else if (r.desfecho === 'AMBIGUO') med.amostraRuim[f].push(`${base} AMBÍGUO → datas [${r.datas.join(', ')}]`);
+};
+
+const registrarDesfecho = (med, f, { ticker, tipo, nosso, eventosFonte, casados }) => {
+    const chave = `${tipo}/${procedencia(nosso)}`;
+    med.placar[f][chave] = med.placar[f][chave] || novoPlacar();
+    const p = med.placar[f][chave];
+    p.total += 1;
+    const r = casar(nosso, eventosFonte);
+    p[r.desfecho] += 1;
+    if (r.desfecho === 'CASADO') registrarCasado(med, f, nosso, r, casados);
+    else registrarAmostraRuim(med, f, ticker, nosso, r);
+};
+
+/** Mede uma fonte para um ticker; devolve o mapa de eventos datados ou `null` se a fonte falhou. */
+const medirFonte = async (med, f, { ticker, tipo, nossos, linha }) => {
+    const cfg = FONTE[f];
+    let resultado = null;
+    try {
+        resultado = { eventos: await cfg.buscar(ticker, tipo) };
+        await pausa(cfg.pausaMs);
+    } catch (e) {
+        med.falhas[f].push({ ticker, motivo: e.message });
+        linha.push(`${cfg.nome}:ERRO(${e.message})`);
+        return null;
+    }
+    if (resultado.motivo) med.falhas[f].push({ ticker, motivo: resultado.motivo });
+
+    const eventosFonte = resultado.eventos || [];
+    const maisAntigo = eventosFonte.reduce((min, e) => (e.dataCom && (!min || e.dataCom < min) ? e.dataCom : min), null);
+    med.profundidade[f].push({ ticker, eventos: eventosFonte.length, maisAntigo });
+
+    const casados = new Map();
+    for (const nosso of nossos) registrarDesfecho(med, f, { ticker, tipo, nosso, eventosFonte, casados });
+    linha.push(`${cfg.nome}:${casados.size}/${nossos.length}`);
+    return casados;
+};
+
+// Onde as duas fontes datam o MESMO evento, elas concordam?
+const registrarDivergencias = (med, ticker, casadosPorFonte) => {
+    if (!casadosPorFonte.b3 || !casadosPorFonte.fundamentus) return;
+    for (const [id, dataB3] of casadosPorFonte.b3) {
+        const dataFu = casadosPorFonte.fundamentus.get(id);
+        if (dataFu && toDateKey(dataB3) !== toDateKey(dataFu)) {
+            med.divergencias.push({ ticker, b3: toDateKey(dataB3), fundamentus: toDateKey(dataFu) });
+        }
+    }
+};
+
+const FORA_DO_ESCOPO = ['CRYPTO', 'FIXED_INCOME', 'CASH', 'STOCK_US', 'ETF'];
+
+const medirTicker = async (med, { ticker, i, total, tipoPorTicker, desde }) => {
+    const tipo = tipoPorTicker.get(ticker) || (/\d{2}$/.test(ticker) ? 'FII' : 'STOCK');
+    if (FORA_DO_ESCOPO.includes(tipo)) {
+        process.stdout.write(`[${String(i).padStart(3)}/${total}] ${ticker.padEnd(8)} ${tipo} — fora do escopo BR, pulado\n`);
+        return;
+    }
+
+    const nossos = await DividendEvent.find({ ticker, date: { $gte: desde } }).sort({ date: -1 }).lean();
+    if (nossos.length === 0) return;
+
+    const linha = [`[${String(i).padStart(3)}/${total}] ${ticker.padEnd(8)} ${String(tipo).padEnd(5)} ${String(nossos.length).padStart(3)} ev`];
+    const casadosPorFonte = {};
+    for (const f of FONTES) {
+        if (!FONTE[f]) continue;
+        const casados = await medirFonte(med, f, { ticker, tipo, nossos, linha });
+        if (casados) casadosPorFonte[f] = casados;
+    }
+    registrarDivergencias(med, ticker, casadosPorFonte);
+    console.log(linha.join('  '));
+};
+
+// ————————————————————————————————————————————————— relatório
+
+const somarPlacares = (placares) => placares.reduce((acc, p) => {
+    for (const k of Object.keys(acc)) acc[k] += p[k];
+    return acc;
+}, novoPlacar());
+
+const linhaPlacar = (rotulo, p) => `    ${rotulo.padEnd(15)} ${String(p.total).padStart(4)} eventos → datados ${String(p.CASADO).padStart(4)} (${pct(p.CASADO, p.total)})  ambíguos ${p.AMBIGUO}  fonte não tem ${p.SEM_EVENTO}  sem data ${p.SEM_DATA}  valor divergente ${p.VALOR_DIVERGENTE}`;
+
+const relatarCobertura = (med) => {
+    console.log('\n───────────── COBERTURA (eventos nossos que a fonte consegue datar)');
+    for (const f of FONTES) {
+        console.log(`\n  ${nomeDa(f)}`);
+        const classes = Object.keys(med.placar[f]);
+        if (!classes.length) { console.log('    (nenhum evento medido)'); continue; }
+        for (const c of classes.sort()) console.log(linhaPlacar(c, med.placar[f][c]));
+        console.log(linhaPlacar('TOTAL', somarPlacares(classes.map((c) => med.placar[f][c]))));
+        // O que a fonte entrega no que ELA é cobrada: só os eventos oficiais, cujo
+        // valor é o da fonte de proventos e não uma dedução nossa.
+        const soProvider = somarPlacares(classes.filter((c) => c.endsWith('/PROVIDER')).map((c) => med.placar[f][c]));
+        if (soProvider.total) console.log(linhaPlacar('só PROVIDER', soProvider));
+    }
+};
+
+const relatarFalhasDeCasamento = (med) => {
+    console.log('\n───────────── ONDE O CASAMENTO FALHA (amostra do que NÃO vira data)');
+    for (const f of FONTES) {
+        const ex = med.amostraRuim[f];
+        console.log(`  ${nomeDa(f)}:${ex.length ? '' : ' —'}`);
+        for (const l of ex) console.log(`    ${l}`);
+    }
+};
+
+const relatarAlinhamento = (med) => {
+    console.log('\n───────────── ALINHAMENTO (ex-date do Yahoo − data-com da fonte, em dias corridos)');
+    for (const f of FONTES) {
+        const linhas = Object.entries(med.offsets[f]).sort((a, b) => Number(a[0]) - Number(b[0]));
+        if (!linhas.length) { console.log(`  ${nomeDa(f)}: —`); continue; }
+        const tot = linhas.reduce((s, [, n]) => s + n, 0);
+        console.log(`  ${nomeDa(f)}: ${linhas.map(([d, n]) => `${d >= 0 ? '+' : ''}${d}d:${n} (${pct(n, tot)})`).join('  ')}`);
+    }
+};
+
+const relatarErroDaEstimativa = (med) => {
+    if (!med.errosEstimativa.length) return;
+    const ord = [...med.errosEstimativa].sort((a, b) => a - b);
+    const p50 = ord[Math.floor(ord.length * 0.5)];
+    const p90 = ord[Math.floor(ord.length * 0.9)];
+    const medioAbs = (ord.reduce((s, d) => s + Math.abs(d), 0) / ord.length).toFixed(1);
+    const acertos = ord.filter((d) => d === 0).length;
+    const dentro3 = ord.filter((d) => Math.abs(d) <= 3).length;
+    console.log('\n───────────── ERRO DA ESTIMATIVA ATUAL (ex-date + 15 dias corridos, contra a data real)');
+    console.log(`  amostras ${ord.length}  ·  acerto exato ${acertos} (${pct(acertos, ord.length)})  ·  dentro de ±3 dias ${dentro3} (${pct(dentro3, ord.length)})`);
+    console.log(`  erro absoluto médio ${medioAbs} dias  ·  mediana ${sinal(p50)}d  ·  p90 ${sinal(p90)}d  ·  pior ${ord[0]}d / ${ord[ord.length - 1]}d`);
+    console.log('  (positivo = a estimativa cai DEPOIS do pagamento real: o dinheiro já caiu e a tela ainda promete)');
+};
+
+// O que já está gravado é dado ou é chute? Um paymentDate só merece o selo
+// "Agendado" da tela se tiver vindo de fonte. Data real de pagamento VARIA: FII
+// paga 7-10 dias depois, empresa paga meses depois, e o calendário desvia de
+// feriado. Um lag CONSTANTE em toda a coleção é a assinatura de uma estimativa
+// gravada como se fosse anúncio.
+const relatarGravados = async (med) => {
+    const gravados = await DividendEvent.find({ paymentDate: { $ne: null } }).select('date paymentDate').lean();
+    if (!gravados.length) return;
+    const hist = {};
+    for (const e of gravados) {
+        contar(hist, Math.round((new Date(e.paymentDate).getTime() - new Date(e.date).getTime()) / DIA_MS));
+    }
+    const linhas = Object.entries(hist).sort((a, b) => b[1] - a[1]);
+    const [lagDominante, freq] = linhas[0];
+    console.log('\n───────────── O QUE JÁ ESTÁ GRAVADO É DADO OU É CHUTE?');
+    console.log(`  ${gravados.length} eventos têm paymentDate. Distribuição de (pagamento − ex-date):`);
+    console.log(`  ${linhas.slice(0, 12).map(([d, n]) => `${d >= 0 ? '+' : ''}${d}d:${n}`).join('  ')}${linhas.length > 12 ? `  … +${linhas.length - 12} valores` : ''}`);
+    if (freq / gravados.length >= 0.95) {
+        console.log(`  ⛔ ${pct(freq, gravados.length)} têm o MESMO lag (${lagDominante}d). Data real não se comporta assim:`);
+        console.log('     isto é estimativa gravada como se fosse anúncio, e a tela a exibe com selo de oficial.');
+    }
+    const { conferidos, iguais } = med.jaConhecido;
+    if (conferidos) {
+        console.log(`  Conferência contra a fonte: ${iguais}/${conferidos} (${pct(iguais, conferidos)}) batem com a data publicada.`);
+    }
+};
+
+const relatarDivergencias = ({ divergencias }) => {
+    console.log('\n───────────── DIVERGÊNCIA ENTRE B3 E FUNDAMENTUS (mesmo evento, datas diferentes)');
+    console.log(divergencias.length === 0
+        ? '  nenhuma — onde as duas datam o mesmo evento, elas concordam'
+        : divergencias.slice(0, 20).map((d) => `  ${d.ticker}: B3 ${d.b3} × Fundamentus ${d.fundamentus}`).join('\n'));
+    if (divergencias.length > 20) console.log(`  ... e mais ${divergencias.length - 20}`);
+};
+
+const relatarProfundidade = (med) => {
+    console.log('\n───────────── PROFUNDIDADE DO HISTÓRICO (quanto a fonte guarda por ativo)');
+    for (const f of FONTES) {
+        const ps = med.profundidade[f].filter((p) => p.eventos > 0);
+        if (!ps.length) { console.log(`  ${nomeDa(f)}: —`); continue; }
+        const med50 = Math.round(ps.reduce((s, p) => s + p.eventos, 0) / ps.length);
+        const antigos = ps.map((p) => p.maisAntigo).filter(Boolean).sort((a, b) => a - b);
+        console.log(`  ${nomeDa(f)}: ${ps.length} ativos respondem  ·  mediana ${med50} eventos/ativo  ·  evento mais antigo visto: ${antigos[0] ? toDateKey(antigos[0]) : '—'}`);
+    }
+};
+
+const relatarFalhasDeAcesso = (med) => {
+    console.log('\n───────────── FALHAS DE ACESSO');
+    for (const f of FONTES) {
+        const fs = med.falhas[f];
+        if (!fs.length) { console.log(`  ${nomeDa(f)}: nenhuma`); continue; }
+        const porMotivo = {};
+        for (const x of fs) contar(porMotivo, x.motivo);
+        console.log(`  ${nomeDa(f)}: ${fs.length} ativo(s) — ${Object.entries(porMotivo).map(([m, n]) => `${m} (${n})`).join('; ')}`);
+    }
+};
+
+// ————————————————————————————————————————————————— execução
+
+const run = async () => {
+    await connectScriptDb({ label: 'audit-dividend-payment-sources' });
+
+    const desde = new Date(Date.now() - MESES * 30.44 * DIA_MS);
+    const universo = await carregarUniverso(desde);
+    const tickers = escolherTickers(universo);
 
     console.log('\n═══ AUDITORIA DE FONTES DE DATA DE PAGAMENTO ═══');
     console.log(`Janela: últimos ${MESES} meses (desde ${toDateKey(desde)})`);
     console.log(`Tickers: ${tickers.length}${ALVO ? ' (alvo explícito)' : ` (top ${LIMITE} por volume de eventos + carteira)`}`);
     console.log(`Fontes: ${FONTES.join(', ')}\n`);
 
-    const placar = {};      // fonte -> classe -> placar
-    const amostraRuim = {}; // fonte -> exemplos de VALOR_DIVERGENTE / AMBIGUO
-    const offsets = {};     // fonte -> {offsetDias: n}
-    const errosEstimativa = []; // dias entre a estimativa ex+15 e a data real
-    const profundidade = {}; // fonte -> [{ticker, eventos, maisAntigo}]
-    const falhas = {};      // fonte -> [{ticker, motivo}]
-    const divergencias = []; // mesma linha datada por B3 e Fundamentus com datas diferentes
-    const jaConhecido = { conferidos: 0, iguais: 0 }; // fonte × paymentDate que já temos
-
-    for (const f of FONTES) { placar[f] = {}; offsets[f] = {}; profundidade[f] = []; falhas[f] = []; amostraRuim[f] = []; }
-
+    const med = novaMedicao();
     let i = 0;
     for (const ticker of tickers) {
         i += 1;
-        const tipo = tipoPorTicker.get(ticker) || (/\d{2}$/.test(ticker) ? 'FII' : 'STOCK');
-        if (['CRYPTO', 'FIXED_INCOME', 'CASH', 'STOCK_US', 'ETF'].includes(tipo)) {
-            process.stdout.write(`[${String(i).padStart(3)}/${tickers.length}] ${ticker.padEnd(8)} ${tipo} — fora do escopo BR, pulado\n`);
-            continue;
-        }
-
-        const nossos = await DividendEvent.find({ ticker, date: { $gte: desde } }).sort({ date: -1 }).lean();
-        if (nossos.length === 0) continue;
-
-        const linha = [`[${String(i).padStart(3)}/${tickers.length}] ${ticker.padEnd(8)} ${String(tipo).padEnd(5)} ${String(nossos.length).padStart(3)} ev`];
-        const casadosPorFonte = {};
-
-        for (const f of FONTES) {
-            const cfg = FONTE[f];
-            if (!cfg) continue;
-            let resultado = null;
-            try {
-                resultado = { eventos: await cfg.buscar(ticker, tipo) };
-                await pausa(cfg.pausaMs);
-            } catch (e) {
-                falhas[f].push({ ticker, motivo: e.message });
-                linha.push(`${cfg.nome}:ERRO(${e.message})`);
-                continue;
-            }
-            if (resultado.motivo) falhas[f].push({ ticker, motivo: resultado.motivo });
-
-            const eventosFonte = resultado.eventos || [];
-            const maisAntigo = eventosFonte.reduce((min, e) => (e.dataCom && (!min || e.dataCom < min) ? e.dataCom : min), null);
-            profundidade[f].push({ ticker, eventos: eventosFonte.length, maisAntigo });
-
-            casadosPorFonte[f] = new Map();
-
-            for (const nosso of nossos) {
-                const chave = `${tipo}/${procedencia(nosso)}`;
-                placar[f][chave] = placar[f][chave] || novoPlacar();
-                const p = placar[f][chave];
-                p.total += 1;
-                const r = casar(nosso, eventosFonte);
-                p[r.desfecho] += 1;
-                if (r.desfecho === 'CASADO') {
-                    offsets[f][r.offsetDias] = (offsets[f][r.offsetDias] || 0) + 1;
-                    casadosPorFonte[f].set(String(nosso._id), r.dataPagamento);
-                    const estimada = estimatedPaymentDate(nosso.date);
-                    errosEstimativa.push(Math.round((estimada.getTime() - r.dataPagamento.getTime()) / DIA_MS));
-                    if (nosso.paymentDate) {
-                        jaConhecido.conferidos += 1;
-                        if (toDateKey(nosso.paymentDate) === toDateKey(r.dataPagamento)) jaConhecido.iguais += 1;
-                    }
-                } else if (r.desfecho === 'VALOR_DIVERGENTE' && amostraRuim[f].length < 12) {
-                    amostraRuim[f].push(`${ticker} ex=${toDateKey(nosso.date)} nosso=${nosso.amount} fonte=[${r.candidatos.join(', ')}]`);
-                } else if (r.desfecho === 'AMBIGUO' && amostraRuim[f].length < 12) {
-                    amostraRuim[f].push(`${ticker} ex=${toDateKey(nosso.date)} nosso=${nosso.amount} AMBÍGUO → datas [${r.datas.join(', ')}]`);
-                }
-            }
-            linha.push(`${cfg.nome}:${casadosPorFonte[f].size}/${nossos.length}`);
-        }
-
-        // Onde as duas fontes datam o MESMO evento, elas concordam?
-        if (casadosPorFonte.b3 && casadosPorFonte.fundamentus) {
-            for (const [id, dataB3] of casadosPorFonte.b3) {
-                const dataFu = casadosPorFonte.fundamentus.get(id);
-                if (dataFu && toDateKey(dataB3) !== toDateKey(dataFu)) {
-                    divergencias.push({ ticker, b3: toDateKey(dataB3), fundamentus: toDateKey(dataFu) });
-                }
-            }
-        }
-
-        console.log(linha.join('  '));
+        await medirTicker(med, { ticker, i, total: tickers.length, tipoPorTicker: universo.tipoPorTicker, desde });
     }
 
-    // ——— cobertura
-    console.log('\n───────────── COBERTURA (eventos nossos que a fonte consegue datar)');
-    for (const f of FONTES) {
-        console.log(`\n  ${FONTE[f]?.nome || f}`);
-        const classes = Object.keys(placar[f]);
-        if (!classes.length) { console.log('    (nenhum evento medido)'); continue; }
-        let g = novoPlacar();
-        const linhaPlacar = (rotulo, p) => `    ${rotulo.padEnd(15)} ${String(p.total).padStart(4)} eventos → datados ${String(p.CASADO).padStart(4)} (${pct(p.CASADO, p.total)})  ambíguos ${p.AMBIGUO}  fonte não tem ${p.SEM_EVENTO}  sem data ${p.SEM_DATA}  valor divergente ${p.VALOR_DIVERGENTE}`;
-        for (const c of classes.sort()) {
-            const p = placar[f][c];
-            for (const k of Object.keys(g)) g[k] += p[k];
-            console.log(linhaPlacar(c, p));
-        }
-        console.log(linhaPlacar('TOTAL', g));
-        // O que a fonte entrega no que ELA é cobrada: só os eventos oficiais, cujo
-        // valor é o da fonte de proventos e não uma dedução nossa.
-        const soProvider = classes.filter((c) => c.endsWith('/PROVIDER')).reduce((acc, c) => {
-            for (const k of Object.keys(acc)) acc[k] += placar[f][c][k];
-            return acc;
-        }, novoPlacar());
-        if (soProvider.total) console.log(linhaPlacar('só PROVIDER', soProvider));
-    }
-
-    // ——— o que impede o casamento
-    console.log('\n───────────── ONDE O CASAMENTO FALHA (amostra do que NÃO vira data)');
-    for (const f of FONTES) {
-        const ex = amostraRuim[f];
-        console.log(`  ${FONTE[f]?.nome || f}:${ex.length ? '' : ' —'}`);
-        for (const l of ex) console.log(`    ${l}`);
-    }
-
-    // ——— alinhamento
-    console.log('\n───────────── ALINHAMENTO (ex-date do Yahoo − data-com da fonte, em dias corridos)');
-    for (const f of FONTES) {
-        const h = offsets[f];
-        const linhas = Object.entries(h).sort((a, b) => Number(a[0]) - Number(b[0]));
-        if (!linhas.length) { console.log(`  ${FONTE[f]?.nome || f}: —`); continue; }
-        const tot = linhas.reduce((s, [, n]) => s + n, 0);
-        console.log(`  ${FONTE[f]?.nome || f}: ${linhas.map(([d, n]) => `${d >= 0 ? '+' : ''}${d}d:${n} (${pct(n, tot)})`).join('  ')}`);
-    }
-
-    // ——— erro da estimativa atual
-    if (errosEstimativa.length) {
-        const ord = [...errosEstimativa].sort((a, b) => a - b);
-        const p50 = ord[Math.floor(ord.length * 0.5)];
-        const p90 = ord[Math.floor(ord.length * 0.9)];
-        const medioAbs = (ord.reduce((s, d) => s + Math.abs(d), 0) / ord.length).toFixed(1);
-        const acertos = ord.filter((d) => d === 0).length;
-        const dentro3 = ord.filter((d) => Math.abs(d) <= 3).length;
-        console.log('\n───────────── ERRO DA ESTIMATIVA ATUAL (ex-date + 15 dias corridos, contra a data real)');
-        console.log(`  amostras ${ord.length}  ·  acerto exato ${acertos} (${pct(acertos, ord.length)})  ·  dentro de ±3 dias ${dentro3} (${pct(dentro3, ord.length)})`);
-        console.log(`  erro absoluto médio ${medioAbs} dias  ·  mediana ${p50 >= 0 ? '+' : ''}${p50}d  ·  p90 ${p90 >= 0 ? '+' : ''}${p90}d  ·  pior ${ord[0]}d / ${ord[ord.length - 1]}d`);
-        console.log('  (positivo = a estimativa cai DEPOIS do pagamento real: o dinheiro já caiu e a tela ainda promete)');
-    }
-
-    // ——— o que já está gravado é dado ou é chute?
-    // Um paymentDate só merece o selo "Agendado" da tela se tiver vindo de fonte.
-    // Data real de pagamento VARIA: FII paga 7-10 dias depois, empresa paga meses
-    // depois, e o calendário desvia de feriado. Um lag CONSTANTE em toda a coleção
-    // é a assinatura de uma estimativa gravada como se fosse anúncio.
-    const gravados = await DividendEvent.find({ paymentDate: { $ne: null } }).select('date paymentDate').lean();
-    if (gravados.length) {
-        const hist = {};
-        for (const e of gravados) {
-            const d = Math.round((new Date(e.paymentDate).getTime() - new Date(e.date).getTime()) / DIA_MS);
-            hist[d] = (hist[d] || 0) + 1;
-        }
-        const linhas = Object.entries(hist).sort((a, b) => b[1] - a[1]);
-        const [lagDominante, freq] = linhas[0];
-        console.log('\n───────────── O QUE JÁ ESTÁ GRAVADO É DADO OU É CHUTE?');
-        console.log(`  ${gravados.length} eventos têm paymentDate. Distribuição de (pagamento − ex-date):`);
-        console.log(`  ${linhas.slice(0, 12).map(([d, n]) => `${d >= 0 ? '+' : ''}${d}d:${n}`).join('  ')}${linhas.length > 12 ? `  … +${linhas.length - 12} valores` : ''}`);
-        if (freq / gravados.length >= 0.95) {
-            console.log(`  ⛔ ${pct(freq, gravados.length)} têm o MESMO lag (${lagDominante}d). Data real não se comporta assim:`);
-            console.log('     isto é estimativa gravada como se fosse anúncio, e a tela a exibe com selo de oficial.');
-        }
-        if (jaConhecido.conferidos) {
-            console.log(`  Conferência contra a fonte: ${jaConhecido.iguais}/${jaConhecido.conferidos} (${pct(jaConhecido.iguais, jaConhecido.conferidos)}) batem com a data publicada.`);
-        }
-    }
-
-    // ——— divergência entre fontes
-    console.log('\n───────────── DIVERGÊNCIA ENTRE B3 E FUNDAMENTUS (mesmo evento, datas diferentes)');
-    console.log(divergencias.length === 0
-        ? '  nenhuma — onde as duas datam o mesmo evento, elas concordam'
-        : divergencias.slice(0, 20).map((d) => `  ${d.ticker}: B3 ${d.b3} × Fundamentus ${d.fundamentus}`).join('\n'));
-    if (divergencias.length > 20) console.log(`  ... e mais ${divergencias.length - 20}`);
-
-    // ——— profundidade
-    console.log('\n───────────── PROFUNDIDADE DO HISTÓRICO (quanto a fonte guarda por ativo)');
-    for (const f of FONTES) {
-        const ps = profundidade[f].filter((p) => p.eventos > 0);
-        if (!ps.length) { console.log(`  ${FONTE[f]?.nome || f}: —`); continue; }
-        const med = Math.round(ps.reduce((s, p) => s + p.eventos, 0) / ps.length);
-        const antigos = ps.map((p) => p.maisAntigo).filter(Boolean).sort((a, b) => a - b);
-        console.log(`  ${FONTE[f]?.nome || f}: ${ps.length} ativos respondem  ·  mediana ${med} eventos/ativo  ·  evento mais antigo visto: ${antigos[0] ? toDateKey(antigos[0]) : '—'}`);
-    }
-
-    // ——— falhas
-    console.log('\n───────────── FALHAS DE ACESSO');
-    for (const f of FONTES) {
-        const fs = falhas[f];
-        if (!fs.length) { console.log(`  ${FONTE[f]?.nome || f}: nenhuma`); continue; }
-        const porMotivo = {};
-        for (const x of fs) porMotivo[x.motivo] = (porMotivo[x.motivo] || 0) + 1;
-        console.log(`  ${FONTE[f]?.nome || f}: ${fs.length} ativo(s) — ${Object.entries(porMotivo).map(([m, n]) => `${m} (${n})`).join('; ')}`);
-    }
+    relatarCobertura(med);
+    relatarFalhasDeCasamento(med);
+    relatarAlinhamento(med);
+    relatarErroDaEstimativa(med);
+    await relatarGravados(med);
+    relatarDivergencias(med);
+    relatarProfundidade(med);
+    relatarFalhasDeAcesso(med);
 
     console.log('\nNada foi escrito no banco.\n');
     await mongoose.disconnect();

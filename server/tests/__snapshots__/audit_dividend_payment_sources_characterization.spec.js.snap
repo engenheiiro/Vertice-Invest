@@ -1,0 +1,110 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`auditDividendPaymentSources — caracterização do relatório > com a amostra padrão: carteira primeiro, limite e uma fonte só 1`] = `
+[
+  "
+═══ AUDITORIA DE FONTES DE DATA DE PAGAMENTO ═══",
+  "Janela: últimos 12 meses (desde 2025-11-21)",
+  "Tickers: 2 (top 2 por volume de eventos + carteira)",
+  "Fontes: b3
+",
+  "[  1/2] VALE3    STOCK   1 ev  B3:0/1",
+  "[  2/2] PETR4    STOCK   2 ev  B3:0/2",
+  "
+───────────── COBERTURA (eventos nossos que a fonte consegue datar)",
+  "
+  B3",
+  "    STOCK/PROVIDER     3 eventos → datados    0 (0.0%)  ambíguos 1  fonte não tem 0  sem data 1  valor divergente 1",
+  "    TOTAL              3 eventos → datados    0 (0.0%)  ambíguos 1  fonte não tem 0  sem data 1  valor divergente 1",
+  "    só PROVIDER        3 eventos → datados    0 (0.0%)  ambíguos 1  fonte não tem 0  sem data 1  valor divergente 1",
+  "
+───────────── ONDE O CASAMENTO FALHA (amostra do que NÃO vira data)",
+  "  B3:",
+  "    PETR4 ex=2026-08-24 nosso=1.5 AMBÍGUO → datas [2026-11-23, 2026-12-21]",
+  "    PETR4 ex=2026-06-15 nosso=2 fonte=[3]",
+  "
+───────────── ALINHAMENTO (ex-date do Yahoo − data-com da fonte, em dias corridos)",
+  "  B3: —",
+  "
+───────────── O QUE JÁ ESTÁ GRAVADO É DADO OU É CHUTE?",
+  "  2 eventos têm paymentDate. Distribuição de (pagamento − ex-date):",
+  "  +7d:1  +15d:1",
+  "
+───────────── DIVERGÊNCIA ENTRE B3 E FUNDAMENTUS (mesmo evento, datas diferentes)",
+  "  nenhuma — onde as duas datam o mesmo evento, elas concordam",
+  "
+───────────── PROFUNDIDADE DO HISTÓRICO (quanto a fonte guarda por ativo)",
+  "  B3: 2 ativos respondem  ·  mediana 2 eventos/ativo  ·  evento mais antigo visto: 2026-06-12",
+  "
+───────────── FALHAS DE ACESSO",
+  "  B3: nenhuma",
+  "
+Nada foi escrito no banco.
+",
+]
+`;
+
+exports[`auditDividendPaymentSources — caracterização do relatório > com tickers explícitos e as duas fontes: todos os desfechos, divergência e falha de acesso 1`] = `
+[
+  "
+═══ AUDITORIA DE FONTES DE DATA DE PAGAMENTO ═══",
+  "Janela: últimos 24 meses (desde 2024-11-21)",
+  "Tickers: 5 (alvo explícito)",
+  "Fontes: b3, fundamentus
+",
+  "[  1/5] GGRC11   FII     3 ev  B3:3/3  Fundamentus:2/3",
+  "[  2/5] PETR4    STOCK   2 ev  B3:0/2  Fundamentus:ERRO(HTTP 403)",
+  "[  3/5] VALE3    STOCK   1 ev  B3:0/1  Fundamentus:0/1",
+  "[  4/5] AAPL     STOCK_US — fora do escopo BR, pulado",
+  "
+───────────── COBERTURA (eventos nossos que a fonte consegue datar)",
+  "
+  B3",
+  "    FII/DERIVED        1 eventos → datados    1 (100.0%)  ambíguos 0  fonte não tem 0  sem data 0  valor divergente 0",
+  "    FII/PROVIDER       2 eventos → datados    2 (100.0%)  ambíguos 0  fonte não tem 0  sem data 0  valor divergente 0",
+  "    STOCK/PROVIDER     3 eventos → datados    0 (0.0%)  ambíguos 1  fonte não tem 0  sem data 1  valor divergente 1",
+  "    TOTAL              6 eventos → datados    3 (50.0%)  ambíguos 1  fonte não tem 0  sem data 1  valor divergente 1",
+  "    só PROVIDER        5 eventos → datados    2 (40.0%)  ambíguos 1  fonte não tem 0  sem data 1  valor divergente 1",
+  "
+  Fundamentus",
+  "    FII/DERIVED        1 eventos → datados    0 (0.0%)  ambíguos 0  fonte não tem 1  sem data 0  valor divergente 0",
+  "    FII/PROVIDER       2 eventos → datados    2 (100.0%)  ambíguos 0  fonte não tem 0  sem data 0  valor divergente 0",
+  "    STOCK/PROVIDER     1 eventos → datados    0 (0.0%)  ambíguos 0  fonte não tem 1  sem data 0  valor divergente 0",
+  "    TOTAL              4 eventos → datados    2 (50.0%)  ambíguos 0  fonte não tem 2  sem data 0  valor divergente 0",
+  "    só PROVIDER        3 eventos → datados    2 (66.7%)  ambíguos 0  fonte não tem 1  sem data 0  valor divergente 0",
+  "
+───────────── ONDE O CASAMENTO FALHA (amostra do que NÃO vira data)",
+  "  B3:",
+  "    PETR4 ex=2026-08-24 nosso=1.5 AMBÍGUO → datas [2026-11-23, 2026-12-21]",
+  "    PETR4 ex=2026-06-15 nosso=2 fonte=[3]",
+  "  Fundamentus: —",
+  "
+───────────── ALINHAMENTO (ex-date do Yahoo − data-com da fonte, em dias corridos)",
+  "  B3: +1d:2 (66.7%)  +3d:1 (33.3%)",
+  "  Fundamentus: +1d:2 (100.0%)",
+  "
+───────────── ERRO DA ESTIMATIVA ATUAL (ex-date + 15 dias corridos, contra a data real)",
+  "  amostras 5  ·  acerto exato 0 (0.0%)  ·  dentro de ±3 dias 0 (0.0%)",
+  "  erro absoluto médio 7.8 dias  ·  mediana +8d  ·  p90 +8d  ·  pior 7d / 8d",
+  "  (positivo = a estimativa cai DEPOIS do pagamento real: o dinheiro já caiu e a tela ainda promete)",
+  "
+───────────── O QUE JÁ ESTÁ GRAVADO É DADO OU É CHUTE?",
+  "  2 eventos têm paymentDate. Distribuição de (pagamento − ex-date):",
+  "  +7d:1  +15d:1",
+  "  Conferência contra a fonte: 1/2 (50.0%) batem com a data publicada.",
+  "
+───────────── DIVERGÊNCIA ENTRE B3 E FUNDAMENTUS (mesmo evento, datas diferentes)",
+  "  GGRC11: B3 2026-10-08 × Fundamentus 2026-10-09",
+  "
+───────────── PROFUNDIDADE DO HISTÓRICO (quanto a fonte guarda por ativo)",
+  "  B3: 3 ativos respondem  ·  mediana 2 eventos/ativo  ·  evento mais antigo visto: 2026-06-12",
+  "  Fundamentus: 1 ativos respondem  ·  mediana 2 eventos/ativo  ·  evento mais antigo visto: 2026-09-01",
+  "
+───────────── FALHAS DE ACESSO",
+  "  B3: nenhuma",
+  "  Fundamentus: 1 ativo(s) — HTTP 403 (1)",
+  "
+Nada foi escrito no banco.
+",
+]
+`;
