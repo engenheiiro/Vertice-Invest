@@ -8,6 +8,8 @@
  * que não pode parar em log de terminal ou de CI.
  */
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { encontrarSegredos, ignorarNaVarredura } from './lib/segredos.mjs';
 import { RAIZ, listarArquivos } from './lib/coleta.mjs';
 
@@ -17,12 +19,14 @@ const staged = process.argv.includes('--staged');
 const arquivos = staged
   ? git(['diff', '--cached', '--name-only', '--diff-filter=ACM']).split('\n').filter(Boolean)
   : listarArquivos();
-const conteudo = (f) => (staged ? git(['show', `:${f}`]) : git(['show', `HEAD:${f}`]));
+// --staged lê a versão que vai entrar no commit (não a do disco, que pode ter
+// mudado depois do `git add`); o modo completo lê o disco.
+const conteudo = (f) => (staged ? git(['show', `:${f}`]) : fs.readFileSync(path.join(RAIZ, f), 'utf8'));
 
 const achados = [];
 for (const f of arquivos.filter((a) => !ignorarNaVarredura(a))) {
   let texto;
-  try { texto = conteudo(f); } catch { continue; /* arquivo novo fora do HEAD: o modo --staged cobre */ }
+  try { texto = conteudo(f); } catch { continue; /* removido entre a listagem e a leitura */ }
   for (const a of encontrarSegredos(texto)) achados.push(`${f}:${a.linha} — ${a.tipo}`);
 }
 
