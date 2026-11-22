@@ -19,14 +19,14 @@ const logDir = isTest
   ? path.join(os.tmpdir(), 'vertice-test-logs', String(process.env.VITEST_WORKER_ID || process.env.VITEST_POOL_ID || process.pid))
   : path.join(__dirname, '..', 'logs');
 
-// Garante que a pasta de logs existe
-if (!fs.existsSync(logDir)) {
-  try {
-    fs.mkdirSync(logDir, { recursive: true });
-    console.log(`📁 Pasta de logs criada em: ${logDir}`);
-  } catch (err) {
-    console.error("❌ ERRO FATAL: Não foi possível criar pasta de logs.", err);
-  }
+// Garante que a pasta de logs existe. `recursive` não falha quando ela já
+// existe — sem o `existsSync` na frente, o mesmo caminho roda sempre. Com ele,
+// a cobertura de config/ variava conforme a pasta temporária do worker de teste
+// já existisse ou não (88,9% × 89,6% sem mudar uma linha).
+try {
+  fs.mkdirSync(logDir, { recursive: true });
+} catch (err) {
+  console.error("❌ ERRO FATAL: Não foi possível criar pasta de logs.", err);
 }
 
 const levels = {

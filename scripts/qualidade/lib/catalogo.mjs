@@ -49,7 +49,7 @@ export const CATALOGO = [
   m('quarentenaIrregular', 'max', 'Teste pulado sem data, vencido ou com prazo > 7 dias', 'metricas', zero),
   m('cssSemUso', 'lista', 'Classes do CSS próprio sem uso', 'metricas'),
   m('imgSemSrcset', 'max', '<img> sem srcSet', 'metricas'),
-  m('bundleGzipKB', 'max', 'Bundle do client, JS+CSS com gzip (KB)', 'metricas (build)', { folga: 1.1 }),
+  m('bundleGzipKB', 'max', 'Bundle do client, JS+CSS com gzip (KB)', 'check completo (build)', { folga: 1.1, modo: 'completo' }),
   m('lint.erros', 'max', 'Erros do ESLint', 'lint', zero),
   m('lint.avisos', 'max', 'Avisos do ESLint (fora a11y e complexidade)', 'lint'),
   m('lint.a11y', 'max', 'Avisos de acessibilidade (jsx-a11y)', 'lint'),
