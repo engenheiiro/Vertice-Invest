@@ -1,9 +1,3 @@
-
-import {
-    DEFAULT_NTNB_FALLBACK,
-    BAZIN_MIN_YIELD,
-    BAZIN_NTNB_PREMIUM,
-} from '../../config/financialConstants.js';
 import {
     classifyStockArchetype,
     getScoringNotApplicableMetrics,
@@ -12,8 +6,12 @@ import {
     resolveRoeReading,
 } from '../../config/stockCalibration.js';
 import { asObservedNumber } from '../../utils/metricObservation.js';
+import { scoreCryptoProfiles } from './cryptoProfileRules.js';
 import { isEligibleForDefensive } from './defensiveGate.js';
 import { scoreFiiProfileRules } from './fiiProfileRules.js';
+import { calculateConfidenceScore, clampProfileScores } from './scoringConfidence.js';
+import { generateDynamicTheses } from './scoringTheses.js';
+import { calculateIntrinsicValue } from './scoringValuation.js';
 import { isFinancialSector, resolvePapel } from './sectorRules.js';
 import { scoreStockProfileRules } from './stockProfileRules.js';
 import {
@@ -24,16 +22,9 @@ import {
     themedStructuralScores,
 } from './structuralScoreRules.js';
 
-const safeVal = (val) => {
-    if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return 0;
-    return Number(val.toFixed(2));
-};
-
 // Sub-tipo efetivo de um ativo do Exterior (STOCK_US). Fora do Exterior → null.
 // Ausente cai em STOCK (mesmo balde padrão da classificação).
 const usSubOf = (asset) => (asset && asset.type === 'STOCK_US') ? (asset.usSubType || 'STOCK') : null;
-// Exterior que NÃO é ação individual (ETF/REIT/Ouro): não tem fundamentos de empresa.
-const isUsNonStock = (sub) => sub === 'ETF' || sub === 'REIT' || sub === 'GOLD';
 
 // Tema efetivo de um ETF NACIONAL (classe própria, type 'ETF'), derivado do `sector`
 // curado em brEtfList.js. Cripto (HASH11/BITH11/…), Ouro (GOLD11) e Renda Fixa (FIXA11)
@@ -48,70 +39,6 @@ const brEtfThemeOf = (asset) => {
     return null;
 };
 
-const calculateConfidenceScore = (m, type, usSubType = null, ratesStale = false) => {
-    let confidence = 100;
-    const audit = [];
-    const isFII = type === 'FII';
-    // ETF/REIT/Ouro do Exterior não têm métricas de EMPRESA (ROE, margem, crescimento).
-    // Cobrá-las da confiança capava injustamente o score em 70/85. Trata como o FII:
-    // confiança só sobre dados aplicáveis (liquidez, recência).
-    // ETF nacional (type 'ETF') e CRYPTO também não têm fundamentos de empresa → mesmo
-    // tratamento (antes a cripto era cobrada por revenueGrowth/ROE inexistentes por
-    // natureza, e compensava com isenção total do teto — dois erros se anulando).
-    const noCompanyMetrics = (type === 'STOCK_US' && isUsNonStock(usSubType)) || type === 'ETF' || type === 'CRYPTO';
-
-    // Métricas de EMPRESA (crescimento de receita, ROE, margem líquida) só fazem sentido
-    // para ações. Em FIIs elas são estruturalmente inaplicáveis — não são "dados ausentes".
-    // Cobrá-las da confiança travava TODO bom FII em confidence 60 → maxScoreAllowed 85,
-    // comprimindo dezenas de FIIs no mesmo teto. Para FII a confiança vem de dados APLICÁVEIS
-    // (patrimônio/valor de mercado, liquidez, recência).
-    if (!isFII && !noCompanyMetrics) {
-        // Usa _missing para distinguir dado ausente de dado genuinamente ruim
-        if (m._missing?.revenueGrowth) {
-            confidence -= 25;
-            audit.push({ factor: 'Dados de Crescimento Ausentes', points: -25, type: 'penalty', category: 'Confiança' });
-        }
-        if (m._missing?.roe || m._missing?.netMargin) {
-            confidence -= 15;
-            audit.push({ factor: 'Dados de Rentabilidade Ausentes', points: -15, type: 'penalty', category: 'Confiança' });
-        }
-    } else if (isFII && m._missing?.marketCap) {
-        // FII sem patrimônio/valor de mercado: dado-base ausente → confiança reduzida.
-        confidence -= 15;
-        audit.push({ factor: 'Patrimônio/Valor de Mercado Ausente', points: -15, type: 'penalty', category: 'Confiança' });
-    }
-    if (m.avgLiquidity < 1000000) {
-        confidence -= 30;
-        audit.push({ factor: 'Liquidez Abaixo do Ideal (<1M/dia)', points: -30, type: 'penalty', category: 'Confiança' });
-    }
-
-    // (I) Macro defasado: quando a cadeia de taxas (BCB→BrasilAPI→IBGE) caiu e o sistema
-    // opera com SELIC/NTN-B de fallback, os bônus dependentes de juros (spread de FII,
-    // ROE-vs-Selic, earnings-yield) são calculados sobre uma taxa possivelmente incorreta.
-    // Desconta confiança e avisa — só para BR (STOCK/FII), que usam essas taxas. É uniforme,
-    // então preserva a ordenação dentro da classe; mexe apenas no limiar BUY/WAIT marginal.
-    if (ratesStale && (type === 'STOCK' || type === 'FII')) {
-        confidence -= 10;
-        audit.push({ factor: 'Indicadores Macro Defasados (taxas em fallback)', points: -10, type: 'penalty', category: 'Confiança' });
-    }
-
-    // Penalidade de staleness: dados desatualizados reduzem a confiança da análise
-    if (m._staleDays !== null && m._staleDays !== undefined) {
-        if (m._staleDays > 180) {
-            confidence -= 30;
-            audit.push({ factor: `Dados Fundamentais Desatualizados (${m._staleDays} dias)`, points: -30, type: 'penalty', category: 'Confiança' });
-        } else if (m._staleDays > 90) {
-            confidence -= 15;
-            audit.push({ factor: `Dados Fundamentais Desatualizados (${m._staleDays} dias)`, points: -15, type: 'penalty', category: 'Confiança' });
-        }
-    } else {
-        // Data de atualização nunca registrada — penalidade leve
-        confidence -= 5;
-        audit.push({ factor: 'Data de Atualização dos Fundamentais Desconhecida', points: -5, type: 'penalty', category: 'Confiança' });
-    }
-
-    return { confidence, audit };
-};
 
 // --- NOVO: IDENTIFICADOR DE DIVIDEND ARISTOCRAT ---
 const isDividendAristocrat = (m, type) => {
@@ -120,102 +47,6 @@ const isDividendAristocrat = (m, type) => {
     return (m.revenueGrowth > 5 && m.roe > 12 && m.dy > 4.0 && m.netMargin > 8 && m.payout > 20 && m.payout < 90);
 };
 
-const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {
-    const { MACRO } = context;
-    let fairPrice = price;
-    let method = "Mercado";
-    let grahamPrice = 0;
-    let bazinPrice = 0;
-    let pegRatio = null;
-
-    // Exterior não-ação (ETF/REIT/Ouro): não cabe Graham/Bazin de empresa.
-    const usSub = type === 'STOCK_US' ? (usSubType || 'STOCK') : null;
-    // ETF nacional (classe própria): referência é o mercado, sem valor intrínseco de empresa.
-    if (type === 'ETF') {
-        return { fairPrice: safeVal(price), method: 'Mercado', grahamPrice: 0, bazinPrice: 0, pegRatio: null };
-    }
-    if (type === 'STOCK_US' && usSub === 'REIT') {
-        // REIT é veículo de renda: preço justo por Bazin (dividendo / yield-alvo 6%).
-        if (m.dy > 0) {
-            const dividendPerShare = price * (Math.min(m.dy, 14) / 100);
-            bazinPrice = dividendPerShare / 0.06;
-        }
-        fairPrice = bazinPrice > 0 ? Math.min(bazinPrice, price * 2.5) : price;
-        method = bazinPrice > 0 ? 'Bazin (REIT)' : 'Mercado';
-        return { fairPrice: safeVal(fairPrice), method, grahamPrice: 0, bazinPrice: safeVal(bazinPrice), pegRatio: null };
-    }
-    if (type === 'STOCK_US' && (usSub === 'ETF' || usSub === 'GOLD')) {
-        // Cesta/commodity: sem valor intrínseco de empresa — referência é o mercado.
-        return { fairPrice: safeVal(price), method: 'Mercado', grahamPrice: 0, bazinPrice: 0, pegRatio: null };
-    }
-
-    if (type === 'STOCK' || type === 'STOCK_US') {
-        if (m.pl > 0 && m.pl < 80 && m.pvp > 0) {
-            const lpa = price / m.pl;
-            const vpa = price / m.pvp;
-            grahamPrice = Math.sqrt(22.5 * lpa * vpa);
-        }
-        // Yield-alvo Bazin ancorado no macro — só para ação BR: max(6% clássico,
-        // NTN-B + prêmio). O 6% fixo inflava o preço justo de dividendeiras com
-        // Selic ~14%. STOCK_US mantém 6%: NTN-B é taxa real BR e não é âncora
-        // válida para ativos em dólar (ambiente de juros US ~4-5%).
-        const bazinYieldPct = type === 'STOCK'
-            ? Math.max(BAZIN_MIN_YIELD, (MACRO.NTNB_LONG || DEFAULT_NTNB_FALLBACK) + BAZIN_NTNB_PREMIUM)
-            : 6;
-        if (m.dy > 0) {
-            const adjustedDy = Math.min(m.dy, 14) / 100;
-            const dividendPerShare = price * adjustedDy;
-            bazinPrice = dividendPerShare / (bazinYieldPct / 100);
-        }
-        if (m.pl > 0 && m.revenueGrowth > 0) {
-            pegRatio = m.pl / m.revenueGrowth;
-        }
-        if (grahamPrice > 0 && bazinPrice > 0) {
-            fairPrice = (grahamPrice * 0.4) + (bazinPrice * 0.6);
-            method = `Híbrido (Bazin ${bazinYieldPct.toFixed(1)}% + Graham)`;
-        } else if (grahamPrice > 0) {
-            fairPrice = grahamPrice;
-            method = "Graham";
-        } else if (bazinPrice > 0) {
-            fairPrice = bazinPrice;
-            method = `Bazin (${bazinYieldPct.toFixed(1)}%)`;
-        }
-        // PEG reverso para STOCK_US: aplica método Lynch quando Graham e Bazin não produzem
-        // preço justo e o ativo está barato em relação ao crescimento (PEG < 1.0)
-        if (type === 'STOCK_US' && grahamPrice === 0 && bazinPrice === 0 && m.pl > 0 && m.pl < 80 && m.revenueGrowth > 10) {
-            const lpa = price / m.pl;
-            const cappedGrowth = Math.min(m.revenueGrowth, 40);
-            const pegReversoPrice = lpa * cappedGrowth; // Lynch: fair P/E = taxa de crescimento
-            if (pegReversoPrice > price) { // somente se o ativo está subavaliado (PEG < 1)
-                fairPrice = pegReversoPrice;
-                method = 'PEG Reverso';
-            }
-        }
-        if (fairPrice > price * 2.5) fairPrice = price * 2.5;
-    } else if (type === 'FII') {
-        // vpCota agora persiste no MarketAsset; o fallback por P/VP (mesma fórmula:
-        // price/pvp) continua valendo para documentos gravados antes disso e para FIIs
-        // cuja fonte não publica o valor patrimonial. Sem ele o VP colapsava para o
-        // próprio preço e o prêmio/deságio patrimonial sumia do preço justo (upside ~0).
-        const vp = m.vpCota || (m.pvp > 0 ? price / m.pvp : price);
-        // Usa fiiSubType (explícito) ou sector como fallback — corrige bug anterior onde
-        // m.sector não existia em metrics e isPapel nunca era detectado
-        const isPapelFII = resolvePapel(m.fiiSubType, m.sector);
-        if (isPapelFII) {
-            fairPrice = vp;
-            method = "VP (Papel)";
-        } else {
-            const ntnb = MACRO.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
-            const yieldPremium = Math.max(0, m.dy - ntnb);
-            fairPrice = vp * (1 + (yieldPremium / 100));
-            method = "VP Ajustado";
-        }
-    } else if (type === 'CRYPTO') {
-        fairPrice = price;
-        method = "Mercado";
-    }
-    return { fairPrice: safeVal(fairPrice), method, grahamPrice: safeVal(grahamPrice), bazinPrice: safeVal(bazinPrice), pegRatio: pegRatio !== null ? safeVal(pegRatio) : null };
-};
 
 // (M1) Scoring por perfil de ação (STOCK/STOCK_US). Retorna os três scores brutos
 // e popula `audit`. As regras moram em etapas puras (stockProfileRules.js); aqui só
@@ -236,90 +67,6 @@ const scoreFiiProfiles = (asset, context, audit) => scoreFiiProfileRules(
     asset, context.MACRO, resolvePapel(asset.fiiSubType, asset.sector), isEligibleForDefensive(asset, context), audit,
 );
 
-// (M1) Scoring por perfil de cripto. Lógica idêntica à versão monolítica anterior.
-const scoreCryptoProfiles = (asset, audit) => {
-    const m = asset.metrics;
-    let defScore = 0, modScore = 0, boldScore = 0;
-    {
-        const isBlueChip = ['BTC', 'ETH'].includes(asset.ticker);
-        const isTop10 = m.marketCap > 20000000000;
-        const isMidCap = m.marketCap > 2000000000 && m.marketCap <= 20000000000;
-        // Perfil "primário" da faixa (recebe a base 90/95) — destino das notas de variância.
-        const primary = isBlueChip ? 'DEFENSIVE' : isTop10 ? 'MODERATE' : 'BOLD';
-
-        // Bases recalibradas (jul/2026): as antigas 90/95 faziam 16/16 criptos cruzarem
-        // o BUY (≥70) com TRX empatando com BTC em 100 — sem diferenciação nenhuma.
-        // Agora a base deixa o ativo ABAIXO do threshold; só liquidez + volatilidade
-        // baixa + tendência (bônus reais) levam ao BUY. Small cap nasce abaixo de mid
-        // cap (o antigo 95 "assimetria" invertia a lógica de risco).
-        if (isBlueChip) {
-            defScore = 75; audit.DEFENSIVE.push({ factor: 'Crypto Blue Chip', points: 75, type: 'base' });
-        } else if (isTop10) {
-            modScore = 62; audit.MODERATE.push({ factor: 'Crypto Large Cap', points: 62, type: 'base' });
-        } else if (isMidCap) {
-            boldScore = 55; audit.BOLD.push({ factor: 'Crypto Mid Cap', points: 55, type: 'base' });
-        } else {
-            boldScore = 50; audit.BOLD.push({ factor: 'Crypto Small Cap', points: 50, type: 'base' });
-        }
-
-        if (m.avgLiquidity < 50000000) {
-            defScore -= 30; modScore -= 20; boldScore -= 10;
-            audit.BOLD.push({ factor: 'Baixa Liquidez Crypto', points: -10, type: 'penalty' });
-        } else if (m.avgLiquidity > 1000000000) {
-            defScore += 10; modScore += 10;
-            audit.MODERATE.push({ factor: 'Alta Liquidez Institucional', points: 10, type: 'bonus' });
-        }
-
-        // ── (Fase 2 / achado E) VARIÂNCIA DE QUALIDADE NO SCORE QUE ORDENA ──────────
-        // Antes a cripto pontuava só por faixa de marketCap + liquidez: dezenas de ativos
-        // empatavam em 90 e cruzavam o BUY (≥70) sem diferenciação real. Volatilidade e
-        // desvio da SMA200 — já usados no score ESTRUTURAL — passam a ajustar também o
-        // score de PERFIL (que ordena). Bandas de volatilidade espelham o RISK estrutural
-        // de cripto (40/70/100) para consistência. Notas vão ao perfil primário da faixa.
-        const cVol = m.volatility || 0;
-        if (cVol > 0) {
-            if (cVol < 40) {
-                defScore += 6; modScore += 6; boldScore += 6;
-                audit[primary].push({ factor: 'Volatilidade Baixa (<40%)', points: 6, type: 'bonus' });
-            } else if (cVol > 100) {
-                defScore -= 12; modScore -= 10; boldScore -= 8;
-                audit[primary].push({ factor: 'Volatilidade Extrema (>100%)', points: -8, type: 'penalty' });
-            } else if (cVol > 70) {
-                defScore -= 6; modScore -= 5; boldScore -= 4;
-                audit[primary].push({ factor: 'Volatilidade Elevada (>70%)', points: -4, type: 'penalty' });
-            }
-        }
-        if (m.sma200 > 0 && asset.price > 0) {
-            const devSma = (asset.price - m.sma200) / m.sma200;
-            if (devSma >= 0) {
-                defScore += 4; modScore += 4; boldScore += 4;
-                audit[primary].push({ factor: 'Acima da Tendência (Preço ≥ SMA200)', points: 4, type: 'bonus' });
-            } else if (devSma < -0.30) {
-                defScore -= 8; modScore -= 6; boldScore -= 5;
-                audit[primary].push({ factor: 'Forte Queda (Preço >30% abaixo da SMA200)', points: -5, type: 'penalty' });
-            } else if (devSma < -0.10) {
-                defScore -= 4; modScore -= 3; boldScore -= 2;
-                audit[primary].push({ factor: 'Abaixo da Tendência (Preço < SMA200)', points: -2, type: 'penalty' });
-            }
-        }
-
-        // ── (Fase 2 / achado E2) TRAVA BRANDA NO BOLD DE SMALL CAP ──────────────────
-        // Uma small cap (não blue chip / não top-10 / não mid) de baixa liquidez OU
-        // volatilidade extrema é APOSTA, não convicção: limita o BOLD a 80 — ainda
-        // elegível a COMPRAR, sem cravar nota máxima. Análogo ao teto especulativo de
-        // ação sem lucro (SPEC_BOLD_CAP). Com a base recalibrada para 50 raramente
-        // dispara, mas segue como cinto de segurança contra stacking de bônus.
-        const isSmallCap = !isBlueChip && !isTop10 && !isMidCap;
-        if (isSmallCap && (m.avgLiquidity < 50000000 || cVol > 100)) {
-            const CRYPTO_SPEC_CAP = 80;
-            if (boldScore > CRYPTO_SPEC_CAP) {
-                audit.BOLD.push({ factor: 'Teto Especulativo Cripto (small cap arriscada)', points: CRYPTO_SPEC_CAP - boldScore, type: 'penalty' });
-                boldScore = CRYPTO_SPEC_CAP;
-            }
-        }
-    }
-    return { defScore, modScore, boldScore };
-};
 
 // Exterior — ETF (cesta de índice/setorial). Sem fundamentos de empresa: pontua por
 // liquidez/AUM, yield, tendência de longo prazo e volatilidade. Diversificação
@@ -492,112 +239,83 @@ const scoreFixedIncomeEtfProfiles = (asset, audit) => {
     return { defScore, modScore, boldScore };
 };
 
+// Scorer de perfil por classe. Ação individual (STOCK ou Exterior sub-tipo STOCK)
+// usa o caminho de ação; ETF nacional temático (Cripto/Ouro/Renda Fixa) tem scorer
+// próprio e os demais temas caem na cesta; sub-tipo do Exterior desconhecido não pontua.
+const PROFILE_SCORERS = {
+    STOCK: (asset, valuationData, context, audit) => scoreStockProfiles(asset, valuationData, context, audit),
+    COMMODITY: (asset, _valuationData, _context, audit) => scoreCommodityProfiles(asset, audit),
+    CRYPTO_ETF: (asset, _valuationData, _context, audit) => scoreCryptoEtfProfiles(asset, audit),
+    FIXED_INCOME_ETF: (asset, _valuationData, _context, audit) => scoreFixedIncomeEtfProfiles(asset, audit),
+    ETF: (asset, _valuationData, _context, audit) => scoreEtfProfiles(asset, audit),
+    REIT: (asset, _valuationData, _context, audit) => scoreReitProfiles(asset, audit),
+    FII: (asset, _valuationData, context, audit) => scoreFiiProfiles(asset, context, audit),
+    CRYPTO: (asset, _valuationData, _context, audit) => scoreCryptoProfiles(asset, audit),
+};
+const BR_ETF_SCORER = { GOLD: 'COMMODITY', CRYPTO: 'CRYPTO_ETF', FIXED_INCOME: 'FIXED_INCOME_ETF' };
+const US_SCORER = { ETF: 'ETF', REIT: 'REIT', GOLD: 'COMMODITY' };
+
+const profileScorerKeyOf = (asset, isPlainStock, usSub) => {
+    if (isPlainStock) return 'STOCK';
+    if (asset.type === 'ETF') return BR_ETF_SCORER[brEtfThemeOf(asset)] || 'ETF';
+    if (asset.type === 'STOCK_US') return US_SCORER[usSub];
+    return asset.type;
+};
+
+// Aplica penalidades de confiança diretamente nos scores de perfil (apenas ação
+// individual) para que o audit log "Dados e Confiança" reflita deduções reais.
+// FIIs/ETF/REIT/Ouro: a confiança já é calculada só sobre dados aplicáveis; o teto
+// graduado basta — não se subtrai duas vezes. CRYPTO usa suas próprias penalidades.
+const applyConfidencePenalty = (s, confidence) => {
+    if (confidence >= 100) return;
+    const confPenalty = 100 - confidence;
+    s.defScore -= confPenalty;
+    s.modScore -= confPenalty;
+    s.boldScore -= confPenalty;
+};
+
+// Dividend Aristocrat bonus aplicado ANTES do clamp de confiança (maxScoreAllowed).
+// Aplicar depois do clamp violaria o teto de 70 para ativos com dados incompletos,
+// podendo gerar sinal BUY indevido em ativos que deveriam ficar em WAIT.
+const applyAristocratBonus = (s, audit) => {
+    s.defScore += 10;
+    s.modScore += 5;
+    audit.DEFENSIVE.push({ factor: 'Dividend Aristocrat Bonus', points: 10, type: 'bonus' });
+    audit.MODERATE.push({ factor: 'Dividend Aristocrat Bonus', points: 5, type: 'bonus' });
+};
+
+// Bônus de qualidade US (escopado a ações STOCK_US; NÃO afeta o BR `STOCK`).
+// O "Dividend Aristocrat" só vale p/ STOCK BR; nomes defensivos US de qualidade
+// (bom yield + rentabilidade + margem) ficavam presos em 58–67 sem reconhecimento.
+const applyUsQualityBonus = (m, s, audit) => {
+    if (!(m.dy > 3 && m.roe > 12 && m.netMargin > 10)) return;
+    s.defScore += 8;
+    s.modScore += 4;
+    audit.DEFENSIVE.push({ factor: 'Qualidade US (yield + ROE + margem)', points: 8, type: 'bonus' });
+    audit.MODERATE.push({ factor: 'Qualidade US', points: 4, type: 'bonus' });
+};
+
 // (M1) Orquestrador: confiança, dispatch por tipo (helpers acima) e clamp final.
 const calculateProfileScores = (asset, valuationData, context) => {
     const m = asset.metrics;
     const type = asset.type;
-
     const usSub = usSubOf(asset);
-    // Exterior ação individual (STOCK ou sub-tipo STOCK) usa o caminho de ação.
     const isPlainStock = type === 'STOCK' || (type === 'STOCK_US' && (!usSub || usSub === 'STOCK'));
 
-    let defScore = 0, modScore = 0, boldScore = 0;
     const audit = { DEFENSIVE: [], MODERATE: [], BOLD: [], CONFIDENCE: [] };
     const ratesStale = !!context?.MACRO?.RATES_STALE;
     const { confidence, audit: confAudit } = calculateConfidenceScore(m, type, asset.usSubType, ratesStale);
     audit.CONFIDENCE = confAudit;
 
-    // Tema do ETF nacional (Cripto/Ouro/Renda Fixa têm scorer próprio; demais = cesta).
-    const etfTheme = brEtfThemeOf(asset);
+    const scorer = PROFILE_SCORERS[profileScorerKeyOf(asset, isPlainStock, usSub)];
+    const s = scorer ? scorer(asset, valuationData, context, audit) : { defScore: 0, modScore: 0, boldScore: 0 };
 
-    if (isPlainStock) {
-        ({ defScore, modScore, boldScore } = scoreStockProfiles(asset, valuationData, context, audit));
-    } else if (type === 'ETF' && etfTheme === 'GOLD') {
-        // ETF de ouro BR (GOLD11): mesmo hedge/reserva de valor do ouro US.
-        ({ defScore, modScore, boldScore } = scoreCommodityProfiles(asset, audit));
-    } else if (type === 'ETF' && etfTheme === 'CRYPTO') {
-        ({ defScore, modScore, boldScore } = scoreCryptoEtfProfiles(asset, audit));
-    } else if (type === 'ETF' && etfTheme === 'FIXED_INCOME') {
-        ({ defScore, modScore, boldScore } = scoreFixedIncomeEtfProfiles(asset, audit));
-    } else if ((type === 'STOCK_US' && usSub === 'ETF') || type === 'ETF') {
-        ({ defScore, modScore, boldScore } = scoreEtfProfiles(asset, audit));
-    } else if (type === 'STOCK_US' && usSub === 'REIT') {
-        ({ defScore, modScore, boldScore } = scoreReitProfiles(asset, audit));
-    } else if (type === 'STOCK_US' && usSub === 'GOLD') {
-        ({ defScore, modScore, boldScore } = scoreCommodityProfiles(asset, audit));
-    } else if (type === 'FII') {
-        ({ defScore, modScore, boldScore } = scoreFiiProfiles(asset, context, audit));
-    } else if (type === 'CRYPTO') {
-        ({ defScore, modScore, boldScore } = scoreCryptoProfiles(asset, audit));
-    }
-
-    // Aplica penalidades de confiança diretamente nos scores de perfil (apenas STOCK/STOCK_US)
-    // para que o audit log "Dados e Confiança" reflita deduções reais (não cosmético).
-    // FIIs: a confiança já é calculada só sobre dados aplicáveis (ver calculateConfidenceScore);
-    // o teto graduado (maxScoreAllowed) basta — não se subtrai duas vezes.
-    // CRYPTO: usa suas próprias penalidades de liquidez dentro do bloco acima.
-    // Só ação individual sofre a dedução direta (ETF/REIT/Ouro seguem o modelo do
-    // FII: confiança já restrita a dados aplicáveis; o teto graduado basta).
-    if (isPlainStock && confidence < 100) {
-        const confPenalty = 100 - confidence;
-        defScore -= confPenalty;
-        modScore -= confPenalty;
-        boldScore -= confPenalty;
-    }
-
-    // Dividend Aristocrat bonus aplicado ANTES do clamp de confiança (maxScoreAllowed).
-    // Aplicar depois do clamp violaria o teto de 70 para ativos com dados incompletos,
-    // podendo gerar sinal BUY indevido em ativos que deveriam ficar em WAIT.
+    if (isPlainStock) applyConfidencePenalty(s, confidence);
     const isAristocrat = isDividendAristocrat(m, type);
-    if (isAristocrat) {
-        defScore += 10;
-        modScore += 5;
-        audit.DEFENSIVE.push({ factor: 'Dividend Aristocrat Bonus', points: 10, type: 'bonus' });
-        audit.MODERATE.push({ factor: 'Dividend Aristocrat Bonus', points: 5, type: 'bonus' });
-    }
+    if (isAristocrat) applyAristocratBonus(s, audit);
+    if (type === 'STOCK_US' && isPlainStock) applyUsQualityBonus(m, s, audit);
 
-    // Bônus de qualidade US (escopado a ações STOCK_US; NÃO afeta o BR `STOCK`).
-    // O "Dividend Aristocrat" só vale p/ STOCK BR; nomes defensivos US de qualidade
-    // (bom yield + rentabilidade + margem) ficavam presos em 58–67 sem reconhecimento.
-    if (type === 'STOCK_US' && isPlainStock && m.dy > 3 && m.roe > 12 && m.netMargin > 10) {
-        defScore += 8;
-        modScore += 4;
-        audit.DEFENSIVE.push({ factor: 'Qualidade US (yield + ROE + margem)', points: 8, type: 'bonus' });
-        audit.MODERATE.push({ factor: 'Qualidade US', points: 4, type: 'bonus' });
-    }
-
-    // Cap graduado: salto binário 59→70/60→100 substituído por escada para evitar que
-    // um dado a menos reduza o teto de 100 para 70 abruptamente. CRYPTO também é capada
-    // (a confiança dela já é calculada só sobre dados aplicáveis — liquidez/recência —,
-    // então a antiga isenção total deixou de ter razão de existir).
-    const maxScoreAllowed = confidence >= 80 ? 100
-        : confidence >= 60 ? 85
-        : 70;
-
-    // Clamp final por perfil. Quando o TETO de confiança (maxScoreAllowed) de fato
-    // reduz o score, registra a dedução no audit do perfil correspondente para que a
-    // Auditoria Completa reconcilie com o score exibido (antes o teto era invisível).
-    const clampProfile = (raw, profileKey) => {
-        const floored = Math.max(10, raw);
-        const capped = Math.min(maxScoreAllowed, floored);
-        // Só registra quando o teto é REALMENTE por confiança (< 100). O teto de 100 é
-        // a normalização padrão e não é uma dedução de confiança — não vira fator de audit.
-        if (maxScoreAllowed < 100 && capped < floored) {
-            audit[profileKey].push({
-                factor: `Teto por Confiança de Dados (máx. ${maxScoreAllowed})`,
-                points: capped - floored,
-                type: 'penalty'
-            });
-        }
-        return capped;
-    };
-    const finalScores = {
-        DEFENSIVE: clampProfile(defScore, 'DEFENSIVE'),
-        MODERATE: clampProfile(modScore, 'MODERATE'),
-        BOLD: clampProfile(boldScore, 'BOLD')
-    };
-
-    return { scores: finalScores, audit, isAristocrat, confidence };
+    return { scores: clampProfileScores(s, confidence, audit), audit, isAristocrat, confidence };
 };
 
 // ---------------------------------------------------------------------------
@@ -712,63 +430,6 @@ const calculateStructuralScores = (asset, context) => {
     return emptyStructuralScores();
 };
 
-const generateDynamicTheses = (m, type, ticker, context, valuationData, currentPrice, sector, fiiSubType) => {
-    const { MACRO } = context;
-    const bull = [];
-    const bear = [];
-    if (m.dy > MACRO.SELIC) bull.push(`Yield (${m.dy.toFixed(1)}%) supera a Selic.`);
-    if (m.pvp < 0.85 && m.pvp > 0) bull.push(`Desconto patrimonial (P/VP ${m.pvp.toFixed(2)}).`);
-    if (!m._missing?.roe && m.roe > 18) bull.push(`Rentabilidade alta (ROE ${m.roe.toFixed(1)}%).`);
-
-    if (type === 'FII') {
-        const ntnb = context.MACRO?.NTNB_LONG || DEFAULT_NTNB_FALLBACK;
-        const spread = m.dy - ntnb;
-        const isPapel = resolvePapel(fiiSubType, sector);
-        
-        if (spread > 2.5) bull.push(`Alto prêmio de risco: Spread de ${spread.toFixed(1)}% sobre NTN-B.`);
-        else if (spread < 0.5) bear.push(`Prêmio de risco pífio (${spread.toFixed(1)}%) sobre o Tesouro.`);
-
-        if (m.vacancy > 12) bear.push(`Vacância elevada (${m.vacancy.toFixed(1)}%): Risco de fluxo de caixa.`);
-        else if (m.vacancy < 3 && !isPapel) bull.push("Ocupação quase plena (Vacância < 3%).");
-
-        if (m.qtdImoveis === 1) bear.push("Risco Mono-Ativo: Dependência total de um único imóvel.");
-        if (m.beta < 0.7) bull.push(`Baixa volatilidade (Beta ${m.beta.toFixed(2)}): Perfil defensivo.`);
-        else if (m.beta > 1.1) bear.push(`Volatilidade alta para o setor (Beta ${m.beta.toFixed(2)}).`);
-
-        if (isPapel && m.pvp > 1.05) bear.push("Ágio em FII de Papel: Risco de amortização negativa.");
-    }
-
-    if (m.debtToEquity > 4 && type === 'STOCK') bear.push("Alavancagem alta.");
-    if (m.avgLiquidity < 500000 && type !== 'CRYPTO') bear.push("Baixa liquidez.");
-    
-    if (type === 'CRYPTO') {
-        if (['BTC', 'ETH'].includes(ticker)) bull.push("Blue Chip do mercado cripto (Reserva de Valor / Infraestrutura).");
-        if (m.marketCap > 20000000000) bull.push("Alta capitalização de mercado (Large Cap), maior resiliência.");
-        else if (m.marketCap < 2000000000) bull.push("Baixa capitalização (Small Cap), alta assimetria de retorno.");
-        
-        if (m.avgLiquidity > 1000000000) bull.push("Altíssima liquidez, facilitando entrada/saída institucional.");
-        else if (m.avgLiquidity < 50000000) bear.push("Baixa liquidez, risco de slippage e manipulação.");
-
-        const vmc = m.marketCap > 0 ? (m.avgLiquidity / m.marketCap) : 0;
-        if (vmc > 0.02 && vmc < 0.15) bull.push(`Volume/MarketCap saudável (${(vmc*100).toFixed(1)}%), indicando adoção orgânica.`);
-        else if (vmc > 0.5) bear.push(`Volume/MarketCap excessivo (${(vmc*100).toFixed(1)}%), possível especulação ou wash trading.`);
-        else if (vmc < 0.005) bear.push(`Volume/MarketCap muito baixo (${(vmc*100).toFixed(1)}%), indicando desinteresse do mercado.`);
-
-        if (m.marketCap < 100000000) bear.push("Micro Cap (< $100M): Risco extremo de volatilidade e falha do projeto.");
-        
-        if (m.sma200) {
-            if (currentPrice > m.sma200) bull.push("Tendência de alta de longo prazo (Preço > SMA200).");
-            else bear.push("Tendência de baixa de longo prazo (Preço < SMA200).");
-        }
-        
-        if (m.volatility) {
-            if (m.volatility > 100) bear.push(`Volatilidade extrema (${m.volatility.toFixed(1)}% a.a.).`);
-            else if (m.volatility < 50) bull.push(`Volatilidade controlada para o setor (${m.volatility.toFixed(1)}% a.a.).`);
-        }
-    }
-    
-    return { bull, bear };
-};
 
 const STABLECOINS = ['USDT', 'USDC', 'DAI', 'FDUSD', 'TUSD', 'USDD', 'USDE'];
 
@@ -836,7 +497,7 @@ export const scoringEngine = {
         const valuationData = calculateIntrinsicValue(scored.metrics, scored.type, scored.price, context, scored.usSubType);
         const profileResult = calculateProfileScores(scored, valuationData, context);
         const structuralResult = calculateStructuralScores(scored, context);
-        const thesisData = generateDynamicTheses(scored.metrics, scored.type, scored.ticker, context, valuationData, scored.price, scored.sector, scored.fiiSubType);
+        const thesisData = generateDynamicTheses(scored, context);
         const aristocrat = profileResult.isAristocrat;
 
         if (aristocrat) {
