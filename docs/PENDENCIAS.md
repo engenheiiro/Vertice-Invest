@@ -10,9 +10,17 @@ mesmo commit que o resolve.
   (60), Indicators e AuditDetailModal (53), o gate `isEligibleForDefensive`
   (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
   (49), EquitySummary, CreateGoalModal e WalletContext (48), DataSourcesPanel e
-  `rebuildUserHistory` (46), WalletSummary (45), TopPicksCard e Research (44).
-  O teto passa a ser `ProfileIdentity.tsx` e `_applyDayTransactions` do
-  `financialService.js` (43).
+  `rebuildUserHistory` (46), WalletSummary (45), TopPicksCard e Research (44),
+  ProfileIdentity e `_applyDayTransactions` (43). O teto passa a ser
+  `utils/weeklyRetention.js` (43); depois vêm `scoringEngine.js` (42),
+  PerformanceChart e `schedulerService.js` (41).
+- **(dono, 2026-11-23) Renda fixa no rebuild (`utils/rebuildDayTransactions.js`),
+  congelado como estava na quebra:** (a) o estado criado na primeira compra usa
+  taxa 10 (100 para CASH) quando a taxa falta ou é ≤ 0, mas o criado depois
+  (`lateFixedIncomeState`) usa `|| 100`, e taxa negativa passa; (b) VENDA de RF
+  numa posição que existe sem estado de RF lança `TypeError`; (c) a aritmética é
+  float cru, não `safeAdd`/`safeMult` (regra 7). Cada um é decisão própria — a
+  caracterização de 400 cenários trava o comportamento atual.
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):
