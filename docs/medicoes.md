@@ -35,10 +35,10 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89.5 | 89.3 | 89.6 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 | 87.3 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89.5 | 89.1 | 89.5 |
-| `testes.server` — Casos de teste do server | 3656 | 3404 | 3656 |
-| `testes.client` — Casos de teste do client | 2249 | 2110 | 2249 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 38 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 40.8 |
+| `testes.server` — Casos de teste do server | 3689 | 3404 | 3689 |
+| `testes.client` — Casos de teste do client | 2260 | 2110 | 2260 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 37 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 39.3 |
 | `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 31 | 37 | 31 |
 | `linhasLongas` — Linhas com mais de 160 caracteres | 1020 | 1079 | 1020 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |
@@ -52,7 +52,7 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `quarentenaIrregular` — Teste pulado sem data, vencido ou com prazo > 7 dias | 0 | 0 | 0 |
 | `cssSemUso` — Classes do CSS próprio sem uso | 9 | 9 | 9 |
 | `imgSemSrcset` — <img> sem srcSet | 23 | 23 | 23 |
-| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 705 | 709 |
+| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 705 | 710 |
 | `lint.erros` — Erros do ESLint | 0 | 0 | 0 |
 | `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 11 | 13 | 11 |
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 | 0 |
