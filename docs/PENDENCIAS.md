@@ -5,7 +5,7 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-23) Maior complexidade agora é 43.** Já quebrados: perfil
+- **(dono, 2026-11-23) Maior complexidade agora é 29 (era 73 em 22/11).** Já quebrados: perfil
   FII do scoring e `auditDividendPaymentSources.js` (73), `dataSourceStatus.js`
   (60), Indicators e AuditDetailModal (53), o gate `isEligibleForDefensive`
   (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
