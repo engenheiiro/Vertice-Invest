@@ -11,19 +11,6 @@ mesmo commit que o resolve.
   (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
   (49), EquitySummary, CreateGoalModal e WalletContext (48). O teto passa a ser
   `DataSourcesPanel.tsx` e `financialService.js` (46).
-- **(dono, 2026-11-22) Achados das refatorações que pedem decisão** (o
-  comportamento foi congelado como estava, cada um com teste):
-  - **Modo privacidade vaza o múltiplo bruto** no Dashboard (EquitySummary):
-    "1.01x" aparece com os valores mascarados, e o badge de capital mostra
-    "+•••%".
-  - **Demo mode ainda lê da API**: no WalletContext, desempenho, proventos e
-    fluxo de caixa chamam `walletService` sem id de carteira quando
-    `isDemoMode` (só leitura; as mutações estão bloqueadas). Teste "dataSource
-    NÃO é bloqueado no demo".
-  - **Prazo da meta em UTC** (CreateGoalModal, edição): o
-    `toISOString().slice(0, 10)` pode mostrar o dia anterior em Brasília.
-  - **Botões de ícone da meta sem nome acessível** (axe `button-name`,
-    desligado só nesse teste; correção de uma linha com `aria-label`).
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):
@@ -42,6 +29,18 @@ mesmo commit que o resolve.
 
 ## Decididas
 
+- **Demo mode não lê da API (22/11/2026).** O `dataSource` do WalletContext
+  não bloqueia o demo sozinho, mas os quatro consumidores bloqueiam antes de
+  chamar (`enabled: !isDemoMode` em CashFlowHistory e MonthlyReturnsTable;
+  `if (isDemoMode)` em DividendDashboard e PerformanceChart). Nenhuma leitura
+  sai no demo; consumidor novo de `dataSource` precisa da mesma guarda.
+- **Prazo da meta lido em UTC é o certo (22/11/2026).** O servidor grava o
+  prazo como data de calendário (`calendarDate`, meia-noite UTC); ler no fuso
+  local é que daria a véspera em Brasília. Comentado em `createGoalForm.ts` e
+  travado em `createGoalForm.test.ts`.
+- **Direção do resultado aparece no modo privacidade (22/11/2026).** O sinal
+  ("+•••%") e a cor verde/vermelha seguem visíveis com os valores mascarados;
+  o múltiplo bruto, que reconstituía o patrimônio, passou a ser mascarado.
 - **`getMarketData`: `metrics.price` fica cru (22/11/2026).** Sem cotação ele
   sai `undefined`, que é o estado honesto (regra 13: nunca número inventado
   como real). O `asset.lastPrice || 0` do topo do item é o desvio, mas a tela
