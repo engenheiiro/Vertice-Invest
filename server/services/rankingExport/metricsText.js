@@ -11,11 +11,13 @@ const isFinancialSector = (sector) => FINANCIAL_SECTOR_MARKERS.some(marker => !!
 // Para STOCK_US, campos não coletados são zerados no DB; exibir N/D em vez de 0.00
 const buildFormatters = (type) => {
     const isUS = type === 'STOCK_US';
+    // Cripto é cotada em dólar (CLAUDE.md): preço, market cap e liquidez em $.
+    const isDollar = isUS || type === 'CRYPTO';
     const isUsZero = (val) => isUS && (val === 0 || val === null || val === undefined);
     return {
-        price: isUS ? fmtUSD : fmtBRL,
-        cap: isUS ? fmtMarketCapUSD : fmtMarketCap,
-        liquidity: (isUS || type === 'CRYPTO') ? fmtLiquidityUSD : fmtLiquidity,
+        price: isDollar ? fmtUSD : fmtBRL,
+        cap: isDollar ? fmtMarketCapUSD : fmtMarketCap,
+        liquidity: isDollar ? fmtLiquidityUSD : fmtLiquidity,
         usZero: (val, decimals = 2) => (isUsZero(val) ? 'N/D' : fmt(val, decimals)),
         usZeroPct: (val) => (isUsZero(val) ? 'N/D' : fmtPct(val)),
     };

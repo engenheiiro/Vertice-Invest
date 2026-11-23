@@ -44,6 +44,12 @@ describe('formatMetrics', () => {
         expect(bloco).not.toContain('R$');
     });
 
+    it('item CRYPTO não tem R$ em nenhum bloco (Valuation e Indicadores de Mercado saíam em R$)', () => {
+        const cripto = formatMetrics({ marketCap: 3.3e9, avgLiquidity: 2e6, fairPrice: 10, grahamPrice: 9, bazinPrice: 8, sma200: 7, ema50: 6 }, 'CRYPTO');
+        expect(cripto).not.toContain('R$');
+        expect(cripto).toContain('Market Cap:        $ 3.30 bi\n');
+    });
+
     it('defasagem 0 aparece; campo marcado false não entra em ausentes', () => {
         const txt = formatMetrics({ _staleDays: 0, _missing: { beta: false, dy: true } }, 'ETF');
         expect(txt).toContain('Defasagem dos Dados Fundamentais: 0 dias');
