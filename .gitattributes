@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Snapshots do Vitest: o Vitest grava LF; com CRLF na cópia de trabalho ele
+# regrava o arquivo a cada execução e o git acusa modificação sem mudança.
+*.snap text eol=lf

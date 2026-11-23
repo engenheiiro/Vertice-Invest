@@ -9,6 +9,13 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Testes `.ts` que precisam de DOM (window, document, localStorage, matchMedia).
+const DOM_TS = [
+  'src/hooks/useCountUp.test.ts', 'src/hooks/useFeatureAccess.test.ts', 'src/hooks/useIsMobile.test.ts',
+  'src/services/auth.api.test.ts', 'src/services/auth.test.ts', 'src/services/support.test.ts', 'src/services/wallet.test.ts',
+  'src/utils/a11yEvents.test.ts', 'src/utils/analytics.test.ts', 'src/utils/analyticsConsent.test.ts', 'src/utils/checkoutIntent.test.ts',
+];
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -180,11 +187,22 @@ export default defineConfig({
   },
   // Configuração do Vitest integrada
   test: {
-    environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
     exclude: ['node_modules', 'dist'],
+    // Dois ambientes: criar o jsdom era 54% do tempo da suíte (uma vez por
+    // arquivo), e teste de lógica pura não precisa dele. `.test.ts` roda em node,
+    // exceto os de DOM_TS (usam window/document/localStorage); `.test.tsx`, em jsdom.
+    // Teste `.ts` novo que falhar por falta de `window` entra em DOM_TS.
+    projects: [
+      {
+        extends: true,
+        test: { name: 'dom', environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], include: ['src/**/*.test.tsx', ...DOM_TS] },
+      },
+      {
+        extends: true,
+        test: { name: 'node', environment: 'node', include: ['src/**/*.test.ts'], exclude: ['node_modules', 'dist', ...DOM_TS] },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'json', 'json-summary', 'lcov'],
