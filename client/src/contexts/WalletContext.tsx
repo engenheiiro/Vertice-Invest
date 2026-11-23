@@ -1,17 +1,19 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { walletService, type UpdateAssetPayload } from '../services/wallet';
 import { walletsService, WalletSummary } from '../services/wallets';
 import { useAuth } from './AuthContext';
-import { useDemo } from './DemoContext'; // Importar DemoContext
+import { useDemo } from './DemoContext';
 import { useToast } from './ToastContext';
-import { DEMO_ASSETS, DEMO_KPIS, DEMO_HISTORY } from '../data/DEMO_DATA'; // Importar Dados Mock
 import { STALE_TIME } from '../config/queryConfig';
-import { computeWalletKpis } from '../utils/kpiCalculations';
 import type { SharpeConfidence } from '../utils/format';
 import { getErrorMessage } from '../utils/errorMessages';
 import { foldEtfIntoStock } from '../utils/allocation';
+import {
+    buildTargetsPatch, computeIsLoading, computeIsRefreshing, invalidateKeys, isScopeReady, resolveActiveWalletId,
+    selectActiveWalletName, selectAssets, selectHistory, selectKpis, selectWallets, walletInvalidations, type WalletSelection,
+} from './walletContextState';
 
 // ETF: classe própria para fundos de índice nacionais (BRL) e internacionais (USD).
 // OURO mantido só por compatibilidade com carteiras antigas (não oferecido na UI;
@@ -171,9 +173,6 @@ export const DEFAULT_SUB_ALLOCATION: SubAllocationMap = {
     STOCK_US: { STOCK: 0, REIT: 0, ETF: 0, DOLLAR: 0 },
 };
 
-// Pseudo-carteira única usada só em modo demo — o seletor real fica oculto.
-const DEMO_WALLETS: WalletSummary[] = [{ id: 'demo', name: 'Demo', isDefault: true, createdAt: new Date().toISOString() }];
-
 /**
  * Fonte das abas que buscam sozinhas (Rentabilidade, Proventos, Extrato).
  * Na área logada aponta para o walletService (com JWT e escopo de carteira); no
@@ -302,7 +301,8 @@ export const WalletContext = createContext<WalletContextType | undefined>(undefi
 
 export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { user } = useAuth();
-    const { isDemoMode } = useDemo(); // Hook do Modo Demo
+    const userId = user?.id;
+    const { isDemoMode } = useDemo();
     const { addToast } = useToast();
     const queryClient = useQueryClient();
 
@@ -312,13 +312,10 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Escolha EXPLÍCITA de carteira (seletor, criação, exclusão). Guardada junto do
     // dono para que a seleção de uma conta nunca vaze para a próxima após um
     // logout/login — um walletId alheio derrubaria as queries em 403 no resolveWallet.
-    const [selection, setSelection] = useState<{ userId?: string; walletId?: string }>({});
-    const selectWallet = (walletId?: string) => setSelection({ userId: user?.id, walletId });
+    const [selection, setSelection] = useState<WalletSelection>({});
+    const selectWallet = (walletId?: string) => setSelection({ userId, walletId });
 
-    const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
-        const saved = localStorage.getItem('isPrivacyMode');
-        return saved === 'true';
-    });
+    const [isPrivacyMode, setIsPrivacyMode] = useState(() => localStorage.getItem('isPrivacyMode') === 'true');
 
     const togglePrivacyMode = () => {
         setIsPrivacyMode(prev => {
@@ -329,10 +326,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- QUERIES ---
+    const canListWallets = !!userId && !isDemoMode;
     const walletsQuery = useQuery({
-        queryKey: ['wallets', user?.id],
+        queryKey: ['wallets', userId],
         queryFn: walletsService.list,
-        enabled: !!user?.id && !isDemoMode,
+        enabled: canListWallets,
         staleTime: STALE_TIME.MEDIUM,
     });
 
@@ -343,27 +341,27 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // por carregamento). A partir daí, cada troca via setActiveWallet atualiza a seleção
     // local otimisticamente, e as queries (cuja chave inclui activeWalletId) buscam de
     // novo sozinhas — sem precisar de invalidação manual em cada uma.
-    const activeWalletId = selection.userId === user?.id
-        ? (selection.walletId ?? walletsQuery.data?.activeWalletId)
-        : walletsQuery.data?.activeWalletId;
+    const walletsData = walletsQuery.data;
+    const activeWalletId = resolveActiveWalletId(selection, userId, walletsData?.activeWalletId);
 
     // Portão único de tudo que é escopado por carteira: só busca depois que
     // GET /wallets respondeu — sucesso OU erro. No erro seguimos sem id, porque aí o
     // backend (resolveWallet) resolve a carteira ativa sozinho; travar aqui deixaria a
     // carteira em loading eterno se a listagem falhasse.
-    const isWalletScopeReady = isDemoMode || (!!user?.id && !walletsQuery.isPending);
+    const isWalletScopeReady = isScopeReady(isDemoMode, userId, walletsQuery.isPending);
+    const canFetchWallet = canListWallets && isWalletScopeReady; // Não busca se estiver em Demo
 
     const walletQuery = useQuery({
-        queryKey: ['wallet', user?.id, activeWalletId],
+        queryKey: ['wallet', userId, activeWalletId],
         queryFn: () => walletService.getWallet(activeWalletId),
-        enabled: !!user?.id && !isDemoMode && isWalletScopeReady, // Não busca se estiver em Demo
+        enabled: canFetchWallet,
         staleTime: STALE_TIME.REALTIME,
     });
 
     const historyQuery = useQuery({
-        queryKey: ['walletHistory', user?.id, activeWalletId],
+        queryKey: ['walletHistory', userId, activeWalletId],
         queryFn: () => walletService.getHistory(activeWalletId),
-        enabled: !!user?.id && !isDemoMode && isWalletScopeReady,
+        enabled: canFetchWallet,
         staleTime: STALE_TIME.MEDIUM,
     });
 
@@ -377,43 +375,32 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // --- FORCE REFRESH ON MOUNT ---
     useEffect(() => {
-        if (user?.id) {
-            queryClient.invalidateQueries({ queryKey: ['wallet', user.id] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory', user.id] });
+        if (userId) {
+            queryClient.invalidateQueries({ queryKey: ['wallet', userId] });
+            queryClient.invalidateQueries({ queryKey: ['walletHistory', userId] });
         }
-    }, [user?.id, queryClient]);
+    }, [userId, queryClient]);
 
     // --- MUTATIONS ---
+    const invalidate = (keys: (id?: string) => QueryKey[]) => invalidateKeys(queryClient, keys(userId));
+
     const addAssetMutation = useMutation({
         mutationFn: (asset: any) => walletService.addAsset(asset, activeWalletId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['dividends'] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
-            queryClient.invalidateQueries({ queryKey: ['goals'] });
-        }
+        onSuccess: () => invalidate(walletInvalidations.add),
         // Feedback de sucesso/erro do "add" é tratado no AddAssetModal (evita toast duplicado).
     });
 
     const updateAssetMutation = useMutation({
         mutationFn: ({ id, data }: { id: string; data: UpdateAssetPayload }) =>
             walletService.updateAsset(id, data, activeWalletId),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-        },
+        onSuccess: () => invalidate(walletInvalidations.update),
         onError: (err: any) => addToast(err?.message || 'Erro ao atualizar ativo.', 'error')
     });
 
     const removeAssetMutation = useMutation({
         mutationFn: (id: string) => walletService.removeAsset(id, activeWalletId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-            queryClient.invalidateQueries({ queryKey: ['goals'] });
+            invalidate(walletInvalidations.remove);
             addToast('Ativo removido da carteira.', 'success');
         },
         onError: (err: any) => addToast(err?.message || 'Erro ao remover ativo.', 'error')
@@ -422,28 +409,17 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const resetWalletMutation = useMutation({
         mutationFn: () => walletService.resetWallet(activeWalletId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
-            queryClient.invalidateQueries({ queryKey: ['dividends'] });
-            queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-            queryClient.invalidateQueries({ queryKey: ['goals'] });
+            invalidate(walletInvalidations.reset);
             addToast('Carteira resetada com sucesso.', 'success');
         },
         onError: (err: any) => addToast(err?.message || 'Erro ao resetar carteira.', 'error')
     });
 
-    // Importação de carteira: mesma invalidação do reset, porque o efeito é o
-    // mesmo — a carteira inteira muda de uma vez, incluindo histórico e metas.
+    // Importação de carteira: invalida o mesmo que a adição, porque a carteira
+    // inteira muda de uma vez, incluindo histórico e metas.
     // Sem `onSuccess` de toast: o wizard de importação dá o feedback, com o
     // resumo do que entrou (toast genérico aqui seria duplicado).
-    const invalidateAfterImport = () => {
-        queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] });
-        queryClient.invalidateQueries({ queryKey: ['walletHistory', user?.id] });
-        queryClient.invalidateQueries({ queryKey: ['dividends'] });
-        queryClient.invalidateQueries({ queryKey: ['cashFlow'] });
-        queryClient.invalidateQueries({ queryKey: ['dashboardResearch'] });
-        queryClient.invalidateQueries({ queryKey: ['goals'] });
-    };
+    const invalidateAfterImport = () => invalidate(walletInvalidations.add);
 
     const importCommitMutation = useMutation({
         mutationFn: ({ source, rows }: { source: string; rows: unknown[] }) =>
@@ -460,14 +436,14 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         mutationFn: (walletId: string) => walletsService.setActive(walletId),
         onSuccess: (_data, walletId) => {
             selectWallet(walletId);
-            queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+            invalidate(walletInvalidations.wallets);
         },
         onError: (err: any) => addToast(err?.message || 'Erro ao trocar de carteira.', 'error')
     });
 
-    // --- ACTIONS ---
+    // --- ACTIONS --- (toda escrita é no-op no demo: nada chega à API)
     const addAsset = async (newAsset: any) => {
-        if (isDemoMode) return; // Bloqueia ações no demo
+        if (isDemoMode) return;
         await addAssetMutation.mutateAsync(newAsset);
     };
 
@@ -497,16 +473,11 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     const updateTargets = async (newTargets: AllocationMap, newReserveTarget: number, newSubAllocation?: SubAllocationMap, newDividendGoal?: number) => {
-        const patch: Partial<WalletTargets> = {
-            targetAllocation: newTargets,
-            targetReserve: newReserveTarget,
-            ...(newSubAllocation ? { targetSubAllocation: newSubAllocation } : {}),
-            ...(newDividendGoal !== undefined ? { targetMonthlyDividendIncome: newDividendGoal } : {}),
-        };
+        const patch = buildTargetsPatch(newTargets, newReserveTarget, newSubAllocation, newDividendGoal);
         if (isDemoMode) { setDemoTargets(prev => ({ ...prev, ...patch })); return; } // Demo não persiste
         // Atualização otimista no CACHE da carteira ativa (a fonte das metas): a UI
         // responde na hora e, se a gravação falhar, o cache volta ao que era.
-        const key = ['wallet', user?.id, activeWalletId];
+        const key = ['wallet', userId, activeWalletId];
         const previous = queryClient.getQueryData(key);
         queryClient.setQueryData(key, (old: any) => (old ? { ...old, ...patch } : old));
         try {
@@ -525,7 +496,7 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const createWallet = async (name: string) => {
         if (isDemoMode) return undefined;
         const res = await walletsService.create(name);
-        queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+        invalidate(walletInvalidations.wallets);
         if (res?.wallet?.id) await setActiveWalletMutation.mutateAsync(res.wallet.id);
         return res.wallet;
     };
@@ -533,13 +504,13 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const renameWallet = async (walletId: string, name: string) => {
         if (isDemoMode) return;
         await walletsService.rename(walletId, name);
-        queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+        invalidate(walletInvalidations.wallets);
     };
 
     const deleteWallet = async (walletId: string) => {
         if (isDemoMode) return;
         const res = await walletsService.remove(walletId);
-        queryClient.invalidateQueries({ queryKey: ['wallets', user?.id] });
+        invalidate(walletInvalidations.wallets);
         // O backend já realoca a carteira ativa (na mesma transação) quando a
         // apagada era a corrente, e devolve o novo id — seta direto em vez de
         // esperar o próximo GET /wallets, senão a query key ['wallet', undefined]
@@ -548,42 +519,26 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     // --- STATES & MEMOIZED CALCULATIONS ---
-
-    // LÓGICA DE INJEÇÃO DO MODO DEMO
     // Memoizado porque o fallback `|| []` produzia um array NOVO a cada render:
     // `assets` é dependência do useMemo de `kpis` (e vai no value do contexto),
     // então sem isso os KPIs eram recalculados em todo render enquanto a query
     // não tivesse dados, e todo consumidor do contexto re-renderizava junto.
-    const assets = useMemo(
-        () => (isDemoMode ? DEMO_ASSETS : (walletQuery.data?.assets || [])),
-        [isDemoMode, walletQuery.data?.assets]
-    );
-    const history = isDemoMode ? DEMO_HISTORY : (historyQuery.data || []);
-    const serverKpis = isDemoMode ? DEMO_KPIS : walletQuery.data?.kpis;
+    const walletData = walletQuery.data;
+    const serverAssets = walletData?.assets;
+    const assets = useMemo(() => selectAssets(isDemoMode, serverAssets), [isDemoMode, serverAssets]);
+    const history = selectHistory(isDemoMode, historyQuery.data);
+    const serverKpis = walletData?.kpis;
+    const kpis = useMemo(() => selectKpis(isDemoMode, assets, serverKpis), [assets, serverKpis, isDemoMode]);
 
-    // KPIs híbridos
-    const kpis = useMemo(() => {
-        // Se estiver em demo, retorna os KPIs fixos do demo
-        if (isDemoMode) return { ...DEMO_KPIS, dataQuality: 'AUDITED' as const, sharpeRatio: 1.8, beta: 0.85 };
+    const usdRate = toUsdRate(walletData?.meta?.usdRate);
+    const isLoading = computeIsLoading({ isDemoMode, userId, isWalletScopeReady, wallet: walletQuery, history: historyQuery });
+    const isRefreshing = computeIsRefreshing({
+        isDemoMode, wallet: walletQuery, history: historyQuery,
+        mutationsPending: [addAssetMutation.isPending, removeAssetMutation.isPending],
+    });
 
-        // Cálculo puro extraído para utils/kpiCalculations.ts (M5, testável).
-        return computeWalletKpis(assets, serverKpis);
-    }, [assets, serverKpis, isDemoMode]);
-
-    const usdRate = toUsdRate(walletQuery.data?.meta?.usdRate);
-    // `!isWalletScopeReady` entra aqui porque enquanto GET /wallets não responde as
-    // queries estão desligadas — e query desligada tem isLoading=false. Sem isso a
-    // carteira piscaria "vazia" antes de começar a carregar.
-    const isLoading = !isDemoMode && !!user?.id && (!isWalletScopeReady || walletQuery.isLoading || historyQuery.isLoading);
-
-    const isRefreshing = !isDemoMode && (
-                         (walletQuery.isFetching && !walletQuery.isLoading) ||
-                         (historyQuery.isFetching && !historyQuery.isLoading) ||
-                         addAssetMutation.isPending ||
-                         removeAssetMutation.isPending);
-
-    const wallets = isDemoMode ? DEMO_WALLETS : (walletsQuery.data?.wallets || []);
-    const activeWalletName = isDemoMode ? 'Demo' : (wallets.find(w => w.id === activeWalletId)?.name || 'Minha Carteira');
+    const wallets = selectWallets(isDemoMode, walletsData);
+    const activeWalletName = selectActiveWalletName(isDemoMode, wallets, activeWalletId);
 
     // Fonte das abas que buscam sozinhas, com o escopo de carteira já embutido.
     // Memoizado porque vai no value do contexto: um objeto novo a cada render
@@ -606,12 +561,12 @@ export const WalletProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             usdRate,
             isLoading,
             isRefreshing,
-            isPrivacyMode: isDemoMode ? false : isPrivacyMode, // Demo sempre visível
+            isPrivacyMode: !isDemoMode && isPrivacyMode, // Demo sempre visível
             togglePrivacyMode,
             isReadOnly: false,
             isValuesLocked: false,
             dataSource,
-            refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', user?.id] }),
+            refreshWallet: () => queryClient.invalidateQueries({ queryKey: ['wallet', userId] }),
             addAsset,
             updateAsset,
             removeAsset,
