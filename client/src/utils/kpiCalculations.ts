@@ -22,32 +22,46 @@ export const totalResultBalance = (
  *   local é apenas fallback.
  * - Carteira vazia retorna zeros, preservando dividendos provisionados do server.
  */
+type ServerKpis = Partial<WalletKPIs> | undefined;
+
+/** Valor do servidor quando veio (nem `null` nem `undefined`); senão o fallback local. */
+function serverOr<K extends keyof WalletKPIs>(
+  serverKpis: ServerKpis,
+  key: K,
+  fallback: WalletKPIs[K]
+): WalletKPIs[K] {
+  return serverKpis?.[key] ?? fallback;
+}
+
+/** Carteira vazia: zeros, preservando o que o servidor sabe de proventos e âncora. */
+function emptyWalletKpis(serverKpis: ServerKpis): WalletKPIs {
+  return {
+    totalEquity: 0,
+    totalInvested: 0,
+    totalResult: 0,
+    totalResultPercent: 0,
+    dayVariation: 0,
+    dayVariationPercent: 0,
+    dayAnchorDate: serverOr(serverKpis, 'dayAnchorDate', null),
+    dayDividends: 0,
+    totalDividends: serverOr(serverKpis, 'totalDividends', 0),
+    projectedDividends: serverOr(serverKpis, 'projectedDividends', 0),
+    weightedRentability: 0,
+    dataQuality: 'AUDITED',
+    // Sem posições não há risco medível — null, não zero.
+    sharpeRatio: null,
+    sharpeConfidence: null,
+    sharpeStandardError: null,
+    sharpeSample: 0,
+    beta: null,
+  };
+}
+
 export function computeWalletKpis(
   assets: Asset[],
   serverKpis?: Partial<WalletKPIs>
 ): WalletKPIs {
-  if (assets.length === 0) {
-    return {
-      totalEquity: 0,
-      totalInvested: 0,
-      totalResult: 0,
-      totalResultPercent: 0,
-      dayVariation: 0,
-      dayVariationPercent: 0,
-      dayAnchorDate: serverKpis?.dayAnchorDate ?? null,
-      dayDividends: 0,
-      totalDividends: serverKpis?.totalDividends ?? 0,
-      projectedDividends: serverKpis?.projectedDividends ?? 0,
-      weightedRentability: 0,
-      dataQuality: 'AUDITED',
-      // Sem posições não há risco medível — null, não zero.
-      sharpeRatio: null,
-      sharpeConfidence: null,
-      sharpeStandardError: null,
-      sharpeSample: 0,
-      beta: null,
-    };
-  }
+  if (assets.length === 0) return emptyWalletKpis(serverKpis);
 
   let equity = 0;
   let invested = 0;
@@ -59,30 +73,33 @@ export function computeWalletKpis(
   // totalResult e dayVariation vêm do servidor pois ele computa corretamente:
   // totalResult = (equity-invested) + realizedProfit + dividends; e dayVariation
   // considera variação cambial intraday em ativos USD.
-  const result = serverKpis?.totalResult ?? equity - invested;
-  const resultPercent =
-    serverKpis?.totalResultPercent ?? (invested > 0 ? (result / invested) * 100 : 0);
+  const result = serverOr(serverKpis, 'totalResult', equity - invested);
+  const resultPercent = serverOr(
+    serverKpis,
+    'totalResultPercent',
+    invested > 0 ? (result / invested) * 100 : 0
+  );
 
   return {
     totalEquity: equity,
     totalInvested: invested,
     totalResult: result,
     totalResultPercent: resultPercent,
-    dayVariation: serverKpis?.dayVariation ?? 0,
-    dayVariationPercent: serverKpis?.dayVariationPercent ?? 0,
+    dayVariation: serverOr(serverKpis, 'dayVariation', 0),
+    dayVariationPercent: serverOr(serverKpis, 'dayVariationPercent', 0),
     // Acompanham a variação: a janela que ela cobre e os proventos do dia-ex.
     // Sem repassá-los aqui, o detalhamento do dia perderia os dois no caminho.
-    dayAnchorDate: serverKpis?.dayAnchorDate ?? null,
-    dayDividends: serverKpis?.dayDividends ?? 0,
-    totalDividends: serverKpis?.totalDividends ?? 0,
-    projectedDividends: serverKpis?.projectedDividends ?? 0,
-    weightedRentability: serverKpis?.weightedRentability ?? resultPercent,
-    dataQuality: serverKpis?.dataQuality ?? 'ESTIMATED',
-    // `?? null` e não `?? 0`: ausência de métrica é "não medido", não "risco zero".
-    sharpeRatio: serverKpis?.sharpeRatio ?? null,
-    sharpeConfidence: serverKpis?.sharpeConfidence ?? null,
-    sharpeStandardError: serverKpis?.sharpeStandardError ?? null,
-    sharpeSample: serverKpis?.sharpeSample ?? 0,
-    beta: serverKpis?.beta ?? null,
+    dayAnchorDate: serverOr(serverKpis, 'dayAnchorDate', null),
+    dayDividends: serverOr(serverKpis, 'dayDividends', 0),
+    totalDividends: serverOr(serverKpis, 'totalDividends', 0),
+    projectedDividends: serverOr(serverKpis, 'projectedDividends', 0),
+    weightedRentability: serverOr(serverKpis, 'weightedRentability', resultPercent),
+    dataQuality: serverOr(serverKpis, 'dataQuality', 'ESTIMATED'),
+    // fallback `null` e não `0`: ausência de métrica é "não medido", não "risco zero".
+    sharpeRatio: serverOr(serverKpis, 'sharpeRatio', null),
+    sharpeConfidence: serverOr(serverKpis, 'sharpeConfidence', null),
+    sharpeStandardError: serverOr(serverKpis, 'sharpeStandardError', null),
+    sharpeSample: serverOr(serverKpis, 'sharpeSample', 0),
+    beta: serverOr(serverKpis, 'beta', null),
   };
 }

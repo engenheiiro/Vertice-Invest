@@ -168,87 +168,110 @@ export const formatAnchorLabel = (anchorDate: string | null | undefined): string
     return `${weekday}, ${day}`;
 };
 
+/** Contagem acumulada enquanto as posições são classificadas. */
+interface MoverTally {
+    rows: DayMoverRow[];
+    upCount: number;
+    downCount: number;
+    flatCount: number;
+    dividendTickers: string[];
+    pendingTreasury: PendingTreasurySummary;
+}
+
+const newTally = (): MoverTally => ({
+    rows: [], upCount: 0, downCount: 0, flatCount: 0, dividendTickers: [],
+    pendingTreasury: { count: 0, latestPriceDate: null },
+});
+
+/**
+ * Um Tesouro sem PU do dia não é um movimento de hoje: o PU anterior já foi
+ * incorporado ao fechamento da própria data-base. Em vez de ocupar uma linha
+ * zerada por título, ele vira uma nota única no rodapé. Se por alguma
+ * inconsistência a contribuição vier diferente de zero, a linha permanece
+ * visível — nunca escondemos dinheiro que entrou no total.
+ */
+const isPendingTreasuryNote = (reason: DayChangeReason | null, value: number): boolean =>
+    reason === 'FIXED_INCOME_MTM_PENDING' && Math.abs(value) < FLAT_THRESHOLD;
+
+function notePendingTreasury(pending: PendingTreasurySummary, priceDate: string | null | undefined): void {
+    pending.count += 1;
+    if (priceDate && (!pending.latestPriceDate || priceDate > pending.latestPriceDate)) {
+        pending.latestPriceDate = priceDate;
+    }
+}
+
+/**
+ * Zero de mercado: o ativo negociou e não se moveu. Agrupa.
+ * Zero nosso (ou provento a explicar): permanece na lista.
+ */
+const isMarketFlat = (value: number, reason: DayChangeReason | null, dividends: number): boolean =>
+    Math.abs(value) < FLAT_THRESHOLD && !isZeroedByData(reason) && dividends <= 0;
+
+const toMoverRow = (asset: Asset, value: number, reason: DayChangeReason | null, dividends: number): DayMoverRow => ({
+    id: asset.id,
+    ticker: asset.ticker,
+    name: displayName(asset),
+    type: asset.type,
+    currency: asset.currency,
+    sector: asset.sector ?? null,
+    isReserve: asset.isReserve ?? asset.type === 'CASH',
+    value,
+    percent: asset.dayChangePct ?? 0,
+    reason,
+    dividends,
+});
+
+function tallyAsset(tally: MoverTally, asset: Asset): void {
+    const value = asset.dayChangeValue ?? 0;
+    const reason = asset.dayChangeReason ?? null;
+    const dividends = asset.dayDividends ?? 0;
+    if (dividends > 0) tally.dividendTickers.push(asset.ticker);
+
+    if (isPendingTreasuryNote(reason, value)) {
+        notePendingTreasury(tally.pendingTreasury, asset.priceDate);
+        return;
+    }
+    if (isMarketFlat(value, reason, dividends)) {
+        tally.flatCount += 1;
+        return;
+    }
+
+    if (value > 0) tally.upCount += 1;
+    else if (value < 0) tally.downCount += 1;
+    tally.rows.push(toMoverRow(asset, value, reason, dividends));
+}
+
+/** Campos que vêm do KPI — a autoridade do total, nunca a soma das linhas. */
+const kpiSummary = (kpis?: Partial<WalletKPIs> | null) => ({
+    total: kpis?.dayVariation ?? 0,
+    totalPercent: kpis?.dayVariationPercent ?? 0,
+    dividends: kpis?.dayDividends ?? 0,
+    anchorDate: kpis?.dayAnchorDate ?? null,
+});
+
 export function buildDayMovers(assets: Asset[], kpis?: Partial<WalletKPIs> | null): DayMovers {
-    const total = kpis?.dayVariation ?? 0;
-    const empty: DayMovers = {
-        rows: [], upCount: 0, downCount: 0, flatCount: 0,
-        total, totalPercent: kpis?.dayVariationPercent ?? 0,
-        dividends: kpis?.dayDividends ?? 0, dividendTickers: [],
-        anchorDate: kpis?.dayAnchorDate ?? null, sharedReason: null,
-        pendingTreasury: { count: 0, latestPriceDate: null },
-    };
-    if (!Array.isArray(assets) || assets.length === 0) return empty;
-
-    const rows: DayMoverRow[] = [];
-    let flatCount = 0;
-    let upCount = 0;
-    let downCount = 0;
-    const dividendTickers: string[] = [];
-    let pendingTreasuryCount = 0;
-    let pendingTreasuryPriceDate: string | null = null;
-
-    for (const asset of assets) {
-        const value = asset.dayChangeValue ?? 0;
-        const reason = asset.dayChangeReason ?? null;
-        const dividends = asset.dayDividends ?? 0;
-        if (dividends > 0) dividendTickers.push(asset.ticker);
-
-        // Um Tesouro sem PU do dia não é um movimento de hoje: o PU anterior já
-        // foi incorporado ao fechamento da própria data-base. Em vez de ocupar
-        // uma linha zerada por título, ele vira uma nota única no rodapé. Se por
-        // alguma inconsistência a contribuição vier diferente de zero, a linha
-        // permanece visível — nunca escondemos dinheiro que entrou no total.
-        if (reason === 'FIXED_INCOME_MTM_PENDING' && Math.abs(value) < FLAT_THRESHOLD) {
-            pendingTreasuryCount += 1;
-            if (asset.priceDate && (!pendingTreasuryPriceDate || asset.priceDate > pendingTreasuryPriceDate)) {
-                pendingTreasuryPriceDate = asset.priceDate;
-            }
-            continue;
-        }
-
-        // Zero de mercado: o ativo negociou e não se moveu. Agrupa.
-        // Zero nosso (ou provento a explicar): permanece na lista.
-        if (Math.abs(value) < FLAT_THRESHOLD && !isZeroedByData(reason) && dividends <= 0) {
-            flatCount += 1;
-            continue;
-        }
-
-        if (value > 0) upCount += 1;
-        else if (value < 0) downCount += 1;
-        rows.push({
-            id: asset.id,
-            ticker: asset.ticker,
-            name: displayName(asset),
-            type: asset.type,
-            currency: asset.currency,
-            sector: asset.sector ?? null,
-            isReserve: asset.isReserve ?? asset.type === 'CASH',
-            value,
-            percent: asset.dayChangePct ?? 0,
-            reason,
-            dividends,
-        });
+    const summary = kpiSummary(kpis);
+    const tally = newTally();
+    if (Array.isArray(assets)) {
+        for (const asset of assets) tallyAsset(tally, asset);
     }
 
     // Maior alta → maior queda. Empate pelo ticker, para a ordem não oscilar
     // entre renderizações quando duas posições contribuem igual.
-    rows.sort((a, b) => (b.value - a.value) || a.ticker.localeCompare(b.ticker));
+    tally.rows.sort((a, b) => (b.value - a.value) || a.ticker.localeCompare(b.ticker));
 
     return {
-        rows,
-        upCount,
-        downCount,
-        flatCount,
-        total,
-        totalPercent: kpis?.dayVariationPercent ?? 0,
-        dividends: kpis?.dayDividends ?? 0,
-        dividendTickers,
-        anchorDate: kpis?.dayAnchorDate ?? null,
-        pendingTreasury: {
-            count: pendingTreasuryCount,
-            latestPriceDate: pendingTreasuryPriceDate,
-        },
-        sharedReason: resolveSharedReason(rows),
+        rows: tally.rows,
+        upCount: tally.upCount,
+        downCount: tally.downCount,
+        flatCount: tally.flatCount,
+        total: summary.total,
+        totalPercent: summary.totalPercent,
+        dividends: summary.dividends,
+        dividendTickers: tally.dividendTickers,
+        anchorDate: summary.anchorDate,
+        pendingTreasury: tally.pendingTreasury,
+        sharedReason: resolveSharedReason(tally.rows),
     };
 }
 
