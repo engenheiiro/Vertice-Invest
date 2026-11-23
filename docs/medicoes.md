@@ -37,8 +37,8 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89 | 89.1 | 89.1 |
 | `testes.server` — Casos de teste do server | 3417 | 3404 | 3417 |
 | `testes.client` — Casos de teste do client | 2125 | 2110 | 2125 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 43 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 57.1 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 36.5 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 44.9 |
 | `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 37 | 37 | 37 |
 | `linhasLongas` — Linhas com mais de 160 caracteres | 1078 | 1079 | 1078 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |
@@ -58,7 +58,7 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 | 0 |
 | `complexidade` — Funções com complexidade > 15, por arquivo | 104 | 105 | 104 |
 | `complexidadeMax` — Maior complexidade ciclomática de uma função | 44 | 45 | 44 |
-| `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.49 | 0.49 | 0.49 |
+| `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.47 | 0.49 | 0.47 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 | 0 |
 | `vulnAltas` — Vulnerabilidades altas/críticas (npm audit) | 0 | 0 | 0 |
 | `depsMajorAtras` — Dependências mais de uma versão maior atrás | 0 | 0 | 0 |

@@ -14,6 +14,8 @@ interface EquityStatCardProps {
     tag: React.ReactNode;
     tagClass: string;
     className?: string;
+    /** Tooltip do rótulo; a Carteira passa o dela, em portal. */
+    Tooltip?: React.ComponentType<{ text: string }>;
 }
 
 const InfoTooltip = ({ text }: { text: string }) => (
@@ -29,13 +31,13 @@ const InfoTooltip = ({ text }: { text: string }) => (
 // Card de indicador padrão: superfície + ícone tingido em quadrado + pílula de tag.
 // Espelha o StatCard da aba Carteira; o valor usa <FitText> p/ nunca cortar dígitos.
 export const EquityStatCard = ({
-    label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass, className = '',
+    label, tooltipText, icon, iconClass, value, valueClass, subLabel, subValue, tag, tagClass, className = '', Tooltip = InfoTooltip,
 }: EquityStatCardProps) => (
     <div className={`h-full bg-base border border-slate-800 rounded-2xl p-[18px] flex flex-col transition-colors hover:border-slate-700 ${className}`}>
         <div className="relative flex min-h-[22px] items-start pr-10">
             <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</span>
-                {tooltipText && <InfoTooltip text={tooltipText} />}
+                {tooltipText && <Tooltip text={tooltipText} />}
             </div>
             <span className={`absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${iconClass}`}>
                 {icon}

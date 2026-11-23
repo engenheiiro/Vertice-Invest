@@ -1,7 +1,7 @@
 import React from 'react';
 import { Wallet, ArrowUpRight, ArrowDownRight, ChevronRight, Minus } from 'lucide-react';
 import { FitText } from '../ui';
-import { plusSign, type EquitySummaryView } from './equitySummaryView';
+import { HERO_STYLE, plusSign, type EquitySummaryView } from './equitySummaryView';
 
 interface EquityHeroCardProps {
     view: EquitySummaryView;
@@ -36,10 +36,36 @@ const DayVariationValue = ({ text, isReadOnly, onOpenDay }: { text: string; isRe
     );
 };
 
-const DayDirectionIcon = ({ isFlat, isPositive }: { isFlat: boolean; isPositive: boolean }) => {
+export const DayDirectionIcon = ({ isFlat, isPositive }: { isFlat: boolean; isPositive: boolean }) => {
     if (isFlat) return <Minus size={12} />;
     return isPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />;
 };
+
+export const HeroWalletIcon = () => (
+    <span className="absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
+        <Wallet size={16} />
+    </span>
+);
+
+/** Badge = variação do CAPITAL, não o retorno total (esse, com proventos, vive no card Lucro Total). */
+const CapitalBadge = ({ view, text }: { view: EquitySummaryView; text: string }) => (
+    <span
+        className={`shrink-0 text-xs font-bold ${view.capitalClass}`}
+        title="Variação do capital: patrimônio atual vs. valor investido (sem proventos)."
+    >
+        {plusSign(view.isCapitalPositive)}{text}%
+    </span>
+);
+
+/** Patrimônio (ajusta a fonte para caber) + badge do capital. */
+export const HeroEquityRow = ({ view, equityText, capitalPercentText }: { view: EquitySummaryView; equityText: string; capitalPercentText: string }) => (
+    <div className="relative flex items-baseline gap-2 mt-1">
+        <FitText className="flex-1 font-extrabold tracking-tight" max={28} min={15} aria-live="polite" aria-atomic={true}>
+            {equityText}
+        </FitText>
+        <CapitalBadge view={view} text={capitalPercentText} />
+    </div>
+);
 
 /**
  * Card "herói" do Patrimônio Líquido, em gradiente verde. Verde-escuro nos dois
@@ -51,10 +77,7 @@ export const EquityHeroCard = ({
 }: EquityHeroCardProps) => (
     <div
         className="relative h-full overflow-hidden rounded-2xl p-[18px] text-[#fff]"
-        style={{
-            background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
-            boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
-        }}
+        style={HERO_STYLE}
     >
         <div
             className="absolute right-[-30px] top-[-30px] w-[130px] h-[130px] rounded-full pointer-events-none"
@@ -62,23 +85,10 @@ export const EquityHeroCard = ({
         />
         <div className="relative flex min-h-[22px] items-start pr-10">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[rgba(255,255,255,0.72)]">Patrimônio Líquido</span>
-            <span className="absolute right-0 top-0 w-[30px] h-[30px] rounded-[9px] bg-white/[0.14] flex items-center justify-center text-[#eafff6]">
-                <Wallet size={16} />
-            </span>
+            <HeroWalletIcon />
         </div>
 
-        <div className="relative flex items-baseline gap-2 mt-1">
-            <FitText className="flex-1 font-extrabold tracking-tight" max={28} min={15} aria-live="polite" aria-atomic={true}>
-                {equityText}
-            </FitText>
-            {/* Badge = variação do CAPITAL, não o retorno total (esse, com proventos, vive no card Lucro Total). */}
-            <span
-                className={`shrink-0 text-xs font-bold ${view.capitalClass}`}
-                title="Variação do capital: patrimônio atual vs. valor investido (sem proventos)."
-            >
-                {plusSign(view.isCapitalPositive)}{capitalPercentText}%
-            </span>
-        </div>
+        <HeroEquityRow view={view} equityText={equityText} capitalPercentText={capitalPercentText} />
 
         <div className="relative flex items-center justify-between mt-3 pt-3 border-t border-white/[0.14]">
             <div className="min-w-0">

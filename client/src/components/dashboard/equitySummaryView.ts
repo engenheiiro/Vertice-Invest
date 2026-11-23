@@ -8,6 +8,12 @@ import { formatSharpe, describeSharpe } from '../../utils/format';
  * (regra 8: o custo já vem congelado no câmbio de cada lançamento).
  */
 
+/** Fundo verde do card herói — o mesmo na Carteira e no Terminal. */
+export const HERO_STYLE = {
+    background: 'linear-gradient(180deg, #0f5f47, #0c4f3b)',
+    boxShadow: '0 14px 30px -18px rgba(12,79,59,.9)',
+} as const;
+
 /** Campo ausente, nulo ou NaN conta como zero — o mesmo `x || 0` de antes. */
 const orZero = (val: number | null | undefined): number => val || 0;
 
