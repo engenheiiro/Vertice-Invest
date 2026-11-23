@@ -13,13 +13,15 @@ mesmo commit que o resolve.
   `rebuildUserHistory` (46). O teto passa a ser `WalletSummary.tsx` (45),
   seguido de `TopPicksCard.tsx` e `Research.tsx` (44) e de `ProfileIdentity.tsx`
   e `_applyDayTransactions` do `financialService.js` (43).
-- **(dono, 2026-11-22) Rebuild de histórico grava câmbio e IPCA inventados
-  sem macro.** Sem `MACRO_INDICATORS` no banco, `rebuildUserHistory` usa IPCA
-  4,5 e dólar 5,75 fixos (`resolveRebuildRates` em
-  `utils/rebuildHistoryRules.js`), e o resultado vai para os snapshots — choca
-  com a regra 13. Comportamento antigo, mantido na refatoração e travado por
-  `tests/rebuild_history_rules.spec.js`; decidir se o rebuild deve abortar
-  sem macro.
+- **(dono, 2026-11-22) Snapshot diário grava câmbio inventado sem macro.** O
+  rebuild já não grava (aborta quando a carteira precisa de IPCA ou câmbio que
+  a macro não tem — `missingRebuildRates`). Mas o `runDailySnapshot`
+  (`schedulerService.js:174`) ainda passa `sysConfig?.dollar || 5.75` ao
+  resolvedor de câmbio, e o dia de HOJE (depois do último candle) sai a 5,75
+  para posições em dólar; IPCA ausente vira 0 no acúmulo da renda fixa IPCA.
+  Mesma regra 13, outro caminho de gravação. Telas e KPIs ao vivo
+  (`walletKpis`, `walletPayload`, `rebalanceService`, `goalsController`,
+  `walletPerformanceController`) usam o mesmo `|| 5.75` para exibir.
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):

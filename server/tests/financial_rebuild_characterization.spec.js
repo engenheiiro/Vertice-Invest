@@ -93,7 +93,7 @@ const PROVENTOS = () => new Map([
     ['2026-06-26', [{ ticker: 'PETR4', amount: 0.5 }]], // posição zerada: não recebe
 ]);
 
-const usdDoDia = (key) => 5 + (Number(key.slice(8, 10)) % 7) * 0.03;
+const usdDoDia = Object.assign((key) => 5 + (Number(key.slice(8, 10)) % 7) * 0.03, { hasSeries: true });
 
 const prepararMocks = ({ sysConfig = { cdi: 14, ipca: 4.5, dollar: 5.2 }, precos = PRECOS(), txs = TXS } = {}) => {
     mocks.txFind.mockReturnValue({ sort: vi.fn().mockResolvedValue(txs) });
@@ -163,6 +163,24 @@ describe('rebuildUserHistory — caracterização antes da decomposição', () =
         prepararMocks({ txs: [] });
         expect(await financialService.rebuildUserHistory('u1', 'w1', { dryRun: true })).toEqual([]);
         expect(mocks.snapshotDeleteMany).not.toHaveBeenCalled();
+    });
+
+    // Regra 13: sem a taxa na macro, o rebuild não grava número inventado — aborta e preserva o histórico.
+    it('sem IPCA na macro e com renda fixa IPCA na carteira: aborta sem gravar', async () => {
+        const persist = prepararMocks({ sysConfig: { cdi: 14, dollar: 5.2 } });
+        const tituloIpca = { ticker: 'NTNB-35', type: 'FIXED_INCOME', currency: 'BRL', fixedIncomeIndex: 'IPCA', fixedIncomeSpread: 6 };
+        mocks.userAssetFind.mockResolvedValue([...ASSETS, tituloIpca]);
+        await expect(financialService.rebuildUserHistory('u1', 'w1', { throughDayKey: '2026-06-10' }))
+            .rejects.toThrow('Macro sem IPCA: o rebuild não grava taxa inventada no histórico.');
+        expect(persist).not.toHaveBeenCalled();
+    });
+
+    it('sem dólar na macro, sem série USD/BRL e com ativo em dólar: aborta sem gravar', async () => {
+        const persist = prepararMocks({ sysConfig: { cdi: 14, ipca: 4.4 } });
+        vi.spyOn(financialService, '_loadUsdRateResolver').mockResolvedValue(() => 5.75);
+        await expect(financialService.rebuildUserHistory('u1', 'w1', { throughDayKey: '2026-06-10' }))
+            .rejects.toThrow('Macro sem câmbio USD/BRL: o rebuild não grava taxa inventada no histórico.');
+        expect(persist).not.toHaveBeenCalled();
     });
 
     it('série que não cobre a posição: aborta sem gravar', async () => {

@@ -28,7 +28,7 @@ import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixe
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import {
-    buildRebuildSnapshot, cdiFactorForDay, dayDividendCash, describeCoverageGaps, nextQuota,
+    buildRebuildSnapshot, cdiFactorForDay, dayDividendCash, describeCoverageGaps, missingRebuildRates, nextQuota,
     rebuildWindow, requiredFromByTicker, resolveRebuildRates,
 } from '../utils/rebuildHistoryRules.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
@@ -740,16 +740,16 @@ export const financialService = {
         });
     },
 
-    /**
-     * Contexto do rebuild: metadados das posições, séries de preço, proventos,
-     * câmbio e PU — cada fonte isolada num helper testável.
-     */
-    async _loadRebuildContext(userId, walletId, txs, currentUsdRate) {
+    /** Contexto do rebuild: posições, séries de preço, proventos, câmbio e PU (cada fonte num helper testável). */
+    async _loadRebuildContext(userId, walletId, txs, rates) {
         const userAssets = await UserAsset.find({ user: userId, wallet: walletId });
         const assetMetadataMap = new Map(userAssets.map(ua => [ua.ticker, ua]));
         const requiredFrom = requiredFromByTicker(txs, assetMetadataMap);
         const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
-        const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
+        const getUsdRateForDate = await this._loadUsdRateResolver(rates.currentUsdRate);
+        // Regra 13: sem a taxa de que a carteira precisa, aborta (o histórico atual fica preservado).
+        const missing = missingRebuildRates(rates, { txs, userAssets, usdSeries: getUsdRateForDate.hasSeries === true });
+        if (missing.length > 0) throw new Error(`Macro sem ${missing.join(' e ')}: o rebuild não grava taxa inventada no histórico.`);
         const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFrom);
         const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
         // Mesma regra de moeda do acumulado (lançamento + posição): um ativo em
@@ -863,8 +863,8 @@ export const financialService = {
                 return [];
             }
 
-            const { currentUsdRate, ...rates } = resolveRebuildRates(await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }));
-            const loaded = await this._loadRebuildContext(userId, walletId, txs, currentUsdRate);
+            const rates = resolveRebuildRates(await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }));
+            const loaded = await this._loadRebuildContext(userId, walletId, txs, rates);
             this._assertPriceCoverage(loaded, { userId, walletId, allowSparseHistory });
 
             const { startDate, today } = rebuildWindow(txs[0].date, throughDayKey, brazilDayKey(new Date()));

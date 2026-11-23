@@ -44,7 +44,7 @@ export const buildUsdRateResolver = (historyEntries, currentUsdRate) => {
         .sort((a, b) => a[0] - b[0]);
     const lastCandleMs = sorted.length > 0 ? sorted[sorted.length - 1][0] : null;
 
-    return (dayKey) => {
+    const resolver = (dayKey) => {
         if (!isValidDayKey(dayKey)) throw new RangeError(`Data de câmbio inválida: ${dayKey}`);
         if (rateByDate.has(dayKey)) return rateByDate.get(dayKey);
         if (sorted.length === 0) return safeCurrent;
@@ -64,6 +64,11 @@ export const buildUsdRateResolver = (historyEntries, currentUsdRate) => {
         // Alvo anterior a todo o histórico → 1ª taxa conhecida (não a de hoje).
         return best >= 0 ? sorted[best][1] : sorted[0][1];
     };
+    // Sem série E sem cotação corrente, o resolvedor só tem o FALLBACK fixo a dar:
+    // quem grava histórico (rebuild) lê isto para abortar em vez de persistir um
+    // câmbio inventado (regra 13).
+    resolver.hasSeries = sorted.length > 0;
+    return resolver;
 };
 
 /**

@@ -3,6 +3,7 @@ import {
     cdiFactorForDay,
     dayDividendCash,
     describeCoverageGaps,
+    missingRebuildRates,
     nextQuota,
     rebuildWindow,
     requiredFromByTicker,
@@ -12,12 +13,28 @@ import {
 const d = (s) => new Date(`${s}T12:00:00.000Z`);
 
 describe('rebuildHistoryRules — regras puras do rebuild', () => {
-    it('taxas: IPCA e câmbio caem no default sem macro; Selic só quando positiva', () => {
+    // Regra 13: sem macro, a taxa é AUSENTE — antes viravam IPCA 4,5 e dólar 5,75 gravados nos snapshots.
+    it('taxas: sem macro, IPCA e câmbio ficam nulos (nada de default inventado); Selic só quando positiva', () => {
         const semMacro = resolveRebuildRates(null);
-        expect(semMacro.currentIpcaRate).toBe(4.5);
-        expect(semMacro.currentUsdRate).toBe(5.75);
+        expect(semMacro.currentIpcaRate).toBeNull();
+        expect(semMacro.currentUsdRate).toBeNull();
         expect(semMacro.currentSelicRate).toBeUndefined();
-        expect(resolveRebuildRates({ ipca: 0, selic: 15, dollar: 5.1 })).toMatchObject({ currentIpcaRate: 4.5, currentSelicRate: 15, currentUsdRate: 5.1 });
+        expect(resolveRebuildRates({ ipca: 0, selic: 15, dollar: 5.1 })).toMatchObject({ currentIpcaRate: null, currentSelicRate: 15, currentUsdRate: 5.1 });
+    });
+
+    it('taxa que falta só barra quando a carteira precisa dela', () => {
+        const ipcaAsset = { ticker: 'NTNB', type: 'FIXED_INCOME', fixedIncomeIndex: 'ipca' };
+        const usdAsset = { ticker: 'AAPL', type: 'STOCK_US', currency: 'USD' };
+        const semTaxa = { currentIpcaRate: null, currentUsdRate: null };
+        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [{ ticker: 'PETR4', type: 'STOCK' }], usdSeries: false })).toEqual([]);
+        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [ipcaAsset], usdSeries: true })).toEqual(['IPCA']);
+        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [usdAsset], usdSeries: false })).toEqual(['câmbio USD/BRL']);
+        // Com série de câmbio, o resolvedor usa candle real: a falta do spot não barra.
+        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [usdAsset], usdSeries: true })).toEqual([]);
+        // Ativo já vendido em dólar só aparece nas transações.
+        expect(missingRebuildRates(semTaxa, { txs: [{ ticker: 'X', currency: 'USD' }], userAssets: [], usdSeries: false })).toEqual(['câmbio USD/BRL']);
+        const comTaxa = { currentIpcaRate: 4.4, currentUsdRate: 5.1 };
+        expect(missingRebuildRates(comTaxa, { txs: [], userAssets: [ipcaAsset, usdAsset], usdSeries: false })).toEqual([]);
     });
 
     it('profundidade exigida: primeira compra por ticker, sem renda fixa, caixa nem RESERVA', () => {

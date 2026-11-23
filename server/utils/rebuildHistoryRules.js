@@ -8,6 +8,7 @@
  * anterior (guarda: tests/financial_rebuild_characterization.spec.js).
  */
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
+import { isDollarized } from './assetCurrency.js';
 import { toDateKey } from './dateUtils.js';
 import { calculateDailyDietz, resolveCurrentCdiRate, safeCurrency, safeFloat } from './mathUtils.js';
 import { isTwrrReturnAnomalous, snapshotInstantForDay } from './walletSnapshot.js';
@@ -15,13 +16,38 @@ import { isTwrrReturnAnomalous, snapshotInstantForDay } from './walletSnapshot.j
 /** Versão do cálculo gravada em cada snapshot reconstruído. */
 const CALCULATION_VERSION = 5;
 
-/** Taxas correntes da macro, com a mesma cadeia do card e do snapshot (CDI → Selic → fallback). */
+/**
+ * Taxas correntes da macro, com a mesma cadeia do card e do snapshot (CDI → Selic → fallback).
+ *
+ * IPCA e câmbio ausentes ficam NULOS (regra 13). Até 22/11/2026 viravam 4,5 e
+ * 5,75 fixos, e esses números iam parar nos snapshots gravados como se fossem
+ * medição — uma carteira com Tesouro IPCA+ rendia por um IPCA inventado. Quem
+ * precisa da taxa e não a tem aborta o rebuild (ver `missingRebuildRates`).
+ */
 export const resolveRebuildRates = (sysConfig) => ({
     currentCdiRate: resolveCurrentCdiRate(sysConfig, DEFAULT_SELIC_FALLBACK),
-    currentIpcaRate: (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : 4.5,
+    currentIpcaRate: (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : null,
     currentSelicRate: (sysConfig?.selic && sysConfig.selic > 0) ? sysConfig.selic : undefined,
-    currentUsdRate: sysConfig?.dollar || 5.75,
+    currentUsdRate: (sysConfig?.dollar && sysConfig.dollar > 0) ? sysConfig.dollar : null,
 });
+
+/**
+ * Taxas que FALTAM e de que a carteira PRECISA. Vazio = pode reconstruir.
+ *
+ *  - IPCA: só renda fixa indexada ao IPCA o usa; sem ele o acúmulo renderia 0
+ *    (ou, antes, um 4,5 inventado).
+ *  - Câmbio: só exposição em dólar (posição dolarizada ou lançamento em USD,
+ *    inclusive de ativo já vendido) o usa, e só falta de verdade quando também
+ *    não há série USD/BRL — com série, o resolvedor usa candle real.
+ */
+export const missingRebuildRates = (rates, { txs = [], userAssets = [], usdSeries = false }) => {
+    const missing = [];
+    const needsIpca = userAssets.some((a) => String(a?.fixedIncomeIndex || '').toUpperCase() === 'IPCA');
+    if (needsIpca && rates.currentIpcaRate == null) missing.push('IPCA');
+    const needsUsd = txs.some((t) => t?.currency === 'USD') || userAssets.some((a) => isDollarized(a));
+    if (needsUsd && rates.currentUsdRate == null && !usdSeries) missing.push('câmbio USD/BRL');
+    return missing;
+};
 
 /**
  * Primeiro dia em que cada ticker entrou na carteira — é a profundidade de
