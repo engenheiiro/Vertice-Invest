@@ -19,12 +19,12 @@ import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
 import { fillPaymentDatesForTicker } from './dividendPaymentDateService.js';
-import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
+import { isDollarized as isDollarizedAsset } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isValidDayKey } from '../utils/walletSnapshot.js';
-import { loadUsdRateResolver, effectiveFxRate, positionCostBRL } from '../utils/fxRate.js';
-import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixedIncome.js';
+import { loadUsdRateResolver, positionCostBRL } from '../utils/fxRate.js';
+import { markLotsToMarket, accrueLotsValue } from '../utils/fixedIncome.js';
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import {
@@ -32,6 +32,7 @@ import {
     rebuildWindow, requiredFromByTicker, resolveRebuildRates,
 } from '../utils/rebuildHistoryRules.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
+import { applyDayTransactions } from '../utils/rebuildDayTransactions.js';
 import {
     resolveNativeCurrency, buildFxRateOf, replayPositionLedger, stampFxRates, createPositionAsset, healAllocationClass, applyLedgerToAsset,
     refreshUsSubType,
@@ -426,176 +427,13 @@ export const financialService = {
     },
 
     /**
-     * Aplica as transações cujo dia <= cursor, mutando `portfolio` e
-     * `fixedIncomeState` in-place. Devolve o novo `txIndex` e o fluxo de caixa
-     * ajustado do dia (para o Modified Dietz). A aritmética é idêntica à original.
+     * Aplica as transações cujo dia <= cursor (ver utils/rebuildDayTransactions.js),
+     * mutando `portfolio` e `fixedIncomeState` in-place. Devolve o novo `txIndex` e
+     * o fluxo de caixa ajustado do dia (para o Modified Dietz).
      */
     _applyDayTransactions(ctx) {
-        const {
-            txs, cursorIso, portfolio, fixedIncomeState,
-            assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
-            treasuryPricing = EMPTY_TREASURY_PRICING,
-        } = ctx;
-        let txIndex = ctx.txIndex;
-        let dayFlowAdjusted = 0;
-        let dayFlowNominal = 0;
-
-        while (txIndex < txs.length) {
-            const tx = txs[txIndex];
-            const txDateIso = this.toDateKey(tx.date);
-            if (txDateIso > cursorIso) break;
-
-            if (!portfolio[tx.ticker]) {
-                // cost = moeda nativa; costBrl = mesmo custo com o câmbio de cada
-                // compra congelado (é ele que alimenta o Valor Aplicado histórico).
-                portfolio[tx.ticker] = { qty: 0, cost: 0, costBrl: 0 };
-                const meta = assetMetadataMap.get(tx.ticker);
-                if (meta && (meta.type === 'FIXED_INCOME' || meta.type === 'CASH')) {
-                    fixedIncomeState[tx.ticker] = {
-                        currentValue: 0,
-                        rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10),
-                        index: meta.fixedIncomeIndex || null,
-                        spread: meta.fixedIncomeSpread || 0,
-                        // Marcação a mercado: série de PU do título público (null =
-                        // segue na curva) + lotes em `{dateIso, cost}` para a razão
-                        // de PU, que é o que torna a marcação independente de como
-                        // quantidade e preço foram cadastrados.
-                        history: treasuryPricing.historyFor(meta),
-                        maturityIso: meta.maturityDate ? this.toDateKey(meta.maturityDate) : null,
-                        lots: [],
-                    };
-                }
-            }
-
-            let txAdjPrice = tx.price;
-            let trueAdjustedFlow = tx.totalValue; // Fluxo ajustado real
-            const meta = assetMetadataMap.get(tx.ticker);
-            const isFixed = meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH';
-            const txIsDollarized = resolveTransactionCurrency(tx, meta) === 'USD';
-            // Câmbio do PRÓPRIO lançamento (carimbado na compra; senão reconstruído
-            // pela data dele). Antes usava o câmbio do dia do CURSOR, que difere da
-            // data real quando o lançamento cai em fim de semana/feriado e é
-            // processado no pregão seguinte.
-            const txUsdRate = txIsDollarized ? effectiveFxRate(tx, 'USD', getUsdRateForDate) : 1;
-            if (!Number.isFinite(Number(txUsdRate)) || Number(txUsdRate) <= 0) {
-                throw new RangeError(`Câmbio USD/BRL inválido para ${cursorIso}: ${txUsdRate}`);
-            }
-
-            if (!isFixed) {
-                const pMap = priceCacheMap.get(tx.ticker);
-                const pData = this.findPriceInMap(pMap, cursorIso);
-                if (pData.adjClose > 0) {
-                    txAdjPrice = pData.adjClose;
-                    if (pData.close > 0) {
-                        const ratio = pData.adjClose / pData.close;
-                        trueAdjustedFlow = tx.totalValue * ratio;
-                    } else {
-                        trueAdjustedFlow = tx.quantity * txAdjPrice;
-                    }
-                }
-            }
-
-            if (tx.type === 'BUY') {
-                portfolio[tx.ticker].qty += tx.quantity;
-                portfolio[tx.ticker].cost += tx.totalValue;
-                portfolio[tx.ticker].costBrl += tx.totalValue * txUsdRate;
-                if (isFixed) {
-                    if (!fixedIncomeState[tx.ticker]) {
-                        fixedIncomeState[tx.ticker] = {
-                            currentValue: 0,
-                            rate: meta?.fixedIncomeRate || 100,
-                            index: meta?.fixedIncomeIndex || null,
-                            spread: meta?.fixedIncomeSpread || 0,
-                            history: meta ? treasuryPricing.historyFor(meta) : null,
-                            maturityIso: meta?.maturityDate ? this.toDateKey(meta.maturityDate) : null,
-                            lots: [],
-                        };
-                    }
-                    const state = fixedIncomeState[tx.ticker];
-                    state.currentValue += tx.totalValue;
-                    state.lots.push({ dateIso: txDateIso, cost: tx.totalValue, qty: tx.quantity });
-                    // `currentValue` acima é só o valor de partida do dia da compra:
-                    // a partir daqui quem manda são os LOTES, recompostos do zero a
-                    // cada dia por `accrueLotsValue`. É de lá que vem a regra de que a
-                    // aplicação não rende no próprio dia — `countBusinessDays` conta
-                    // os dias ESTRITAMENTE depois da compra.
-                    //
-                    // Compra anterior ao início da série: o título é abandonado pela
-                    // marcação de vez, em vez de marcar só parte dos lotes. Metade
-                    // marcada e metade na curva seria um número sem régua.
-                    if (state.history && !findTreasuryPu(state.history, txDateIso)) state.history = null;
-                }
-                dayFlowAdjusted += trueAdjustedFlow * txUsdRate;
-                dayFlowNominal += tx.totalValue * txUsdRate;
-
-                if (!lastKnownPrices[tx.ticker]) lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: txAdjPrice };
-
-            } else if (tx.type === 'SELL') {
-                const qtyBefore = portfolio[tx.ticker].qty;
-                const currentAvg = qtyBefore > 0 ? portfolio[tx.ticker].cost / qtyBefore : 0;
-                // Baixa proporcional em BRL — a venda não reprecifica o câmbio das
-                // compras que ficaram (mesma regra de recalculatePosition).
-                const soldFraction = qtyBefore > 0 ? tx.quantity / qtyBefore : 0;
-                portfolio[tx.ticker].qty -= tx.quantity;
-                portfolio[tx.ticker].cost -= (tx.quantity * currentAvg);
-                portfolio[tx.ticker].costBrl -= portfolio[tx.ticker].costBrl * soldFraction;
-                if (isFixed) {
-                    const state = fixedIncomeState[tx.ticker];
-                    state.currentValue = Math.max(0, state.currentValue - tx.totalValue);
-                    // Resgate parcial consome os lotes MAIS ANTIGOS primeiro (PEPS), a
-                    // mesma regra de `recalculatePosition`, de onde saem os taxLots que
-                    // o KPI ao vivo e o snapshot valorizam. Antes aqui a baixa era
-                    // proporcional em todos os lotes: CDB de R$ 10 mil de 2024 + R$ 10 mil
-                    // de 2026, resgate de metade — o KPI tirava o lote velho (que rendeu
-                    // mais) e o histórico tirava metade de cada, ~R$ 1,1 mil de degrau no
-                    // dia em que os dois caminhos se encontram. Dentro do lote, o custo
-                    // cai na proporção da quantidade resgatada dele.
-                    this._consumeFixedIncomeLotsFifo(state, tx.quantity, soldFraction);
-                }
-                dayFlowAdjusted -= trueAdjustedFlow * txUsdRate;
-                dayFlowNominal -= tx.totalValue * txUsdRate;
-            }
-
-            if (portfolio[tx.ticker].qty < QUANTITY_EPSILON) {
-                portfolio[tx.ticker].qty = 0;
-                portfolio[tx.ticker].cost = 0;
-                portfolio[tx.ticker].costBrl = 0;
-                if (fixedIncomeState[tx.ticker]) {
-                    fixedIncomeState[tx.ticker].currentValue = 0;
-                    fixedIncomeState[tx.ticker].lots = [];
-                }
-            }
-            txIndex++;
-        }
-
-        return { txIndex, dayFlowAdjusted, dayFlowNominal };
-    },
-
-    /**
-     * Baixa PEPS dos lotes de renda fixa do rebuild (muta `state.lots`).
-     * Lote sem `qty` (não deveria existir: todo lote nasce com ela) derruba para a
-     * baixa proporcional pela fração da posição, que era a regra antiga.
-     */
-    _consumeFixedIncomeLotsFifo(state, soldQty, soldFraction) {
-        if (!(soldQty > 0) || !state?.lots?.length) return;
-        if (state.lots.some((lot) => !(lot.qty > 0))) {
-            const remaining = Math.max(0, 1 - soldFraction);
-            state.lots = state.lots.map((lot) => ({ ...lot, cost: lot.cost * remaining }));
-            return;
-        }
-        let toSell = soldQty;
-        const kept = [];
-        for (const lot of state.lots) {
-            if (toSell <= QUANTITY_EPSILON) { kept.push(lot); continue; }
-            if (lot.qty > toSell + QUANTITY_EPSILON) {
-                const left = lot.qty - toSell;
-                kept.push({ ...lot, qty: left, cost: lot.cost * (left / lot.qty) });
-                toSell = 0;
-            } else {
-                toSell -= lot.qty;
-            }
-        }
-        state.lots = kept;
+        const { treasuryPricing = EMPTY_TREASURY_PRICING } = ctx;
+        return applyDayTransactions({ ...ctx, treasuryPricing }, (priceMap, dayKey) => this.findPriceInMap(priceMap, dayKey));
     },
 
     /**
