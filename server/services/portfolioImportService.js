@@ -6,18 +6,8 @@ import ImportBatch from '../models/ImportBatch.js';
 import { financialService } from './financialService.js';
 import { runTransaction } from '../utils/dbTransaction.js';
 import { toDateKey } from '../utils/dateUtils.js';
-import {
-    addQty,
-    QUANTITY_EPSILON,
-    safeAdd,
-    safeCurrency,
-    safePrice,
-    safeQuantity,
-    safeSub,
-    safeUnitPrice,
-    safeValue,
-    subQty,
-} from '../utils/mathUtils.js';
+import { addQty, QUANTITY_EPSILON, safeQuantity, safeUnitPrice, safeValue } from '../utils/mathUtils.js';
+import { ROW_STATUS, classifyInDateOrder, dedupKey, summarizeTicker } from '../utils/importPreview.js';
 import AppError from '../utils/AppError.js';
 import logger from '../config/logger.js';
 
@@ -42,13 +32,7 @@ import logger from '../config/logger.js';
  * histórico uma vez.
  */
 
-/** Situação de uma linha na tela de conferência. */
-export const ROW_STATUS = {
-    OK: 'ok',
-    DUPLICADO: 'duplicado',
-    ATENCAO: 'atencao',
-    NAO_RECONHECIDO: 'nao_reconhecido',
-};
+export { ROW_STATUS };
 
 /** Forma de um papel da B3 (`PETR4`, `MXRF11`, `PETR4F`). */
 const TICKER_SHAPE = /^[A-Z]{4}\d{1,2}[A-Z]?$/;
@@ -100,23 +84,6 @@ const anchorImportDate = (value) => {
     const key = toDateKey(value);
     return key ? new Date(`${key}T12:00:00.000Z`) : null;
 };
-
-/**
- * Chave de dedup de um lançamento — o que torna dois lançamentos "o mesmo".
- *
- * Preço pela régua de PREÇO UNITÁRIO (`safeUnitPrice`, regra 7), não de dinheiro:
- * com `safeCurrency` duas compras de SHIB no mesmo dia e quantidade, a
- * US$ 0,00001234 e a US$ 0,00001567, viravam ambas `0` na chave — a segunda
- * era marcada como duplicata e ficava fora do import.
- */
-const dedupKey = ({ ticker, date, side, quantity, price }) =>
-    [
-        String(ticker).toUpperCase(),
-        toDateKey(date),
-        side,
-        safeQuantity(quantity),
-        safeUnitPrice(price),
-    ].join('|');
 
 /**
  * Primeiro (ticker, dia) em que o saldo fica NEGATIVO, varrendo em ordem de data
@@ -187,126 +154,47 @@ export const resolveRows = async ({ userId, walletId, rows }) => {
             .lean(),
     ]);
 
-    const catalogByTicker = new Map(catalog.map((a) => [a.ticker, a]));
-    const positionByTicker = new Map(existingPositions.map((a) => [a.ticker, a]));
-    const alreadyThere = new Set(
-        existingTransactions.map((tx) =>
-            dedupKey({ ticker: tx.ticker, date: tx.date, side: tx.type, quantity: tx.quantity, price: tx.price })
-        )
-    );
+    const maps = {
+        catalogByTicker: new Map(catalog.map((a) => [a.ticker, a])),
+        positionByTicker: new Map(existingPositions.map((a) => [a.ticker, a])),
+        alreadyThere: new Set(
+            existingTransactions.map((tx) =>
+                dedupKey({ ticker: tx.ticker, date: tx.date, side: tx.type, quantity: tx.quantity, price: tx.price })
+            )
+        ),
+    };
 
-    // Duplicata DENTRO do próprio arquivo (usuário colou o mesmo bloco duas vezes).
-    const seenInBatch = new Set();
-
-    // Ordena por data para que a simulação de saldo faça sentido; o índice
-    // original volta depois para não embaralhar a tela de conferência.
-    const chronological = normalized
-        .map((row, index) => ({ row, index }))
-        .sort((a, b) => (a.row.date?.getTime() || 0) - (b.row.date?.getTime() || 0));
-
-    const resolvedByIndex = new Array(normalized.length);
-
-    for (const { row, index } of chronological) {
-        const known = catalogByTicker.get(row.ticker);
-        const position = positionByTicker.get(row.ticker);
-
-        // Precedência de tipo/moeda: escolha explícita do parser > catálogo >
-        // posição já existente na carteira. Nunca chuta por formato de ticker —
-        // "termina em 11" é FII, ETF ou unit, e errar isso desloca o ativo de
-        // classe na alocação inteira.
-        const type = row.type || known?.type || position?.type || null;
-        const currency = row.currency || known?.currency || position?.currency || 'BRL';
-        const name = row.name || known?.name || null;
-
-        const key = dedupKey({ ...row, side: row.side });
-        let status = ROW_STATUS.OK;
-        let reason = null;
-
-        if (!row.ticker || !row.date) {
-            status = ROW_STATUS.NAO_RECONHECIDO;
-            reason = 'Linha sem ticker ou data válida.';
-        } else if (!type) {
-            status = ROW_STATUS.NAO_RECONHECIDO;
-            reason = 'Ativo fora do nosso catálogo. Escolha a classe para importar.';
-        } else if (alreadyThere.has(key)) {
-            status = ROW_STATUS.DUPLICADO;
-            reason = 'Lançamento idêntico já existe nesta carteira.';
-        } else if (seenInBatch.has(key)) {
-            status = ROW_STATUS.DUPLICADO;
-            reason = 'Linha repetida dentro do próprio arquivo.';
-        } else if (row.side === 'BUY' && row.price === 0) {
-            status = ROW_STATUS.ATENCAO;
-            reason = 'Compra com preço zerado — confira antes de importar.';
-        }
-
-        seenInBatch.add(key);
-
-        // Só falta a CLASSE — que é escolhida nesta mesma tela. A linha vai
-        // entrar, então conta no saldo e no resumo.
-        const soFaltaClasse = status === ROW_STATUS.NAO_RECONHECIDO && !!row.ticker && !!row.date;
-
-        resolvedByIndex[index] = { ...row, type, currency, name, status, reason, soFaltaClasse };
-    }
-
-    // Venda sem lastro — a MESMA régua do commit (`findChronologicalShortfall`):
-    // cronológica, na virada de cada dia, partindo dos lançamentos JÁ GRAVADOS do
-    // ticker. A simulação antiga partia da posição de HOJE: uma venda antiga podia
-    // passar na prévia como OK e o commit recusar o arquivo inteiro (ou o inverso).
-    // Só conta o que de fato entraria, e o aviso não sobrescreve o "escolha a
-    // classe" — é a classe que destrava a linha.
-    for (const ticker of tickers) {
-        const entram = resolvedByIndex.filter((r) => r.ticker === ticker
-            && (r.status === ROW_STATUS.OK || r.status === ROW_STATUS.ATENCAO || r.soFaltaClasse));
-        const furo = findChronologicalShortfall(existingTransactions.filter((t) => t.ticker === ticker), entram);
-        if (!furo) continue;
-        for (const r of entram) {
-            if (r.side === 'SELL' && !r.soFaltaClasse && toDateKey(r.date) === furo.dayKey) {
-                r.status = ROW_STATUS.ATENCAO;
-                r.reason = 'Venda maior que a posição acumulada até esta data — falta a compra correspondente.';
-            }
-        }
-    }
+    // Ordem de data para que a simulação de saldo faça sentido; duplicata DENTRO
+    // do próprio arquivo (usuário colou o mesmo bloco duas vezes) também é pega aí.
+    const resolvedByIndex = classifyInDateOrder(normalized, maps);
+    for (const ticker of tickers) flagUnbackedSales(resolvedByIndex, ticker, existingTransactions);
     for (const r of resolvedByIndex) delete r.soFaltaClasse;
 
-    // Posição resultante por ticker — o material da conferência contra a origem.
-    //
-    // Linha que só espera a classe entra na conta. Fora dela, um Tesouro ou
-    // qualquer ativo fora do catálogo aparecia com quantidade e valor ZERO na
-    // tela de conferência — justamente o número que o usuário abriu a tela para
-    // conferir, e que o commit ia gravar certo de qualquer jeito.
-    const summary = tickers.map((ticker) => {
-        const linhas = resolvedByIndex.filter((r) => r.ticker === ticker);
-        const importaveis = linhas.filter(
-            (r) => r.status === ROW_STATUS.OK
-                || r.status === ROW_STATUS.ATENCAO
-                || (r.status === ROW_STATUS.NAO_RECONHECIDO && !!r.ticker && !!r.date)
-        );
-        let quantity = safeQuantity(positionByTicker.get(ticker)?.quantity || 0);
-        let cost = 0;
-        for (const linha of importaveis) {
-            if (linha.side === 'BUY') {
-                quantity = addQty(quantity, linha.quantity);
-                cost = safeAdd(cost, safeValue(linha.quantity, linha.price));
-            } else {
-                const avg = safePrice(cost, quantity);
-                cost = safeSub(cost, safeValue(linha.quantity, avg));
-                quantity = subQty(quantity, linha.quantity);
-            }
-        }
-        return {
-            ticker,
-            type: importaveis[0]?.type || catalogByTicker.get(ticker)?.type || null,
-            name: catalogByTicker.get(ticker)?.name || null,
-            currency: importaveis[0]?.currency || 'BRL',
-            rows: linhas.length,
-            quantity: safeQuantity(quantity),
-            averagePrice: quantity > 0 ? safeCurrency(safePrice(cost, quantity)) : 0,
-            totalCost: safeCurrency(cost),
-            hadPosition: positionByTicker.has(ticker),
-        };
-    });
+    const summary = tickers.map((ticker) =>
+        summarizeTicker(ticker, resolvedByIndex.filter((r) => r.ticker === ticker), maps));
 
     return { rows: resolvedByIndex, summary };
+};
+
+/**
+ * Venda sem lastro — a MESMA régua do commit (`findChronologicalShortfall`):
+ * cronológica, na virada de cada dia, partindo dos lançamentos JÁ GRAVADOS do
+ * ticker. A simulação antiga partia da posição de HOJE: uma venda antiga podia
+ * passar na prévia como OK e o commit recusar o arquivo inteiro (ou o inverso).
+ * Só conta o que de fato entraria, e o aviso não sobrescreve o "escolha a
+ * classe" — é a classe que destrava a linha.
+ */
+const flagUnbackedSales = (resolvedByIndex, ticker, existingTransactions) => {
+    const entram = resolvedByIndex.filter((r) => r.ticker === ticker
+        && (r.status === ROW_STATUS.OK || r.status === ROW_STATUS.ATENCAO || r.soFaltaClasse));
+    const furo = findChronologicalShortfall(existingTransactions.filter((t) => t.ticker === ticker), entram);
+    if (!furo) return;
+    for (const r of entram) {
+        if (r.side === 'SELL' && !r.soFaltaClasse && toDateKey(r.date) === furo.dayKey) {
+            r.status = ROW_STATUS.ATENCAO;
+            r.reason = 'Venda maior que a posição acumulada até esta data — falta a compra correspondente.';
+        }
+    }
 };
 
 /**
