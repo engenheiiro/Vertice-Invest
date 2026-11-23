@@ -139,7 +139,7 @@ export const sumTransactionFlowBRL = (transactions, assetsByTicker, usdRateForDa
                 ? usdRateForDate(dateKey)
                 : usdRateForDate);
         if (currency === 'USD' && (!Number.isFinite(usdRate) || usdRate <= 0)) {
-            throw new RangeError(`Câmbio USD/BRL inválido para ${dateKey}: ${usdRate}`);
+            throw Object.assign(new RangeError(`Câmbio USD/BRL inválido para ${dateKey}: ${usdRate}`), { code: 'FX_UNAVAILABLE' });
         }
         const baseValue = currency === 'USD' ? safeMult(totalValue, usdRate) : totalValue;
         flow = tx.type === 'SELL' ? safeAdd(flow, -baseValue) : safeAdd(flow, baseValue);

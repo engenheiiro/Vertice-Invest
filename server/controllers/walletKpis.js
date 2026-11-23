@@ -166,6 +166,20 @@ export const computePendingFlowBRL = async ({ userId, walletId, anchor, currentU
     return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
 };
 
+/**
+ * Colhe o fluxo do período. Lançamento em dólar sem carimbo e sem série nem
+ * cotação (regra 13: o câmbio fica nulo) torna o fluxo não calculável: devolve
+ * `null` em vez de derrubar a carteira. Qualquer outro erro sobe.
+ */
+export const settlePeriodFlow = async (flowPromise) => {
+    try {
+        return await flowPromise;
+    } catch (err) {
+        if (err?.code === 'FX_UNAVAILABLE') return null;
+        throw err;
+    }
+};
+
 export const computeWalletMetrics = async ({
     userId, walletId, snapshots, riskSnapshots, safeTotalEquity, totalResultPercent, currentCdi, currentUsd,
     pendingFlow = null, dividendsSinceAnchor = null,
@@ -203,9 +217,9 @@ export const computeWalletMetrics = async ({
         // ativos produz. Aqui ele só é colhido. Sem a promessa (chamador que não
         // pôde adiantar), busca na hora — mesmo resultado, três idas ao banco
         // enfileiradas na cauda da requisição.
-        const periodFlow = pendingFlow !== null
-            ? await pendingFlow
-            : await computePendingFlowBRL({ userId, walletId, anchor: lastSnapshot, currentUsd });
+        const periodFlow = await settlePeriodFlow(pendingFlow !== null
+            ? pendingFlow
+            : computePendingFlowBRL({ userId, walletId, anchor: lastSnapshot, currentUsd }));
 
         // Fonte única da cota live (utils/mathUtils.computeLiveQuota) — mesmo
         // cálculo que getWalletPerformance usa no ponto live.
@@ -216,8 +230,14 @@ export const computeWalletMetrics = async ({
         const periodIncome = dividendsSinceAnchor && dividendsSinceAnchor.dayKey === anchorDayKey
             ? dividendsSinceAnchor.total
             : 0;
-        const liveQuotaPrice = computeLiveQuota(lastSnapshot, safeTotalEquity, periodFlow, periodIncome);
-        weightedRentability = ((liveQuotaPrice / 100) - 1) * 100;
+        if (periodFlow === null) {
+            // Lançamento em dólar sem câmbio algum: a cota live não é calculável.
+            weightedRentability = totalResultPercent;
+            dataQuality = 'ESTIMATED';
+        } else {
+            const liveQuotaPrice = computeLiveQuota(lastSnapshot, safeTotalEquity, periodFlow, periodIncome);
+            weightedRentability = ((liveQuotaPrice / 100) - 1) * 100;
+        }
     } else {
         weightedRentability = totalResultPercent;
         dataQuality = 'ESTIMATED'; // Sem histórico, é apenas ROI simples

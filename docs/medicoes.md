@@ -21,7 +21,7 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | Métrica | Limite | 2026-11-22 | 2026-11-23 |
 |---|---|---|---|
 | `cobertura.server.config` — Cobertura de linhas — server/config (%) | 90 | 90.2 | 90.2 |
-| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 71.5 | 71.7 | 71.7 |
+| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 71.5 | 71.7 | 71.8 |
 | `cobertura.server.middleware` — Cobertura de linhas — server/middleware (%) | 93.5 | 93.9 | 93.9 |
 | `cobertura.server.models` — Cobertura de linhas — server/models (%) | 91 | 91.3 | 91.3 |
 | `cobertura.server.routes` — Cobertura de linhas — server/routes (%) | 81.5 | 81.6 | 81.6 |
@@ -35,10 +35,10 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89 | 89.3 | 89.3 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 | 87.1 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89 | 89.1 | 89.1 |
-| `testes.server` — Casos de teste do server | 3417 | 3404 | 3417 |
+| `testes.server` — Casos de teste do server | 3422 | 3404 | 3422 |
 | `testes.client` — Casos de teste do client | 2140 | 2110 | 2140 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 41.3 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 55.3 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 45.5 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 54.9 |
 | `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 36 | 37 | 36 |
 | `linhasLongas` — Linhas com mais de 160 caracteres | 1059 | 1079 | 1059 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |

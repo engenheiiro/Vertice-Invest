@@ -127,6 +127,21 @@ export const buildFxRateOf = async (nativeCurrency, loadUsdRateResolver) => {
 };
 
 /**
+ * Valores de um lançamento para o razão. Quantidade em 8 casas (cripto); valor
+ * monetário em 2/4 casas. Sem câmbio (nem série nem cotação), `txFx` é nulo: o
+ * lançamento entra sem carimbo e o espelho em BRL vira nulo no fim ("não
+ * migrado"), nunca um câmbio fixo (regra 13).
+ */
+const ledgerEntry = (tx, rateOf) => {
+    const txQty = safeQuantity(tx.quantity);
+    const txPrice = safeUnitPrice(tx.price);
+    const txTotal = safeCurrency(txQty * txPrice);
+    const rawFx = rateOf(tx);
+    const txFx = Number(rawFx) > 0 ? rawFx : null;
+    return { txQty, txPrice, txTotal, txFx, txTotalBrl: txFx === null ? 0 : safeCurrency(txTotal * txFx) };
+};
+
+/**
  * Reproduz a sequência de lançamentos (já ordenada) e devolve a posição em
  * memória, mais os carimbos de câmbio a gravar nos lançamentos legados em dólar.
  *
@@ -147,6 +162,7 @@ export const replayPositionLedger = (transactions, { nativeCurrency, rateOf, ins
     };
     const fxToStamp = [];
     let currentDayKey = null;
+    let fxMissing = false;
 
     for (const tx of transactions) {
         const txDayKey = toDateKey(tx.date);
@@ -154,18 +170,15 @@ export const replayPositionLedger = (transactions, { nativeCurrency, rateOf, ins
             throw insufficientBalance();
         }
         currentDayKey = txDayKey;
-        // Quantidade em 8 casas (cripto); valor monetário continua em 2/4 casas.
-        const txQty = safeQuantity(tx.quantity);
-        const txPrice = safeUnitPrice(tx.price);
-        const txTotal = safeCurrency(txQty * txPrice);
-        const txFx = rateOf(tx);
-        const entry = { txQty, txPrice, txTotal, txFx, txTotalBrl: safeCurrency(txTotal * txFx) };
+        const entry = ledgerEntry(tx, rateOf);
+        const hasFx = entry.txFx !== null;
+        if (!hasFx) fxMissing = true;
         // Carimba o câmbio nos lançamentos legados EM DÓLAR (auto-heal): a
         // partir daí o custo em reais não depende mais da reconstrução
         // histórica. Posição em real não é carimbada — gravar "1" em todo
         // lançamento do país inteiro seria escrita pura sem informação.
-        if (nativeCurrency === 'USD' && !(Number(tx.fxRate) > 0)) {
-            fxToStamp.push({ id: tx._id, fxRate: txFx });
+        if (nativeCurrency === 'USD' && hasFx && !(Number(tx.fxRate) > 0)) {
+            fxToStamp.push({ id: tx._id, fxRate: entry.txFx });
         }
 
         if (tx.type === 'BUY') applyBuy(state, tx, entry);
@@ -184,6 +197,7 @@ export const replayPositionLedger = (transactions, { nativeCurrency, rateOf, ins
     if (state.quantity <= QUANTITY_EPSILON) {
         state.quantity = 0; state.totalCost = 0; state.totalCostBrl = 0; state.taxLots = [];
     }
+    if (fxMissing) { state.totalCostBrl = null; state.realizedProfitBrl = null; }
     return { ...state, fxToStamp };
 };
 
@@ -273,8 +287,9 @@ export const applyLedgerToAsset = (asset, ledger) => {
     asset.fifoRealizedProfit = safeCurrency(ledger.fifoRealizedProfit);
     asset.taxLots = ledger.taxLots;
     // Custo/realizado em BRL com o câmbio de cada lançamento congelado.
-    asset.totalCostBrl = safeCurrency(ledger.totalCostBrl);
-    asset.realizedProfitBrl = safeCurrency(ledger.realizedProfitBrl);
+    // `null` = algum lançamento sem câmbio: fica "não migrado" até o próximo recálculo.
+    asset.totalCostBrl = ledger.totalCostBrl === null ? null : safeCurrency(ledger.totalCostBrl);
+    asset.realizedProfitBrl = ledger.realizedProfitBrl === null ? null : safeCurrency(ledger.realizedProfitBrl);
     asset.updatedAt = new Date();
 
     if (ledger.firstBuyDate && (asset.type === 'FIXED_INCOME' || asset.type === 'CASH')) {

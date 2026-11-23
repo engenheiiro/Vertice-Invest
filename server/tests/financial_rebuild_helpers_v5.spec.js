@@ -83,14 +83,15 @@ describe('financialService V5 — resolver histórico USD/BRL', () => {
     expect(resolve('2026-08-01')).toBe(5.75);
   });
 
-  it('ignora candles corrompidos e usa fallback atual saneado', async () => {
+  // Regra 13: antes devolvia 5,75 fixo e o recálculo o gravava no custo.
+  it('ignora candles corrompidos e, sem série nem cotação válidas, devolve nulo', async () => {
     serie([
       { date: '2026-02-30', close: 5 },
       { date: '2026-07-01', close: Infinity },
       { date: '2026-07-02', close: -1 },
     ]);
     const resolve = await financialService._loadUsdRateResolver(Infinity);
-    expect(resolve('2026-07-15')).toBe(5.75);
+    expect(resolve('2026-07-15')).toBeNull();
     expect(() => resolve('data inválida')).toThrow('Data de câmbio inválida');
   });
 });

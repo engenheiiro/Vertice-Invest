@@ -1,9 +1,6 @@
 import { isValidDayKey } from './walletSnapshot.js';
 import { isDollarized } from './assetCurrency.js';
 
-/** Último recurso quando não há histórico nem cotação corrente utilizável. */
-export const FALLBACK_USD_RATE = 5.75;
-
 /**
  * Câmbio de um lançamento em moeda nativa → BRL.
  *
@@ -36,7 +33,8 @@ export const buildUsdRateResolver = (historyEntries, currentUsdRate) => {
 
     const parsedCurrent = Number(currentUsdRate);
     const hasSpot = Number.isFinite(parsedCurrent) && parsedCurrent > 0;
-    const safeCurrent = hasSpot ? parsedCurrent : FALLBACK_USD_RATE;
+    // Sem cotação corrente nem série, não há câmbio: nulo (regra 13), nunca um fixo.
+    const safeCurrent = hasSpot ? parsedCurrent : null;
 
     const sorted = [...rateByDate.entries()]
         .map(([day, rate]) => [new Date(day).getTime(), rate])
@@ -64,9 +62,9 @@ export const buildUsdRateResolver = (historyEntries, currentUsdRate) => {
         // Alvo anterior a todo o histórico → 1ª taxa conhecida (não a de hoje).
         return best >= 0 ? sorted[best][1] : sorted[0][1];
     };
-    // Sem série E sem cotação corrente, o resolvedor só tem o FALLBACK fixo a dar:
-    // quem grava histórico (rebuild) lê isto para abortar em vez de persistir um
-    // câmbio inventado (regra 13).
+    // Sem série E sem cotação corrente, o resolvedor devolve nulo: quem grava
+    // histórico (rebuild, snapshot) lê isto para abortar; o recálculo da posição
+    // deixa o lançamento sem carimbo (regra 13).
     resolver.hasSeries = sorted.length > 0;
     return resolver;
 };

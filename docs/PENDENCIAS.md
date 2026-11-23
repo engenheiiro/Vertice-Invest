@@ -13,13 +13,6 @@ mesmo commit que o resolve.
   `rebuildUserHistory` (46), WalletSummary (45), TopPicksCard (44). O teto
   passa a ser `Research.tsx` (44), seguido de `ProfileIdentity.tsx` e
   `_applyDayTransactions` do `financialService.js` (43).
-- **(dono, 2026-11-23) Último 5,75 vive no resolvedor de câmbio.** Telas e
-  gravações já não inventam câmbio (`loadDisplayUsdRate`: macro → último candle
-  real → nulo; `missingMacroRates` no rebuild e no snapshot). Sobra o
-  `FALLBACK_USD_RATE` de `buildUsdRateResolver`, devolvido só quando NÃO há
-  série USD/BRL nem cotação — caso em que o carimbo de `fxRate` de um
-  lançamento novo sairia 5,75. Trocar por nulo exige decidir o que o
-  lançamento faz sem câmbio (recusar? gravar sem carimbo?).
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):
@@ -38,6 +31,13 @@ mesmo commit que o resolve.
 
 ## Decididas
 
+- **Lançamento em dólar sem câmbio entra sem carimbo (23/11/2026).** Sem
+  série USD/BRL e sem cotação na macro, o resolvedor devolve nulo (antes, 5,75
+  fixo). O recálculo não carimba `fxRate` e deixa `totalCostBrl` e
+  `realizedProfitBrl` nulos ("não migrado"); o próximo recálculo com câmbio
+  real carimba. A cota live, sem câmbio para o fluxo do período, cai para
+  "Estimado" em vez de derrubar a carteira. Travado em
+  `tests/fx_missing_rate.spec.js`.
 - **Demo mode não lê da API (22/11/2026).** O `dataSource` do WalletContext
   não bloqueia o demo sozinho, mas os quatro consumidores bloqueiam antes de
   chamar (`enabled: !isDemoMode` em CashFlowHistory e MonthlyReturnsTable;

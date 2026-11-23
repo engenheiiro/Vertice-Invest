@@ -15,7 +15,7 @@ import {
     DEFAULT_PERFORMANCE_POINTS,
     downsampleTimeSeries,
 } from '../utils/timeSeriesDownsample.js';
-import { calculateLiveKPIS, computePendingFlowBRL, getDailyFactorForDate } from './walletKpis.js';
+import { calculateLiveKPIS, computePendingFlowBRL, getDailyFactorForDate, settlePeriodFlow } from './walletKpis.js';
 
 // Ponto live (hoje) anexado à série quando o último snapshot não é de hoje.
 // Muta `history` — mesma ordem de leituras da versão monolítica.
@@ -36,12 +36,14 @@ const appendLivePoint = async (history, { userId, walletId, config, today, today
     if (!liveData || !(liveData.totalEquity > 0)) return;
 
     // Fluxo de caixa desde o âncora (aportes/resgates) — Modified Dietz.
-    const periodFlow = await computePendingFlowBRL({
+    const periodFlow = await settlePeriodFlow(computePendingFlowBRL({
         userId,
         walletId,
         anchor,
         currentUsd: config?.dollar > 0 ? config.dollar : null,
-    });
+    }));
+    // Sem câmbio para um lançamento em dólar do período, o ponto live não é calculável.
+    if (periodFlow === null) return;
 
     // Fonte única da cota live — idêntica ao KPI (weightedRentability).
     // Com a renda do período (proventos com ex-date desde o âncora),
