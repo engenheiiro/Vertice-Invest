@@ -26,9 +26,12 @@ import logger from '../config/logger.js';
 import { getPasswordError } from '../utils/passwordPolicy.js'; // (S6) política de senha
 import { invalidateUser } from '../utils/userCache.js'; // (I6) bust de cache no update de perfil
 import { verifySecondFactor, MFA_GUARD_FIELDS } from '../utils/mfa.js'; // (I14) MFA no login
-import { encrypt, decrypt, blindIndex } from '../utils/encryption.js'; // (S) cripto em repouso: mfaSecret + CPF
+import { decrypt } from '../utils/encryption.js'; // (S) cripto em repouso: mfaSecret + CPF
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
-import { validateCpf } from '../utils/cpfUtils.js';
+import { buildProfileUpdate } from '../services/auth/profileUpdate.js';
+import {
+  hashToken, rememberRotation, consumeGraceRotation, revokeUserSessions,
+} from '../services/auth/refreshRotation.js'; // (F5) rotação com janela de graça
 import { sanitizeAcquisition } from '../utils/acquisition.js'; // origem da conta (funil)
 import { anonymizeUserTickets } from '../services/supportService.js'; // LGPD: atendimento sem titular
 import { serializeTicketForUser } from '../utils/supportRules.js'; // regra 12: nota interna não sai na exportação
@@ -97,44 +100,6 @@ const getTrustedClientUrl = () => {
 };
 
 const CLIENT_URL = getTrustedClientUrl();
-
-const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
-
-// (F5) Rotação de refresh token com janela de graça para concorrência multi-aba.
-// O cookie de refresh é COMPARTILHADO entre abas do mesmo domínio; duas abas podem
-// apresentar o mesmo token simultaneamente antes de qualquer resposta rotacioná-lo.
-// Sem graça, o "perdedor" da corrida receberia 401 e cairia no /login. Guardamos
-// por poucos segundos o mapeamento hash-antigo → novo cookie: a aba retardatária
-// recebe o MESMO novo token em vez de erro. Fora dessa janela, hash ausente = reuso.
-const REFRESH_GRACE_MS = 15 * 1000;
-const recentlyRotated = new Map(); // oldHash -> { newTokenString, userId, expires }
-
-const rememberRotation = (oldHash, newTokenString, userId) => {
-  recentlyRotated.set(oldHash, { newTokenString, userId, expires: Date.now() + REFRESH_GRACE_MS });
-  // Expurgo oportunístico para não crescer indefinidamente.
-  if (recentlyRotated.size > 10_000) {
-    const now = Date.now();
-    for (const [k, v] of recentlyRotated) if (v.expires < now) recentlyRotated.delete(k);
-  }
-};
-
-const consumeGraceRotation = (oldHash) => {
-  const entry = recentlyRotated.get(oldHash);
-  if (!entry) return null;
-  if (Date.now() > entry.expires) { recentlyRotated.delete(oldHash); return null; }
-  return entry;
-};
-
-// Revoga as sessões persistidas e também a curta janela de graça em memória.
-// Sem remover essa janela, um refresh token rotacionado instantes antes de um
-// reset de senha ainda poderia receber um novo access token por até 15 segundos.
-const revokeUserSessions = async (userId) => {
-  const normalizedUserId = String(userId);
-  await RefreshToken.deleteMany({ user: userId });
-  for (const [oldHash, entry] of recentlyRotated) {
-    if (String(entry.userId) === normalizedUserId) recentlyRotated.delete(oldHash);
-  }
-};
 
 // --- UTILS DE SEGURANÇA ---
 
@@ -366,15 +331,22 @@ export const rotateSessionAfterSecurityChange = async (req, res, user) => {
   await revokeUserSessions(user._id);
   invalidateUser(user._id);
 
-  const refreshTokenString = jwt.sign(
-    { id: user._id },
-    JWT_REFRESH_SECRET,
-    { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
-  );
+  const refreshTokenString = signRefreshToken(user);
+  await persistRefreshToken(refreshTokenString, user._id);
+  return emitSession(req, res, user, refreshTokenString);
+};
+
+const signRefreshToken = (user) => jwt.sign(
+  { id: user._id },
+  JWT_REFRESH_SECRET,
+  { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
+);
+
+// Grava só o hash do refresh token, com a mesma validade do JWT.
+const persistRefreshToken = (refreshTokenString, userId) => {
   const expiredAt = new Date();
   expiredAt.setDate(expiredAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
-  await RefreshToken.create({ token: hashToken(refreshTokenString), user: user._id, expiryDate: expiredAt });
-  return emitSession(req, res, user, refreshTokenString);
+  return RefreshToken.create({ token: hashToken(refreshTokenString), user: userId, expiryDate: expiredAt });
 };
 
 // Emite (ou reemite) o cookie de refresh e devolve o access token correspondente.
@@ -394,52 +366,88 @@ const emitSession = (req, res, user, refreshTokenString) => {
   );
 };
 
+const sendAccessToken = (req, res, user, refreshTokenString) => {
+  const accessToken = emitSession(req, res, user, refreshTokenString);
+  return res.status(200).json({ accessToken });
+};
+
+const refreshExpired = (res) => res.status(401).json({ message: "Sessão expirada." });
+
+// Reuso fora da graça: se o JWT ainda é estruturalmente válido, revoga a família.
+const revokeFamilyOnReuse = async (req, requestToken) => {
+  try {
+    const decoded = jwt.verify(requestToken, JWT_REFRESH_SECRET);
+    if (decoded?.id) {
+      await revokeUserSessions(decoded.id);
+      logAudit(req, 'TOKEN_REUSE_DETECTED', 'Refresh token reusado — todas as sessões revogadas', decoded.id);
+    }
+  } catch { /* JWT inválido/expirado: nada a revogar */ }
+};
+
+// Hash não está no banco: pode ser (a) uma corrida multi-aba dentro da janela
+// de graça — reemite o mesmo token novo já rotacionado; ou (b) reuso de um
+// token já consumido/roubado — revoga TODA a família como precaução.
+const handleUnknownRefreshToken = async (req, res, requestToken, requestHash) => {
+  const grace = consumeGraceRotation(requestHash);
+  if (grace) {
+    const user = await User.findById(grace.userId);
+    if (user && user.isActive !== false) return sendAccessToken(req, res, user, grace.newTokenString);
+  }
+  await revokeFamilyOnReuse(req, requestToken);
+  logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh inválido ou reusado');
+  return refreshExpired(res);
+};
+
+// Dono do token guardado, ou null depois de responder (expirado, sem usuário,
+// conta desativada — mesmo critério do login).
+const resolveRefreshUser = async (req, res, tokenInDb) => {
+  if (RefreshToken.verifyExpiration(tokenInDb)) {
+    await RefreshToken.findByIdAndDelete(tokenInDb._id);
+    logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh expirado');
+    refreshExpired(res);
+    return null;
+  }
+  const user = await User.findById(tokenInDb.user);
+  if (!user) {
+    res.status(404).json({ message: "Usuário não encontrado." });
+    return null;
+  }
+  if (user.isActive === false) {
+    await RefreshToken.findByIdAndDelete(tokenInDb._id);
+    res.status(401).json({ message: "Conta desativada." });
+    return null;
+  }
+  return user;
+};
+
+// Perdeu a baixa do documento: é a aba retardatária de uma corrida, que recebe
+// o token do vencedor pela janela de graça — ou o token sumiu por outro motivo.
+const handleLostRotation = async (req, res, requestHash, user) => {
+  let grace = consumeGraceRotation(requestHash);
+  if (!grace) {
+    // O vencedor registra a rotação logo depois da própria baixa; dá a ele um
+    // instante antes de concluir que o token sumiu por outro motivo.
+    await new Promise((r) => setTimeout(r, 150));
+    grace = consumeGraceRotation(requestHash);
+  }
+  if (grace && String(grace.userId) === String(user._id)) {
+    return sendAccessToken(req, res, user, grace.newTokenString);
+  }
+  logAudit(req, 'TOKEN_REFRESH_FAILED', 'Refresh token consumido por outra requisição');
+  return refreshExpired(res);
+};
+
 export const refreshToken = async (req, res, next) => {
   try {
-    const cookies = req.cookies;
-    if (!cookies?.jwt) return res.status(401).json({ message: "Sessão inválida." });
+    const requestToken = req.cookies?.jwt;
+    if (!requestToken) return res.status(401).json({ message: "Sessão inválida." });
 
-    const requestToken = cookies.jwt;
     const requestHash = hashToken(requestToken);
     const tokenInDb = await RefreshToken.findOne({ token: requestHash });
+    if (!tokenInDb) return await handleUnknownRefreshToken(req, res, requestToken, requestHash);
 
-    // Hash não está no banco: pode ser (a) uma corrida multi-aba dentro da janela
-    // de graça — reemite o mesmo token novo já rotacionado; ou (b) reuso de um
-    // token já consumido/roubado — revoga TODA a família como precaução.
-    if (!tokenInDb) {
-      const grace = consumeGraceRotation(requestHash);
-      if (grace) {
-        const user = await User.findById(grace.userId);
-        if (user && user.isActive !== false) {
-          const newAccessToken = emitSession(req, res, user, grace.newTokenString);
-          return res.status(200).json({ accessToken: newAccessToken });
-        }
-      }
-      // Reuso fora da graça: se o JWT ainda é estruturalmente válido, revoga a família.
-      try {
-        const decoded = jwt.verify(requestToken, JWT_REFRESH_SECRET);
-        if (decoded?.id) {
-          await revokeUserSessions(decoded.id);
-          logAudit(req, 'TOKEN_REUSE_DETECTED', 'Refresh token reusado — todas as sessões revogadas', decoded.id);
-        }
-      } catch { /* JWT inválido/expirado: nada a revogar */ }
-      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh inválido ou reusado');
-      return res.status(401).json({ message: "Sessão expirada." });
-    }
-
-    if (RefreshToken.verifyExpiration(tokenInDb)) {
-      await RefreshToken.findByIdAndDelete(tokenInDb._id);
-      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Token de refresh expirado');
-      return res.status(401).json({ message: "Sessão expirada." });
-    }
-
-    const user = await User.findById(tokenInDb.user);
-    if (!user) return res.status(404).json({ message: "Usuário não encontrado." });
-    // Mesmo critério do login: conta desativada não renova sessão.
-    if (user.isActive === false) {
-      await RefreshToken.findByIdAndDelete(tokenInDb._id);
-      return res.status(401).json({ message: "Conta desativada." });
-    }
+    const user = await resolveRefreshUser(req, res, tokenInDb);
+    if (!user) return undefined;
 
     // ROTAÇÃO (uso único): invalida o token apresentado e emite um novo. Limita a
     // janela de utilidade de um refresh token vazado a uma única renovação.
@@ -447,43 +455,17 @@ export const refreshToken = async (req, res, next) => {
     // A baixa é a TRAVA: só quem apaga o documento rotaciona. Antes era findOne +
     // delete sem conferir o resultado, e duas requisições simultâneas com o mesmo
     // cookie passavam as duas — cada uma criava um refresh novo, a sessão bifurcava
-    // e a detecção de reuso nunca disparava. O perdedor da corrida é a aba
-    // retardatária legítima: recebe o token do vencedor pela janela de graça.
-    const newRefreshTokenString = jwt.sign(
-      { id: user._id },
-      JWT_REFRESH_SECRET,
-      { expiresIn: `${REFRESH_TOKEN_EXPIRATION_DAYS}d` }
-    );
+    // e a detecção de reuso nunca disparava.
+    const newRefreshTokenString = signRefreshToken(user);
     const claimed = await RefreshToken.findOneAndDelete({ _id: tokenInDb._id });
-    if (!claimed) {
-      let grace = consumeGraceRotation(requestHash);
-      if (!grace) {
-        // O vencedor registra a rotação logo depois da própria baixa; dá a ele um
-        // instante antes de concluir que o token sumiu por outro motivo.
-        await new Promise((r) => setTimeout(r, 150));
-        grace = consumeGraceRotation(requestHash);
-      }
-      if (grace && String(grace.userId) === String(user._id)) {
-        const graceAccessToken = emitSession(req, res, user, grace.newTokenString);
-        return res.status(200).json({ accessToken: graceAccessToken });
-      }
-      logAudit(req, 'TOKEN_REFRESH_FAILED', 'Refresh token consumido por outra requisição');
-      return res.status(401).json({ message: "Sessão expirada." });
-    }
+    if (!claimed) return await handleLostRotation(req, res, requestHash, user);
+
     // Registrada já aqui (antes do create) para o perdedor de uma corrida a achar.
     rememberRotation(requestHash, newRefreshTokenString, user._id.toString());
-    const expiredAt = new Date();
-    expiredAt.setDate(expiredAt.getDate() + REFRESH_TOKEN_EXPIRATION_DAYS);
-    await RefreshToken.create({
-      token: hashToken(newRefreshTokenString),
-      user: user._id,
-      expiryDate: expiredAt,
-    });
-    const newAccessToken = emitSession(req, res, user, newRefreshTokenString);
-    res.status(200).json({ accessToken: newAccessToken });
-
+    await persistRefreshToken(newRefreshTokenString, user._id);
+    return sendAccessToken(req, res, user, newRefreshTokenString);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
@@ -554,99 +536,10 @@ export const resetPassword = async (req, res, next) => {
 export const updateProfile = async (req, res, next) => {
     try {
         const userId = req.user.id;
-        const {
-            name, cpf, phone, occupation, bannerColor,
-            // (3.21) novos campos de perfil
-            brokerage, cep, street, neighborhood, city, state, birthDate, salary,
-        } = req.body;
-        const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
-
-        // $set ignora chaves undefined (deixa o campo inalterado quando vazio).
-        const set = { name, phone: phone || undefined, occupation: occupation || undefined };
-        const unset = {};
-
         // Nome da carteira (Fase 1) foi substituído por Wallet.name — renomear
         // agora é feito via PUT /api/wallets/:walletId (walletsController.js).
-
-        // (3.21a) Corretora — texto livre (lista conhecida + "Outra"). Só valida
-        // tamanho. '' → remove a escolha.
-        if (brokerage !== undefined) {
-            const b = typeof brokerage === 'string' ? brokerage.trim() : '';
-            if (b === '') unset.brokerage = 1;
-            else if (b.length > 80) return res.status(400).json({ message: "Corretora inválida." });
-            else set.brokerage = b;
-        }
-
-        // (3.21b) Endereço (ViaCEP) — campos em claro. Helper: '' → $unset.
-        const addressFields = { cep, street, neighborhood, city, state };
-        for (const [key, raw] of Object.entries(addressFields)) {
-            if (raw === undefined) continue;
-            const v = typeof raw === 'string' ? raw.trim() : '';
-            if (v === '') unset[key] = 1;
-            else if (v.length > 120) return res.status(400).json({ message: "Endereço inválido." });
-            else set[key] = v;
-        }
-
-        // (3.21c) Data de nascimento — cifrada em repouso. Aceita YYYY-MM-DD,
-        // valida que é data real e plausível (não futura, idade ≤ 120 anos).
-        if (birthDate !== undefined) {
-            const v = typeof birthDate === 'string' ? birthDate.trim() : '';
-            if (v === '') {
-                unset.birthDate = 1;
-            } else {
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return res.status(400).json({ message: "Data de nascimento inválida." });
-                const d = new Date(`${v}T00:00:00Z`);
-                const now = new Date();
-                const min = new Date(); min.setUTCFullYear(now.getUTCFullYear() - 120);
-                if (Number.isNaN(d.getTime()) || v !== d.toISOString().slice(0, 10) || d > now || d < min) {
-                    return res.status(400).json({ message: "Data de nascimento inválida." });
-                }
-                set.birthDate = encrypt(v); // cifra em repouso (AES-256-GCM)
-            }
-        }
-
-        // (3.21d) Salário atual — cifrado em repouso. Número não-negativo.
-        if (salary !== undefined) {
-            const v = (salary === null || salary === '') ? '' : salary;
-            if (v === '') {
-                unset.salary = 1;
-            } else {
-                const n = Number(v);
-                if (!Number.isFinite(n) || n < 0 || n > 1e12) return res.status(400).json({ message: "Salário inválido." });
-                set.salary = encrypt(String(n)); // cifra em repouso (AES-256-GCM)
-            }
-        }
-
-        // Banner de perfil (3.20): só aceita presets conhecidos; '' remove a escolha
-        // (volta ao gradiente padrão do plano).
-        const BANNER_PRESETS = ['ocean', 'emerald', 'royal', 'sunset', 'gold', 'graphite'];
-        if (bannerColor !== undefined) {
-            if (bannerColor === '' || bannerColor === null) {
-                unset.bannerColor = 1;
-            } else if (BANNER_PRESETS.includes(bannerColor)) {
-                set.bannerColor = bannerColor;
-            } else {
-                return res.status(400).json({ message: "Banner inválido." });
-            }
-        }
-
-        if (cleanCpf) {
-            if (!validateCpf(cleanCpf)) return res.status(400).json({ message: "CPF inválido." });
-            // Unicidade via blind index (CPF cifrado não é comparável diretamente).
-            const cpfHash = blindIndex(cleanCpf);
-            const existing = await User.findOne({ cpfHash }).select('_id');
-            if (existing && existing._id.toString() !== userId) return res.status(409).json({ message: "CPF já utilizado." });
-            set.cpf = encrypt(cleanCpf); // cifra em repouso (AES-256-GCM)
-            set.cpfHash = cpfHash;
-        } else if (cpf !== undefined) {
-            // Campo enviado vazio → titular quer remover o CPF. $unset evita deixar
-            // cpfHash=null (que colidiria no índice único sparse entre vários usuários).
-            unset.cpf = 1;
-            unset.cpfHash = 1;
-        }
-
-        const updateOps = { $set: set };
-        if (Object.keys(unset).length) updateOps.$unset = unset;
+        const { error, updateOps } = await buildProfileUpdate(userId, req.body);
+        if (error) return res.status(error.status).json({ message: error.message });
 
         const updatedUser = await User.findByIdAndUpdate(
             userId,
@@ -656,12 +549,12 @@ export const updateProfile = async (req, res, next) => {
         invalidateUser(userId); // (I6) nome em cache mudou → invalida
 
         // [SEGURANÇA] Usa o sanitizador
-        res.json({ 
-            message: "Perfil atualizado.", 
+        return res.json({
+            message: "Perfil atualizado.",
             user: sanitizeUser(updatedUser)
         });
     } catch (error) {
-        next(error);
+        return next(error);
     }
 };
 

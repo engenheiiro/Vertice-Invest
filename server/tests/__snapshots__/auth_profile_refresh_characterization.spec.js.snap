@@ -1,0 +1,3987 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`caracterização — refreshToken > cenários legíveis 1`] = `
+[
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": null,
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 5000,
+      "claimed": "doc",
+      "cookieKind": "garbage",
+      "cookies": "none",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-3",
+      "user": {
+        "_id": "user-3",
+        "email": "user-3@x.com",
+        "isActive": false,
+        "plan": "ELITE",
+        "role": "USER",
+        "sessionVersion": 5,
+      },
+    },
+    "seed": 3,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão expirada.",
+      },
+      "calls": {
+        "Audit.create": [
+          [
+            {
+              "action": "TOKEN_REUSE_DETECTED",
+              "details": "Refresh token reusado — todas as sessões revogadas",
+              "email": null,
+              "ipAddress": "10.0.0.2",
+              "user": "user-23",
+              "userAgent": "UA/1",
+            },
+          ],
+          [
+            {
+              "action": "TOKEN_REFRESH_FAILED",
+              "details": "Token de refresh inválido ou reusado",
+              "email": null,
+              "ipAddress": "10.0.0.2",
+              "user": null,
+              "userAgent": "UA/1",
+            },
+          ],
+        ],
+        "RT.deleteMany": [
+          [
+            {
+              "user": "user-23",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "ecee4dedd06bf759eb1e474f76c1c327f68328c00ab804455bd396848dc56d10",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": null,
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 5000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "UA/1",
+      },
+      "tokenInDb": null,
+      "uid": "user-23",
+      "user": "reject",
+    },
+    "seed": 23,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão expirada.",
+      },
+      "calls": {
+        "Audit.create": [
+          [
+            {
+              "action": "TOKEN_REFRESH_FAILED",
+              "details": "Token de refresh expirado",
+              "email": null,
+              "ipAddress": "127.9.9.9",
+              "user": null,
+              "userAgent": "__undef",
+            },
+          ],
+        ],
+        "RT.findByIdAndDelete": [
+          [
+            "rt-user-43",
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "1e6ddcb476554c2618e383dec9364b11db7399a6eb0337dee98ea60cb419ec9d",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-43",
+              "user": "user-43",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDMtb3V0cm8iLCJlbWFpbCI6InVzZXItNDMtb3V0cm9AeC5jb20iLCJwbGFuIjoiUFJPIiwicm9sZSI6IlVTRVIiLCJzdiI6MSwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.7pDST2_BFOfPZ2loyhZHqBStfQWVe6wbXJ4U_-NwgNk",
+            "payload": {
+              "email": "user-43-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-43-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "67b30db9ac995992e2cff09989cf2d9e7befd6e8bf23478e555cdcaab4ca6e42",
+                "user": "user-43-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "1e6ddcb476554c2618e383dec9364b11db7399a6eb0337dee98ea60cb419ec9d",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-43",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-43",
+                "user": "user-43-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-43-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDMtb3V0cm8iLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.TMrLbxGSkGMFOtNcu2AWhHnAFk8ZYOjpVYhkA9wBxSg",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-43-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 5000,
+      "claimed": "doc",
+      "cookieKind": "wrongSecret",
+      "cookies": "cookie",
+      "create": "reject",
+      "expired": true,
+      "prime": "other",
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-43",
+      "user": {
+        "_id": "user-43",
+        "email": "user-43@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 43,
+  },
+  {
+    "out": {
+      "body": {
+        "accessToken": {
+          "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJlbWFpbCI6InVzZXItNjNAeC5jb20iLCJwbGFuIjoiR1VFU1QiLCJyb2xlIjoiQURNSU4iLCJzdiI6MCwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.-dz4I-NiVPj5BYQk7HZY89YQDCTcfjwgvU1JMe8P36A",
+          "payload": {
+            "email": "user-63@x.com",
+            "exp": 1795436100,
+            "iat": 1795435200,
+            "id": "user-63",
+            "plan": "GUEST",
+            "role": "ADMIN",
+            "sv": 0,
+          },
+        },
+      },
+      "calls": {
+        "RT.create": [
+          [
+            {
+              "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+              "token": "06a571fe85125d2a7362e16710aae97b2a9a3a2fd13a360380c706c891a1a0a8",
+              "user": "user-63",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "fa2e83176d9320afbe8d02e31cd25a0412712031014964e77617a36024adf2f0",
+            },
+          ],
+        ],
+        "RT.findOneAndDelete": [
+          [
+            {
+              "_id": "rt-user-63",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-63",
+              "user": "user-63",
+            },
+          ],
+        ],
+        "User.findById": [
+          [
+            "user-63",
+          ],
+        ],
+        "issueCsrfToken": [
+          [
+            "__req/res",
+            "__req/res",
+          ],
+        ],
+      },
+      "cookies": [
+        {
+          "name": "jwt",
+          "opts": {
+            "httpOnly": true,
+            "maxAge": 604800000,
+            "sameSite": "strict",
+            "secure": false,
+          },
+          "value": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.dDZu3XhAEl3TwIovySGPQMyLRSljSW9oadvRxZRs-08",
+            "payload": {
+              "exp": 1796040000,
+              "iat": 1795435200,
+              "id": "user-63",
+            },
+          },
+        },
+      ],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJlbWFpbCI6InVzZXItNjNAeC5jb20iLCJwbGFuIjoiUFJPIiwicm9sZSI6IlVTRVIiLCJzdiI6MSwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.4oKlgaZP56-00oHlEF9na47AO2SnfE9FmNIf4kmupLI",
+            "payload": {
+              "email": "user-63@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-63",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "06a571fe85125d2a7362e16710aae97b2a9a3a2fd13a360380c706c891a1a0a8",
+                "user": "user-63",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "fa2e83176d9320afbe8d02e31cd25a0412712031014964e77617a36024adf2f0",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-63",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-63",
+                "user": "user-63",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-63",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.dDZu3XhAEl3TwIovySGPQMyLRSljSW9oadvRxZRs-08",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-63",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-63",
+      "user": {
+        "_id": "user-63",
+        "email": "user-63@x.com",
+        "plan": "GUEST",
+        "role": "ADMIN",
+      },
+    },
+    "seed": 63,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItODMtb3V0cm8iLCJlbWFpbCI6InVzZXItODMtb3V0cm9AeC5jb20iLCJwbGFuIjoiUFJPIiwicm9sZSI6IlVTRVIiLCJzdiI6MSwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.jgFSqkeEuPYL2a0lDuyVa6V9N7ZW8fw6fSaPj3-B9fU",
+            "payload": {
+              "email": "user-83-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-83-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "b03c1b1ee54ef838e2da50348bc89a376f142757ca1055bc68741c3f416f3d0c",
+                "user": "user-83-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "f09368eed88b7ae07cb29aca38b9784755a3ae5255f2c80b27915847e133c010",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-83",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-83",
+                "user": "user-83-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-83-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItODMtb3V0cm8iLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.OMU8Jm_OKmlVEwKLekPsxTVE79JG8Hd2aosnsE8N110",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-83-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "wrongSecret",
+      "cookies": "empty",
+      "create": "ok",
+      "expired": true,
+      "prime": "other",
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-83",
+      "user": {
+        "_id": "user-83",
+        "email": "user-83@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 83,
+  },
+  {
+    "out": {
+      "body": null,
+      "calls": {
+        "RT.findOne": [
+          [
+            {
+              "token": "fdc0617b404b791a3d3cf6bcbce39ba177deca6ddbf59d8c32b46bbeee1e0920",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [
+        [
+          {
+            "message": "mongo fora (rt)",
+            "name": "Error",
+          },
+        ],
+      ],
+      "primed": null,
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 60000,
+      "claimed": "doc",
+      "cookieKind": "noId",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "__undef",
+      },
+      "tokenInDb": "reject",
+      "uid": "user-103",
+      "user": {
+        "_id": "user-103",
+        "email": "user-103@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 103,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão expirada.",
+      },
+      "calls": {
+        "Audit.create": [
+          [
+            {
+              "action": "TOKEN_REFRESH_FAILED",
+              "details": "Token de refresh inválido ou reusado",
+              "email": null,
+              "ipAddress": "10.0.0.1",
+              "user": null,
+              "userAgent": "__undef",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "02c7a0df7a80213ac6b0a56cf57b3128b756ae55381092720df54193dbbd6cb9",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTIzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTEyMy1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.9pW2svchBzkbtD7Q74GjdHp2Oofp5-bnwIsfu8XeZrg",
+            "payload": {
+              "email": "user-123-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-123-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "d2b2540e646fd5851a7581ff129ea28e554a060070a377a91a8588b3bb35c881",
+                "user": "user-123-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "02c7a0df7a80213ac6b0a56cf57b3128b756ae55381092720df54193dbbd6cb9",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-123",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-123",
+                "user": "user-123-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-123-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTIzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.QNmRcqtmpb58tArt2Lun-V6F__pr-FKdOqJrnzu-bcY",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-123-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 60000,
+      "claimed": "doc",
+      "cookieKind": "expired",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "other",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-123",
+      "user": "reject",
+    },
+    "seed": 123,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": null,
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 5000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "empty",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-143",
+      "user": "reject",
+    },
+    "seed": 143,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Conta desativada.",
+      },
+      "calls": {
+        "RT.findByIdAndDelete": [
+          [
+            "rt-user-163",
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "cdf6c01a33df7b4c0c5c490bd006c80796a9cbd8bbf0569b673a72abfed1b57a",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-163",
+              "user": "user-163",
+            },
+          ],
+        ],
+        "User.findById": [
+          [
+            "user-163",
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTYzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTE2My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.ly2q2P8wiG6PaBmmM7biMCM-x5EvJH68Ae0O79Lkb5Y",
+            "payload": {
+              "email": "user-163-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-163-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "74f370d47f38e93d90602a5221628088133404387c12533c0af05a7d7256acf0",
+                "user": "user-163-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "cdf6c01a33df7b4c0c5c490bd006c80796a9cbd8bbf0569b673a72abfed1b57a",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-163",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-163",
+                "user": "user-163-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-163-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTYzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.1UVUY3W9DjKBcBV-doYPWCle9UBc3zIkJqEbNmBkQFo",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-163-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 16000,
+      "claimed": "doc",
+      "cookieKind": "expired",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "other",
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "UA/1",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-163",
+      "user": {
+        "_id": "user-163",
+        "email": "user-163@x.com",
+        "isActive": false,
+        "plan": "ELITE",
+        "role": "USER",
+        "sessionVersion": 5,
+      },
+    },
+    "seed": 163,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão expirada.",
+      },
+      "calls": {
+        "Audit.create": [
+          [
+            {
+              "action": "TOKEN_REUSE_DETECTED",
+              "details": "Refresh token reusado — todas as sessões revogadas",
+              "email": null,
+              "ipAddress": "127.9.9.9",
+              "user": "user-183",
+              "userAgent": "__undef",
+            },
+          ],
+          [
+            {
+              "action": "TOKEN_REFRESH_FAILED",
+              "details": "Token de refresh inválido ou reusado",
+              "email": null,
+              "ipAddress": "127.9.9.9",
+              "user": null,
+              "userAgent": "__undef",
+            },
+          ],
+        ],
+        "RT.deleteMany": [
+          [
+            {
+              "user": "user-183",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "ae90e24356515220b94f7eb0cd55c8198ae0e76b0384fc63463816d24e87c1d3",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTgzIiwiZW1haWwiOiJ1c2VyLTE4M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.cI_W0LHGcgqVzkwYgaF42RqpXaqNDMxPMBPNt1GhP30",
+            "payload": {
+              "email": "user-183@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-183",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "4314642cc705a65deb43f662ed34aede227d445fc2c07855580e2669eb0a90ed",
+                "user": "user-183",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "ae90e24356515220b94f7eb0cd55c8198ae0e76b0384fc63463816d24e87c1d3",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-183",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-183",
+                "user": "user-183",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-183",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTgzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.e5eBxh9AxIMnmayVTBotBmW-vDOA8x3eLJpLOHPlCh4",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-183",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 60000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-183",
+      "user": {
+        "_id": "user-183",
+        "email": "user-183@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 183,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjAzIiwiZW1haWwiOiJ1c2VyLTIwM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.jmEnc5L8M7GCf7MD6zsKkynHjDZxTceGE_enjsXBwms",
+            "payload": {
+              "email": "user-203@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-203",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "4dede721c661e230a297bad4860452148e794ba1d628743b35e8ae908f6ac326",
+                "user": "user-203",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "2979bca4b9a3a9235f215e8fd316d3bd1b74ed98cee12e3c95abd283e10c995b",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-203",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-203",
+                "user": "user-203",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-203",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjAzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.fBP0RkG-Bt-rIR1Mk9DTJormTvzIWoR9ry_0jAkVEN4",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-203",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 5000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "blank",
+      "create": "ok",
+      "expired": true,
+      "prime": "same",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "UA/1",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-203",
+      "user": {
+        "_id": "user-203",
+        "email": "user-203@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 203,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": null,
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "none",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "UA/1",
+      },
+      "tokenInDb": null,
+      "uid": "user-223",
+      "user": "reject",
+    },
+    "seed": 223,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjQzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTI0My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.5UqTsKmW4B8A-6CueanlIoMAHJCyvAKHgAbV_8vieuQ",
+            "payload": {
+              "email": "user-243-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-243-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "5040986919052e146c184de9619add0ffe004b7d544eacf80fea15546dced0c7",
+                "user": "user-243-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "3f2aeb4f5db391fad81712f3c4c6be5c5038d09f6f2a766c6113fbf3a640cc3f",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-243",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-243",
+                "user": "user-243-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-243-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjQzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.OHRiVEalTigiSzr2TSEs6KBn1wXsMrcAIgP4v2JvCfg",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-243-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 60000,
+      "claimed": null,
+      "cookieKind": "valid",
+      "cookies": "none",
+      "create": "ok",
+      "expired": true,
+      "prime": "other",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "__undef",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-243",
+      "user": {
+        "_id": "user-243",
+        "email": "user-243@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 243,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": null,
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 5000,
+      "claimed": "doc",
+      "cookieKind": "expired",
+      "cookies": "none",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "__undef",
+      },
+      "tokenInDb": "reject",
+      "uid": "user-263",
+      "user": {
+        "_id": "user-263",
+        "email": "user-263@x.com",
+        "isActive": false,
+        "plan": "ELITE",
+        "role": "USER",
+        "sessionVersion": 5,
+      },
+    },
+    "seed": 263,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjgzIiwiZW1haWwiOiJ1c2VyLTI4M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.eQnnDXvTVZKUGzmSqWaIs3JCvvVG2RapOSQI8HI7vbw",
+            "payload": {
+              "email": "user-283@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-283",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "8040957a7e991010c42745a1462d490fbbdfa6c00f288bbbbdca73a21e83e54c",
+                "user": "user-283",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "80129d976710f3f1d398f76af3f18bad2e8d7113e9c508353b4064f22640c00d",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-283",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-283",
+                "user": "user-283",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-283",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjgzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.O7pL4V457NBg4_9U1uibCNfKfb2siyqCJxwdEN6nrMM",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-283",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "noId",
+      "cookies": "empty",
+      "create": "ok",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "__undef",
+      },
+      "tokenInDb": "reject",
+      "uid": "user-283",
+      "user": {
+        "_id": "user-283",
+        "email": "user-283@x.com",
+        "plan": "GUEST",
+        "role": "ADMIN",
+      },
+    },
+    "seed": 283,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Conta desativada.",
+      },
+      "calls": {
+        "RT.findByIdAndDelete": [
+          [
+            "rt-user-303",
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "7aefcc32eba17e2cff689d2572539829bc028dbd8c7341b1979dad62fd3801a8",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-303",
+              "user": "user-303",
+            },
+          ],
+        ],
+        "User.findById": [
+          [
+            "user-303",
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzAzIiwiZW1haWwiOiJ1c2VyLTMwM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.aQ8KSLdKmmSxXrrCTqPItI8l92fFD6cRySbQ9lfYS_I",
+            "payload": {
+              "email": "user-303@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-303",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "9bd9620f3d3209473b450a615478839583b39b6c2e0695f280b21f936208914d",
+                "user": "user-303",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "7aefcc32eba17e2cff689d2572539829bc028dbd8c7341b1979dad62fd3801a8",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-303",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-303",
+                "user": "user-303",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-303",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzAzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.CEu-sQEypFj0zznpTG7mdC3B593T-RlMM-Jhwhuhols",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-303",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 16000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "reject",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "__undef",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-303",
+      "user": {
+        "_id": "user-303",
+        "email": "user-303@x.com",
+        "isActive": false,
+        "plan": "ELITE",
+        "role": "USER",
+        "sessionVersion": 5,
+      },
+    },
+    "seed": 303,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzIzIiwiZW1haWwiOiJ1c2VyLTMyM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.EuW51jLbAa6pfXtvFsf5vHAEF_7RDne7NsabYG0F-xI",
+            "payload": {
+              "email": "user-323@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-323",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "bf4ea55dd0d436394cc5b6b3e9f5a7aeb9b3b16acf1c3c9dda6580ffdfb48c00",
+                "user": "user-323",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "479fff73ac6684733005150b2ceb98c07d36d96e46bc904aa4702a7fe32411b6",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-323",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-323",
+                "user": "user-323",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-323",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzIzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.Rj4yBiuoVCj0GKeCpO33I9-lKAnX4CyhEr8pvcDn_UA",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-323",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "garbage",
+      "cookies": "none",
+      "create": "ok",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "__undef",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-323",
+      "user": null,
+    },
+    "seed": 323,
+  },
+  {
+    "out": {
+      "body": null,
+      "calls": {
+        "RT.findOne": [
+          [
+            {
+              "token": "76cd878d5ef16e035369a800d678f6cfd56c72a244960eb0873a5792c76e0f74",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [
+        [
+          {
+            "message": "mongo fora (rt)",
+            "name": "Error",
+          },
+        ],
+      ],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzQzIiwiZW1haWwiOiJ1c2VyLTM0M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.v-e-eq3BGoKqml5Lxna6JKB8DD212uuqzgF1Rn_Fybw",
+            "payload": {
+              "email": "user-343@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-343",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "ec55ebe5072e949f73184fc5287417d1402a4d71c1afd1c0b7711cd823f4dec4",
+                "user": "user-343",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "76cd878d5ef16e035369a800d678f6cfd56c72a244960eb0873a5792c76e0f74",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-343",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-343",
+                "user": "user-343",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-343",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzQzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.eE_b_uXH-PDnFZMTjuCBf0tE5S9W9eD_3is3iG05sCM",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-343",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 14000,
+      "claimed": "doc",
+      "cookieKind": "noId",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "__undef",
+      },
+      "tokenInDb": "reject",
+      "uid": "user-343",
+      "user": {
+        "_id": "user-343",
+        "email": "user-343@x.com",
+        "isActive": false,
+        "plan": "ELITE",
+        "role": "USER",
+        "sessionVersion": 5,
+      },
+    },
+    "seed": 343,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzYzIiwiZW1haWwiOiJ1c2VyLTM2M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.tvTONog40ZU756pybp9Rx2WADckhqXdvxHMUOJIrcGs",
+            "payload": {
+              "email": "user-363@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-363",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "90ff6e9c405faf47ad00c3d68c5f02704555b6c90e62efa9132e54d148c38067",
+                "user": "user-363",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "6a30458d448a5828df5b0027e74ee01735c7de5670f5a7a7eabb9e44688091ae",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-363",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-363",
+                "user": "user-363",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-363",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzYzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.7YvICUUjnKpvATGTJsugaDDtjORRBz9plUJcopE4p_s",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-363",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 14000,
+      "claimed": null,
+      "cookieKind": "valid",
+      "cookies": "empty",
+      "create": "ok",
+      "expired": true,
+      "prime": "same",
+      "req": {
+        "ip": [
+          "10.0.0.2",
+          "10.0.0.3",
+        ],
+        "ua": "UA/1",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-363",
+      "user": {
+        "_id": "user-363",
+        "email": "user-363@x.com",
+        "plan": "GUEST",
+        "role": "ADMIN",
+      },
+    },
+    "seed": 363,
+  },
+  {
+    "out": {
+      "body": null,
+      "calls": {
+        "RT.findOne": [
+          [
+            {
+              "token": "68ff85c1709d263e7451de39ce97dc0bbfc9c433902ec80c271fc8f1011a8eb9",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [
+        [
+          {
+            "message": "mongo fora (rt)",
+            "name": "Error",
+          },
+        ],
+      ],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzgzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTM4My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.xCagEaeSDoLUKw2WrQs_1-U1cgWDZVIj4VhKhQsJitM",
+            "payload": {
+              "email": "user-383-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-383-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "a1b81c3f52205af8d5c682f2c9731333b6d6700e7484ccaa37788dac1cef7bb9",
+                "user": "user-383-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "68ff85c1709d263e7451de39ce97dc0bbfc9c433902ec80c271fc8f1011a8eb9",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-383",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-383",
+                "user": "user-383-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-383-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzgzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.TXeaXf1eV4QoM1H4luLEJcbVrHPBps_K7zs5wLcbOno",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-383-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 14000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "reject",
+      "expired": false,
+      "prime": "other",
+      "req": {
+        "ip": "__undef",
+        "ua": "UA/1",
+      },
+      "tokenInDb": "reject",
+      "uid": "user-383",
+      "user": "reject",
+    },
+    "seed": 383,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão expirada.",
+      },
+      "calls": {
+        "Audit.create": [
+          [
+            {
+              "action": "TOKEN_REUSE_DETECTED",
+              "details": "Refresh token reusado — todas as sessões revogadas",
+              "email": null,
+              "ipAddress": "127.9.9.9",
+              "user": "user-403",
+              "userAgent": "__undef",
+            },
+          ],
+          [
+            {
+              "action": "TOKEN_REFRESH_FAILED",
+              "details": "Token de refresh inválido ou reusado",
+              "email": null,
+              "ipAddress": "127.9.9.9",
+              "user": null,
+              "userAgent": "__undef",
+            },
+          ],
+        ],
+        "RT.deleteMany": [
+          [
+            {
+              "user": "user-403",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "824334922a8f942e90a804ba531c3e39acf1173b44fac02d6a8eea8468a8b823",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": null,
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": null,
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-403",
+      "user": null,
+    },
+    "seed": 403,
+  },
+  {
+    "out": {
+      "body": {
+        "message": "Sessão expirada.",
+      },
+      "calls": {
+        "Audit.create": [
+          [
+            {
+              "action": "TOKEN_REFRESH_FAILED",
+              "details": "Token de refresh expirado",
+              "email": null,
+              "ipAddress": "10.0.0.1",
+              "user": null,
+              "userAgent": "UA/1",
+            },
+          ],
+        ],
+        "RT.findByIdAndDelete": [
+          [
+            "rt-user-423",
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "8c2831311bebd26fcf4316c0694b43994ca31a65522446e52ea20eb68e87e1f5",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-423",
+              "user": "user-423",
+            },
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDIzIiwiZW1haWwiOiJ1c2VyLTQyM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.0GyIWITbwo0d6QZRMeWjen4rxmWyJWE7Fg_mk-ILPFg",
+            "payload": {
+              "email": "user-423@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-423",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "fd717a1f814d12263be5cb02c0f3c6ba5366a4b52c99d06bd5461eca08b32431",
+                "user": "user-423",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "8c2831311bebd26fcf4316c0694b43994ca31a65522446e52ea20eb68e87e1f5",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-423",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-423",
+                "user": "user-423",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-423",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDIzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.Efr5OxjVtHYCGoOC_axn5Y2Uk_GACQW9ifofhBSGr_k",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-423",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 401,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "expired",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": true,
+      "prime": "same",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "UA/1",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-423",
+      "user": null,
+    },
+    "seed": 423,
+  },
+  {
+    "out": {
+      "body": {
+        "accessToken": {
+          "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzIiwiZW1haWwiOiJ1c2VyLTQ0M0B4LmNvbSIsInBsYW4iOiJHVUVTVCIsInJvbGUiOiJBRE1JTiIsInN2IjowLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.FFU9egBbaAwZ-gTXD6BSxW20UnPNwrbhaP7yojVaD0I",
+          "payload": {
+            "email": "user-443@x.com",
+            "exp": 1795436100,
+            "iat": 1795435200,
+            "id": "user-443",
+            "plan": "GUEST",
+            "role": "ADMIN",
+            "sv": 0,
+          },
+        },
+      },
+      "calls": {
+        "RT.create": [
+          [
+            {
+              "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+              "token": "c4f8224917c70625e539751cad60b21752c04f39ef94fa2aac2a3b0a3998facc",
+              "user": "user-443",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "1582b617026d0f2371c32a5bbcaf4b9c96dcce05c18b8f2f4c5d2a369001baf5",
+            },
+          ],
+        ],
+        "RT.findOneAndDelete": [
+          [
+            {
+              "_id": "rt-user-443",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-443",
+              "user": "user-443",
+            },
+          ],
+        ],
+        "User.findById": [
+          [
+            "user-443",
+          ],
+        ],
+        "issueCsrfToken": [
+          [
+            "__req/res",
+            "__req/res",
+          ],
+        ],
+      },
+      "cookies": [
+        {
+          "name": "jwt",
+          "opts": {
+            "httpOnly": true,
+            "maxAge": 604800000,
+            "sameSite": "strict",
+            "secure": false,
+          },
+          "value": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.Cx0irtGXO5kBRGyx7uVJX9YXn6OCehF5bw3BgaVIK3o",
+            "payload": {
+              "exp": 1796040000,
+              "iat": 1795435200,
+              "id": "user-443",
+            },
+          },
+        },
+      ],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTQ0My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.rwH25NFrVgk2mReAFjwjjwt5TqvaCAwv7X9l3oNLrNU",
+            "payload": {
+              "email": "user-443-outro@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-443-outro",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "2891148a64ab4e2af986032f96f5f72a79c815a0ce91be087060b89853611bd8",
+                "user": "user-443-outro",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "1582b617026d0f2371c32a5bbcaf4b9c96dcce05c18b8f2f4c5d2a369001baf5",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-443",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-443",
+                "user": "user-443-outro",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-443-outro",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.CzRTuyP821pMigIXsQV17HrBp5RS-j5Zqzoi4ZzV3tQ",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-443-outro",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "other",
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-443",
+      "user": {
+        "_id": "user-443",
+        "email": "user-443@x.com",
+        "plan": "GUEST",
+        "role": "ADMIN",
+      },
+    },
+    "seed": 443,
+  },
+  {
+    "out": {
+      "body": {
+        "accessToken": {
+          "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiZW1haWwiOiJ1c2VyLTQ2M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoyLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.1OozgGsc5AD56c8dcJMKw-Y9_1WaJBABV7AzKHmHXoQ",
+          "payload": {
+            "email": "user-463@x.com",
+            "exp": 1795436100,
+            "iat": 1795435200,
+            "id": "user-463",
+            "plan": "PRO",
+            "role": "USER",
+            "sv": 2,
+          },
+        },
+      },
+      "calls": {
+        "RT.findOne": [
+          [
+            {
+              "token": "f20a5dc452f5c7327a7bc6c985a8a15734f24444005978cea2252dc7b9b02b49",
+            },
+          ],
+        ],
+        "User.findById": [
+          [
+            "user-463",
+          ],
+        ],
+        "issueCsrfToken": [
+          [
+            "__req/res",
+            "__req/res",
+          ],
+        ],
+      },
+      "cookies": [
+        {
+          "name": "jwt",
+          "opts": {
+            "httpOnly": true,
+            "maxAge": 604800000,
+            "sameSite": "strict",
+            "secure": false,
+          },
+          "value": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.D0hXyUVm2D-lBZDcrYVmW5hDtJHtXmvdBDuVoW1ABO8",
+            "payload": {
+              "exp": 1796040000,
+              "iat": 1795435200,
+              "id": "user-463",
+            },
+          },
+        },
+      ],
+      "next": [],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiZW1haWwiOiJ1c2VyLTQ2M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.O4SgWefWJJy5DczWrmW6x-88OwRCVwccegwdeCDv_gs",
+            "payload": {
+              "email": "user-463@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-463",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "706f8049633d1ce6016dcd6de2be0ce7e5760411764ccfa3ec76b555e350ff35",
+                "user": "user-463",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "f20a5dc452f5c7327a7bc6c985a8a15734f24444005978cea2252dc7b9b02b49",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-463",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-463",
+                "user": "user-463",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-463",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.D0hXyUVm2D-lBZDcrYVmW5hDtJHtXmvdBDuVoW1ABO8",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-463",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 0,
+      "claimed": null,
+      "cookieKind": "garbage",
+      "cookies": "cookie",
+      "create": "ok",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": "__undef",
+        "ua": "__undef",
+      },
+      "tokenInDb": null,
+      "uid": "user-463",
+      "user": {
+        "_id": "user-463",
+        "email": "user-463@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 463,
+  },
+  {
+    "out": {
+      "body": null,
+      "calls": {
+        "RT.create": [
+          [
+            {
+              "expiryDate": "__date(2026-11-30T12:00:14.000Z)",
+              "token": "66bd5b59f31789871bbdd204a6fd466db1fc99b4153106dde5b86dfbe60a1d53",
+              "user": "user-483",
+            },
+          ],
+        ],
+        "RT.findOne": [
+          [
+            {
+              "token": "7c275c4e3b64cb314393e45ae5e7b86fc762362f813dd66e26f8ca289685d35b",
+            },
+          ],
+        ],
+        "RT.findOneAndDelete": [
+          [
+            {
+              "_id": "rt-user-483",
+            },
+          ],
+        ],
+        "RT.verifyExpiration": [
+          [
+            {
+              "_id": "rt-user-483",
+              "user": "user-483",
+            },
+          ],
+        ],
+        "User.findById": [
+          [
+            "user-483",
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [
+        [
+          {
+            "message": "mongo fora (create)",
+            "name": "Error",
+          },
+        ],
+      ],
+      "primed": {
+        "body": {
+          "accessToken": {
+            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDgzIiwiZW1haWwiOiJ1c2VyLTQ4M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.EVUzcKtfP3a_-SdFgjJo12jeIDx_vQr7s26VqdCLW5o",
+            "payload": {
+              "email": "user-483@x.com",
+              "exp": 1795436100,
+              "iat": 1795435200,
+              "id": "user-483",
+              "plan": "PRO",
+              "role": "USER",
+              "sv": 1,
+            },
+          },
+        },
+        "calls": {
+          "RT.create": [
+            [
+              {
+                "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
+                "token": "03610045bc394a1c4180dcc1523af332d4504daf85c61f670d9a573250ce23e2",
+                "user": "user-483",
+              },
+            ],
+          ],
+          "RT.findOne": [
+            [
+              {
+                "token": "7c275c4e3b64cb314393e45ae5e7b86fc762362f813dd66e26f8ca289685d35b",
+              },
+            ],
+          ],
+          "RT.findOneAndDelete": [
+            [
+              {
+                "_id": "rt-prime-user-483",
+              },
+            ],
+          ],
+          "RT.verifyExpiration": [
+            [
+              {
+                "_id": "rt-prime-user-483",
+                "user": "user-483",
+              },
+            ],
+          ],
+          "User.findById": [
+            [
+              "user-483",
+            ],
+          ],
+          "issueCsrfToken": [
+            [
+              "__req/res",
+              "__req/res",
+            ],
+          ],
+        },
+        "cookies": [
+          {
+            "name": "jwt",
+            "opts": {
+              "httpOnly": true,
+              "maxAge": 604800000,
+              "sameSite": "strict",
+              "secure": false,
+            },
+            "value": {
+              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDgzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.RPhmhMZ16M6fFnNkA2BgkvgfiU4TvYY_uh67685KNCU",
+              "payload": {
+                "exp": 1796040000,
+                "iat": 1795435200,
+                "id": "user-483",
+              },
+            },
+          },
+        ],
+        "next": [],
+        "status": 200,
+      },
+      "status": 200,
+    },
+    "sc": {
+      "advanceMs": 14000,
+      "claimed": "doc",
+      "cookieKind": "valid",
+      "cookies": "cookie",
+      "create": "reject",
+      "expired": false,
+      "prime": "same",
+      "req": {
+        "ip": "10.0.0.1",
+        "ua": "UA/1",
+      },
+      "tokenInDb": "doc",
+      "uid": "user-483",
+      "user": {
+        "_id": "user-483",
+        "email": "user-483@x.com",
+        "isActive": true,
+        "plan": "PRO",
+        "role": "USER",
+        "sessionVersion": 2,
+      },
+    },
+    "seed": 483,
+  },
+]
+`;
+
+exports[`caracterização — refreshToken > hash por cenário 1`] = `
+{
+  "1": "779dec78a4fd621b",
+  "10": "6beacfe7598fac25",
+  "100": "5c5c63a399d72d36",
+  "101": "ce063afaf3741eed",
+  "102": "5ad98a4cc287241c",
+  "103": "a8961e6af463f695",
+  "104": "37e5a8317606110d",
+  "105": "f56e0adbecd6f1c5",
+  "106": "6e018d487e19f690",
+  "107": "a13841e292fd0a8d",
+  "108": "84dcec23f75e0bee",
+  "109": "d24b75f9fc40ea0c",
+  "11": "e8c466e109c46fac",
+  "110": "4b78ccc829f410b0",
+  "111": "84dcec23f75e0bee",
+  "112": "b355042c93bd7ea9",
+  "113": "520fd603f2fbfbe2",
+  "114": "84dcec23f75e0bee",
+  "115": "84dcec23f75e0bee",
+  "116": "316da7eb45aefd6f",
+  "117": "07b5b8b9a5f40192",
+  "118": "6d182029e37909da",
+  "119": "f40f4efe6ecb4271",
+  "12": "a242c78639baaf22",
+  "120": "88097cc8718b6f82",
+  "121": "614c16d05d1ffa62",
+  "122": "495b58607d652ab1",
+  "123": "16414b8aac5faa4c",
+  "124": "c986dd0449d5581c",
+  "125": "8258adcff2f263dd",
+  "126": "2ccfe984152d90e7",
+  "127": "af51f66ccac9339d",
+  "128": "815e578f189a2cf8",
+  "129": "239c0c88c14baeb2",
+  "13": "84dcec23f75e0bee",
+  "130": "84dcec23f75e0bee",
+  "131": "2f0edf5037e1a4a3",
+  "132": "009052943c6956b5",
+  "133": "8595f9e9eec0ff58",
+  "134": "ec9956cc199175e4",
+  "135": "49c7781329cddf03",
+  "136": "6a4386863cdc2f81",
+  "137": "e5a11cd71ec9dbfa",
+  "138": "0ee8406c471b38c0",
+  "139": "1cb0bc4d142909f5",
+  "14": "9f4a56a98a6e5cca",
+  "140": "654c0b8917e5e45f",
+  "141": "1e4e2e4f41deeafc",
+  "142": "6974223c9a37e3da",
+  "143": "84dcec23f75e0bee",
+  "144": "cf41edacc5e8b825",
+  "145": "f3b9db49a59ee6a3",
+  "146": "daf1256c49ae96a2",
+  "147": "24f4d46ff29185ac",
+  "148": "2899e6050a384518",
+  "149": "14083351c453e834",
+  "15": "f50364197c9f020a",
+  "150": "84dcec23f75e0bee",
+  "151": "c3c303282591905f",
+  "152": "50757228a2a5fb19",
+  "153": "3339571d29119db8",
+  "154": "6d6ceff5d4acb84c",
+  "155": "84dcec23f75e0bee",
+  "156": "3b2facae314d127f",
+  "157": "327098d471a8cc07",
+  "158": "8509b12d889b6911",
+  "159": "71d9e6465a1997ad",
+  "16": "b2880f52ee945062",
+  "160": "8273ce5869c970a8",
+  "161": "26468475fb6fe715",
+  "162": "0f9da587b506dfa1",
+  "163": "d9e51d33b1dc58dc",
+  "164": "17cf69eb4e1427e1",
+  "165": "f0715128bf3c42f6",
+  "166": "614add64fef40448",
+  "167": "7fe06c65b023409b",
+  "168": "a3076a42741405d7",
+  "169": "576f825694ed7c24",
+  "17": "70bdc45e823b5fbd",
+  "170": "14ea3701ddd3cd46",
+  "171": "4a9f7a49a1e1cc60",
+  "172": "a96b97eed4ebeb71",
+  "173": "5851bd227e02d1df",
+  "174": "84dcec23f75e0bee",
+  "175": "7e324ea39fd21195",
+  "176": "779cd46f281700b4",
+  "177": "1f0b47695baed5da",
+  "178": "ea15f4b88990d0a0",
+  "179": "8167ef71034e9067",
+  "18": "3eac01b1dd89dc16",
+  "180": "197d1879e26916f2",
+  "181": "34d2460b1c4bfdbc",
+  "182": "84dcec23f75e0bee",
+  "183": "9ad0a0aa6a765ffe",
+  "184": "8b4ca3d75558ac9c",
+  "185": "01497116925e4b37",
+  "186": "1265d4e1358b2b4c",
+  "187": "84dcec23f75e0bee",
+  "188": "84dcec23f75e0bee",
+  "189": "f2108173c08baec8",
+  "19": "bf47a3fdaada276b",
+  "190": "3190dd508f49640a",
+  "191": "84dcec23f75e0bee",
+  "192": "01024e2478e108a6",
+  "193": "48e6eba1b4159500",
+  "194": "5a1ec9186634d9c1",
+  "195": "82686f01eaba8657",
+  "196": "4b2507f17c3f5c3f",
+  "197": "e557870a48b4f3cc",
+  "198": "e82190eed0c36463",
+  "199": "0daf2374475d069a",
+  "2": "8b4ef85198fc9c06",
+  "20": "ced7af7d70e7f3a3",
+  "200": "c8d63fbd8bd3e50a",
+  "201": "233bce8ed6a12022",
+  "202": "8b4927e91b13a27c",
+  "203": "59d38db25da065ac",
+  "204": "46508200400476d9",
+  "205": "07a86db0e54861f9",
+  "206": "10dbc919ae9236b3",
+  "207": "875f595e4b2dcaa7",
+  "208": "fca3131f1c0245c2",
+  "209": "977b5f3b19c9ed35",
+  "21": "a94ed4df7f934f29",
+  "210": "38d8ea6dea8d7fb3",
+  "211": "15cf481480dd99e1",
+  "212": "b3e6c2fddf7f95fe",
+  "213": "7395baeb6d488081",
+  "214": "8384f2219ba6a902",
+  "215": "41ac96df4142ec7c",
+  "216": "03b3131f179a0b4c",
+  "217": "f00cf0d94ae85f5f",
+  "218": "b6c17bc64dc6d52b",
+  "219": "ba6d9e75d892b2ac",
+  "22": "84dcec23f75e0bee",
+  "220": "b76374a0f9e1b2cb",
+  "221": "2ad8219558102c13",
+  "222": "3e6af1966aed9176",
+  "223": "84dcec23f75e0bee",
+  "224": "84dcec23f75e0bee",
+  "225": "1b7ae2b2a196f95e",
+  "226": "df94cec66e677e9e",
+  "227": "00f378c8c6a9134d",
+  "228": "b6920f30061c340b",
+  "229": "5b7b31eb28b2cab4",
+  "23": "0eeadda8442b224c",
+  "230": "825e3f28dc877b1a",
+  "231": "6c3f97755011181d",
+  "232": "120ca64700cd9601",
+  "233": "dc60d32ca8e1ef3d",
+  "234": "86534c45fb323f64",
+  "235": "61b7b9f3193b1f3a",
+  "236": "7fdfec2c0b0eb31f",
+  "237": "c4cff0ca541d7495",
+  "238": "88764c9d11fd8b07",
+  "239": "b0366affcac75c93",
+  "24": "002f93ffbb2e8cdb",
+  "240": "92469ca588ad8f6e",
+  "241": "1e06cb8cd457cb2b",
+  "242": "84dcec23f75e0bee",
+  "243": "c06ff175a4a4291f",
+  "244": "14ab81c2b9d8a288",
+  "245": "709f5bd0c8c29b22",
+  "246": "84dcec23f75e0bee",
+  "247": "94178fe2bfc133ee",
+  "248": "57f789c90fdcf972",
+  "249": "983975f272394a88",
+  "25": "59e9f004f2f2fcc1",
+  "250": "fc7f84f4ef698eb0",
+  "251": "37898bd87e9a932e",
+  "252": "84dcec23f75e0bee",
+  "253": "84dcec23f75e0bee",
+  "254": "68f858ef5234fd1e",
+  "255": "f611e72fc41b415f",
+  "256": "790368c9b0ac0911",
+  "257": "72edc1bc84c0c99b",
+  "258": "1395f11b2a8add26",
+  "259": "84dcec23f75e0bee",
+  "26": "3e6be77839ce687f",
+  "260": "d749a3de4bb0424f",
+  "261": "a76366a8270842c5",
+  "262": "a7f103ae32564c1b",
+  "263": "84dcec23f75e0bee",
+  "264": "84dcec23f75e0bee",
+  "265": "8da4c52acf09779d",
+  "266": "f46b3e1b582714c9",
+  "267": "9f33d433cea96dfc",
+  "268": "081d788505489dc4",
+  "269": "c540d073d57c0ee6",
+  "27": "84dcec23f75e0bee",
+  "270": "39b5bc33e3c54c6a",
+  "271": "cca7eb1c598bd86d",
+  "272": "239df19d301b25a9",
+  "273": "176520bbb260b699",
+  "274": "ec4a02ad3c1fe9a8",
+  "275": "e325383e6d203273",
+  "276": "68ed12be2870a064",
+  "277": "e3c7a7344fa1e590",
+  "278": "41146d39734b96bf",
+  "279": "d9aa50a67909a6a4",
+  "28": "ef5e3d84942996e5",
+  "280": "bb95b5396c7a2565",
+  "281": "35cce66a63317185",
+  "282": "0df482b6a128614b",
+  "283": "3474bbfd660733a5",
+  "284": "aeec77ff52b0973c",
+  "285": "6506ca66d1472deb",
+  "286": "ebe680e5815dab1a",
+  "287": "4dc3070a87535fd6",
+  "288": "34f0c79073734524",
+  "289": "1bf5afe168bb3622",
+  "29": "1dcfd9c353916495",
+  "290": "dcbab1ea472c2586",
+  "291": "84dcec23f75e0bee",
+  "292": "7238fcf398b63760",
+  "293": "84dcec23f75e0bee",
+  "294": "944522aaa08168a1",
+  "295": "84dcec23f75e0bee",
+  "296": "b12846b51580ea0c",
+  "297": "b19efb34f9e7882b",
+  "298": "c78ac8d4fc57331e",
+  "299": "48c01b5e8b77bacd",
+  "3": "84dcec23f75e0bee",
+  "30": "cae488e9e1dd78d4",
+  "300": "84dcec23f75e0bee",
+  "301": "84dcec23f75e0bee",
+  "302": "c03cb3076cd27a34",
+  "303": "d937fe35aaf106b6",
+  "304": "8aace590cca33d34",
+  "305": "d8d2b5412076658d",
+  "306": "43ded923c9139d37",
+  "307": "5f31285cb3527e69",
+  "308": "82ba0512fcef4aa0",
+  "309": "ba23c69ea2a91409",
+  "31": "84dcec23f75e0bee",
+  "310": "190d96e4c78fe689",
+  "311": "8a72293e09a9a84f",
+  "312": "03adbde5647a74e5",
+  "313": "afd74975ad784fbc",
+  "314": "7b65dec8f6d048f4",
+  "315": "d6ebef815b8f74c1",
+  "316": "f0a45d5b181a6589",
+  "317": "84dcec23f75e0bee",
+  "318": "7ca06b2341b3f0ac",
+  "319": "4d1ab68b448765bd",
+  "32": "0770704120239bf4",
+  "320": "84dcec23f75e0bee",
+  "321": "7032640f77a54416",
+  "322": "13e56f76ccd90c02",
+  "323": "463c36e4792cfc1f",
+  "324": "50a2c5871260e62a",
+  "325": "c66f71512c645082",
+  "326": "f934f2fda80073c3",
+  "327": "d1a1d725ed7847ad",
+  "328": "9854da529d6040c6",
+  "329": "ab77b689b25010ea",
+  "33": "2428493176d17384",
+  "330": "d62afaa937c21843",
+  "331": "651f35912f2a1354",
+  "332": "f5f76dade484bf1f",
+  "333": "7991c34259c51de1",
+  "334": "f8f337d9891b690d",
+  "335": "b7fce5d1f119a17e",
+  "336": "c4f87447d803b4a9",
+  "337": "0238576058f19e3c",
+  "338": "d7a800b7acaa7925",
+  "339": "669e3fee76e1437b",
+  "34": "58c8670bc6963ea6",
+  "340": "84dcec23f75e0bee",
+  "341": "b653ca74f1cdf4da",
+  "342": "2a59b165c0f4c349",
+  "343": "5976261cc978f7cc",
+  "344": "ae9fa81502a1e20f",
+  "345": "eb05b3349177699c",
+  "346": "73b6107d05232f30",
+  "347": "6fd543f2b4063928",
+  "348": "ab468a6db512b6ce",
+  "349": "4d2e1f38bf2b263d",
+  "35": "ff6572b664ba4a72",
+  "350": "eff12d42932cf186",
+  "351": "8bf5cfa9b1c2e1b5",
+  "352": "f926103d41174627",
+  "353": "84dcec23f75e0bee",
+  "354": "74ab4343110d2075",
+  "355": "c008211880663361",
+  "356": "84dcec23f75e0bee",
+  "357": "aaf3564c0859af93",
+  "358": "c29a939548a6efaf",
+  "359": "5d0937946995c914",
+  "36": "316e8aa6d2ea6f29",
+  "360": "b161b11ca6f14a8b",
+  "361": "0c039a5b5d835d1a",
+  "362": "844d0a6f5f8bb565",
+  "363": "3dcc5e521f903018",
+  "364": "5e8373bec8bffe02",
+  "365": "84dcec23f75e0bee",
+  "366": "8385fbc1cb618847",
+  "367": "9593380b4aaa1795",
+  "368": "84dcec23f75e0bee",
+  "369": "dadc12501a59a33f",
+  "37": "e53b74ee157187a1",
+  "370": "76623feff902f489",
+  "371": "345d39424080319e",
+  "372": "af01c36529c1a0eb",
+  "373": "48b8e6deb0986222",
+  "374": "d38b920d0397c64d",
+  "375": "557d5ab298de504e",
+  "376": "fcb95c2db388fffc",
+  "377": "2b706459fdd975ce",
+  "378": "0cc65ece406818b2",
+  "379": "53884961c229616d",
+  "38": "a738c54f9ecdd190",
+  "380": "03b83d3ae17370ac",
+  "381": "8a2e2a5a52246619",
+  "382": "6b1917c9fd57904e",
+  "383": "b71292b1c622349f",
+  "384": "52724c879c007bf7",
+  "385": "1fd3c627d2b33ef3",
+  "386": "f03edf3578a4c2d1",
+  "387": "37836785a9c64b1f",
+  "388": "f89c48cbd4b657e1",
+  "389": "46837a074e89d88e",
+  "39": "185302ca212ec89b",
+  "390": "84dcec23f75e0bee",
+  "391": "92d9cb3127ef7643",
+  "392": "01ce434f6f276145",
+  "393": "e65029f0a1b4a018",
+  "394": "69cca5f9f6880817",
+  "395": "776509eee44d1722",
+  "396": "049976a3b70c388e",
+  "397": "c0d29ee93db633c9",
+  "398": "8164f7921ff6605b",
+  "399": "d25f9dba610980a3",
+  "4": "6915eb5ce1864508",
+  "40": "7661723fd66946e7",
+  "400": "d0608a1bc997e79e",
+  "401": "84dcec23f75e0bee",
+  "402": "0c675c0331006dc1",
+  "403": "48ffadb47e85ea7e",
+  "404": "4e4cd7857e4c9db7",
+  "405": "84dcec23f75e0bee",
+  "406": "c4190729a871e2c2",
+  "407": "402ad6d7d20b5333",
+  "408": "cce0ff3d445dc1bd",
+  "409": "41756fd3c6f41994",
+  "41": "69b38bab3394711b",
+  "410": "d4fc251bf641ba0f",
+  "411": "84dcec23f75e0bee",
+  "412": "6623c6df75de6a70",
+  "413": "84dcec23f75e0bee",
+  "414": "da83ce18892ff10e",
+  "415": "171410359f977841",
+  "416": "84dcec23f75e0bee",
+  "417": "12f9856a542750b6",
+  "418": "84dcec23f75e0bee",
+  "419": "15d24ffc17c251ca",
+  "42": "1c073a17faebe548",
+  "420": "cd8f545e28f5fd18",
+  "421": "734d55a7d521e903",
+  "422": "238c8c22b0ef3682",
+  "423": "4f9bac1743aa3b1a",
+  "424": "2c434c976884dddd",
+  "425": "81195f494a151aca",
+  "426": "5a8a551985040e90",
+  "427": "696c049d89d37d5d",
+  "428": "42e22da3aadd2711",
+  "429": "500558ed4596812c",
+  "43": "585696e0f3ddc641",
+  "430": "005ca4ee604852c3",
+  "431": "e54bf4ddcc8107f2",
+  "432": "cfd5437c895e8e6a",
+  "433": "00b304e1fe9b3f39",
+  "434": "cf9984554f36ddff",
+  "435": "0e13b2bf35da5ee2",
+  "436": "0ba7638692598fe8",
+  "437": "f08ff4501a47eedb",
+  "438": "b239b5e20a54a718",
+  "439": "68e6c81a08b12981",
+  "44": "926d41bdbd51f209",
+  "440": "aca99e2591fb6434",
+  "441": "bd15d271fbc38a79",
+  "442": "72b9c00774661a59",
+  "443": "78d315992a407126",
+  "444": "1b76455e3922849f",
+  "445": "2ebf04ba9e5c8797",
+  "446": "84dcec23f75e0bee",
+  "447": "30997147bdc85886",
+  "448": "84dcec23f75e0bee",
+  "449": "dbbf2b99c90b598a",
+  "45": "5bf4f1852ee9afae",
+  "450": "a30a760b70452082",
+  "451": "1f9945e8588b8571",
+  "452": "feff5e1d11bcc8af",
+  "453": "5179c8e67401ca90",
+  "454": "4ebfda2fc1e4bb6b",
+  "455": "924e2ffe715d01ac",
+  "456": "6e6bb9660dd9cfe9",
+  "457": "d96249381740d067",
+  "458": "42c49c7f2a652c26",
+  "459": "77c6e7c84c8d7497",
+  "46": "9912db909f0a7338",
+  "460": "27aeeb71fa2df2f8",
+  "461": "f7bf506972a6bf73",
+  "462": "c053896aabc819f4",
+  "463": "9476c59b5d1705e6",
+  "464": "946e5bd995171236",
+  "465": "8edfb3d82de21e4b",
+  "466": "6fbed29828b34ff9",
+  "467": "73483fa41c939c69",
+  "468": "84dcec23f75e0bee",
+  "469": "4fcd9f920c414b6b",
+  "47": "37a03e13d41d0883",
+  "470": "328b5f76d1138f63",
+  "471": "7df9399721600347",
+  "472": "66ed1e718baf27c8",
+  "473": "59d31f7b040f819a",
+  "474": "802fb95c0a98cdf4",
+  "475": "209e29c3f0b67bf0",
+  "476": "eb9d0ee88a444ccf",
+  "477": "46aec3220ddf45b4",
+  "478": "2bd8eee75a112cee",
+  "479": "f68e69fb2a3ddcf1",
+  "48": "c338f1d5fba9f129",
+  "480": "4eda0e7d50bfb1b0",
+  "481": "916c5d86f97e420e",
+  "482": "54eb0d1e7da7d4af",
+  "483": "9e7db9ac94f9a26e",
+  "484": "6497f9a963d2dd9f",
+  "485": "56b8bdc976fb456b",
+  "486": "84dcec23f75e0bee",
+  "487": "48ab3b39fe7d3c76",
+  "488": "48e09db3b232a500",
+  "489": "61656b7d5af085cc",
+  "49": "7cddd22ee97da854",
+  "490": "bea2a6593b200880",
+  "491": "02389a7ba5106f06",
+  "492": "0cb0106306c74199",
+  "493": "bc74e5ebaefd242b",
+  "494": "f98787731b0bb119",
+  "495": "993dea051de7830d",
+  "496": "7ed6d25114d0c95a",
+  "497": "6220397354f35a3b",
+  "498": "922dd8f97c0766fa",
+  "499": "ac5907132c033e78",
+  "5": "84dcec23f75e0bee",
+  "50": "10b9f7ce044df4f7",
+  "500": "9db131299eb54e90",
+  "51": "2dc0eb52059af4c0",
+  "52": "26d94620bd8c6d64",
+  "53": "c173a8cb30d66a83",
+  "54": "5a2eebc6553ac953",
+  "55": "ac1acc222831d22d",
+  "56": "8f791819905292dc",
+  "57": "e81fcde922773b43",
+  "58": "da1e00f0a396cb1a",
+  "59": "5aa78c73791c5711",
+  "6": "08d7cecccfcfaad0",
+  "60": "dc5140a0d9710cdc",
+  "61": "f8e7bf108a5fbafe",
+  "62": "6879eb6297ec9b16",
+  "63": "6c78fdb02087474e",
+  "64": "f4d4fb7129c2d395",
+  "65": "20db46a0addc0e1f",
+  "66": "6e7c14494928170a",
+  "67": "93dc7c935b65aa95",
+  "68": "3b83d74a54c612b6",
+  "69": "1fecf56bab404939",
+  "7": "50f6e2dd8ccb7b45",
+  "70": "84dcec23f75e0bee",
+  "71": "5ec31a92cd55950f",
+  "72": "84dcec23f75e0bee",
+  "73": "0efc1dae2c701d28",
+  "74": "1d45f441389046b5",
+  "75": "ee6ecc312b73eca4",
+  "76": "7a23f728edf1a6cd",
+  "77": "84dcec23f75e0bee",
+  "78": "0712ca467bb4f924",
+  "79": "f670b4ebe902646a",
+  "8": "97e22b9c3a2cebab",
+  "80": "f5c9cd9eeb7b951f",
+  "81": "bd09f160ae4aa708",
+  "82": "7041d1b67abc80eb",
+  "83": "1b9ab56146973109",
+  "84": "006334799a4d31e9",
+  "85": "80e712cd11269923",
+  "86": "7fb83186034b6b5d",
+  "87": "84dcec23f75e0bee",
+  "88": "88bd5f58811ce996",
+  "89": "84dcec23f75e0bee",
+  "9": "27378dd3a4c249df",
+  "90": "e0263a6b16afcedd",
+  "91": "c674a940cc90564c",
+  "92": "6bfb6357c4363f95",
+  "93": "1e365ce426d1b6e6",
+  "94": "6780aa6446226365",
+  "95": "5d31e936babaef72",
+  "96": "84dcec23f75e0bee",
+  "97": "84dcec23f75e0bee",
+  "98": "5def5cf5bed47ea0",
+  "99": "94ab0df3fde44ae3",
+}
+`;
+
+exports[`caracterização — updateProfile > cenários legíveis 1`] = `
+[
+  {
+    "body": {
+      "brokerage": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "cpf": 123,
+      "occupation": "Engenheira",
+      "role": "ADMIN",
+      "salary": "5000",
+    },
+    "cpfOwner": "reject",
+    "out": {
+      "body": null,
+      "calls": {},
+      "cookies": [],
+      "next": [
+        [
+          {
+            "message": "cpf.replace is not a function",
+            "name": "TypeError",
+          },
+        ],
+      ],
+      "status": 200,
+    },
+    "seed": 1,
+    "updated": "reject",
+  },
+  {
+    "body": {
+      "cep": "",
+      "city": "São Paulo",
+      "email": "novo@x.com",
+      "street": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+    },
+    "cpfOwner": {
+      "_id": "u1",
+    },
+    "out": {
+      "body": {
+        "message": "Endereço inválido.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "status": 400,
+    },
+    "seed": 51,
+    "updated": "reject",
+  },
+  {
+    "body": {
+      "bannerColor": "",
+      "cpf": "12345678900",
+      "mfaEnabled": false,
+      "neighborhood": "",
+      "occupation": "",
+      "password": "hack",
+      "phone": "",
+      "street": "",
+      "validUntil": "2099-01-01",
+    },
+    "cpfOwner": {
+      "_id": "u2",
+    },
+    "out": {
+      "body": {
+        "message": "CPF inválido.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "status": 400,
+    },
+    "seed": 101,
+    "updated": "stored",
+  },
+  {
+    "body": {
+      "bannerColor": "gold",
+      "brokerage": "  XP  ",
+      "resetPasswordToken": "t",
+      "salary": "  7  ",
+      "street": "",
+    },
+    "cpfOwner": null,
+    "out": {
+      "body": {
+        "message": "Perfil atualizado.",
+        "user": {
+          "avatar": "data:a",
+          "bannerColor": "ocean",
+          "birthDate": "dec(b1)",
+          "brokerage": "XP",
+          "cep": "01001",
+          "city": "C",
+          "cpf": "dec(c1)",
+          "email": "ana@x.com",
+          "hasSeenTutorial": true,
+          "id": "u1",
+          "marketingOptIn": false,
+          "mfaEnabled": true,
+          "name": "Ana",
+          "neighborhood": "N",
+          "occupation": "dev",
+          "phone": "119",
+          "plan": "PRO",
+          "role": "USER",
+          "salary": "dec(s1)",
+          "state": "SP",
+          "street": "R",
+          "subscriptionStatus": "ACTIVE",
+          "validUntil": "__date(2027-01-01T00:00:00.000Z)",
+        },
+      },
+      "calls": {
+        "User.findByIdAndUpdate": [
+          [
+            "u1",
+            {
+              "$set": {
+                "bannerColor": "gold",
+                "brokerage": "XP",
+                "name": "__undef",
+                "occupation": "__undef",
+                "phone": "__undef",
+                "salary": "enc(7)",
+              },
+              "$unset": {
+                "street": 1,
+              },
+            },
+            {
+              "new": true,
+            },
+          ],
+        ],
+        "invalidateUser": [
+          [
+            "u1",
+          ],
+        ],
+      },
+      "cookies": [],
+      "next": [],
+      "status": 200,
+    },
+    "seed": 151,
+    "updated": "stored",
+  },
+  {
+    "body": {
+      "neighborhood": 7,
+      "street": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "subscriptionStatus": "ACTIVE",
+    },
+    "cpfOwner": {
+      "_id": "u1",
+    },
+    "out": {
+      "body": {
+        "message": "Endereço inválido.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "status": 400,
+    },
+    "seed": 201,
+    "updated": "stored",
+  },
+  {
+    "body": {
+      "avatar": "data:x",
+      "cep": "",
+      "city": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "cpf": "12345678900",
+      "street": "",
+      "validUntil": "2099-01-01",
+    },
+    "cpfOwner": {
+      "_id": "u2",
+    },
+    "out": {
+      "body": {
+        "message": "Endereço inválido.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "status": 400,
+    },
+    "seed": 251,
+    "updated": "reject",
+  },
+  {
+    "body": {
+      "avatar": "data:x",
+      "bannerColor": null,
+      "birthDate": "1990-05-10",
+      "cpf": 123,
+      "name": "Ana Souza",
+      "phone": "11999990000",
+      "state": "",
+    },
+    "cpfOwner": {
+      "_id": "u2",
+    },
+    "out": {
+      "body": null,
+      "calls": {},
+      "cookies": [],
+      "next": [
+        [
+          {
+            "message": "cpf.replace is not a function",
+            "name": "TypeError",
+          },
+        ],
+      ],
+      "status": 200,
+    },
+    "seed": 301,
+    "updated": "stored",
+  },
+  {
+    "body": {
+      "activeWalletId": "w9",
+      "brokerage": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "cep": 5,
+      "cpf": "529.982.247-25",
+      "cpfHash": "forjado",
+      "name": "",
+      "resetPasswordToken": "t",
+      "street": "",
+    },
+    "cpfOwner": "reject",
+    "out": {
+      "body": {
+        "message": "Corretora inválida.",
+      },
+      "calls": {},
+      "cookies": [],
+      "next": [],
+      "status": 400,
+    },
+    "seed": 351,
+    "updated": "empty",
+  },
+]
+`;
+
+exports[`caracterização — updateProfile > hash por cenário 1`] = `
+{
+  "1": "34726dcc5454ad6e",
+  "10": "60a5ee5b921f372d",
+  "100": "0575eb3da4261682",
+  "101": "fe1156591d9cfc9f",
+  "102": "34726dcc5454ad6e",
+  "103": "768773a10a3bbbeb",
+  "104": "f47cca363ad6d075",
+  "105": "f47cca363ad6d075",
+  "106": "822f70d449a1d666",
+  "107": "f47cca363ad6d075",
+  "108": "60a5ee5b921f372d",
+  "109": "6d6d547c5ec86d9b",
+  "11": "fe1156591d9cfc9f",
+  "110": "aac13f6b223f3968",
+  "111": "f47cca363ad6d075",
+  "112": "ef7a6608bc00f405",
+  "113": "f32cfe500afd707e",
+  "114": "b09e68e1fb8723fd",
+  "115": "34726dcc5454ad6e",
+  "116": "aac13f6b223f3968",
+  "117": "34726dcc5454ad6e",
+  "118": "768773a10a3bbbeb",
+  "119": "f47cca363ad6d075",
+  "12": "aac13f6b223f3968",
+  "120": "f47cca363ad6d075",
+  "121": "60a5ee5b921f372d",
+  "122": "60a5ee5b921f372d",
+  "123": "885dad43d9446903",
+  "124": "885dad43d9446903",
+  "125": "f47cca363ad6d075",
+  "126": "60a5ee5b921f372d",
+  "127": "c212097cc896a488",
+  "128": "090e1299c2e9f475",
+  "129": "f47cca363ad6d075",
+  "13": "f47cca363ad6d075",
+  "130": "7cc120841fdd8dd8",
+  "131": "c8ec196df5bf01c4",
+  "132": "60a5ee5b921f372d",
+  "133": "aac13f6b223f3968",
+  "134": "f47cca363ad6d075",
+  "135": "f47cca363ad6d075",
+  "136": "f47cca363ad6d075",
+  "137": "0cb8b9e8ed325bf9",
+  "138": "aaa1108d1668ab96",
+  "139": "60a5ee5b921f372d",
+  "14": "cac4f40e4884245f",
+  "140": "f47cca363ad6d075",
+  "141": "885dad43d9446903",
+  "142": "8f25e2585719f729",
+  "143": "f47cca363ad6d075",
+  "144": "91f1a16a89ea695d",
+  "145": "34726dcc5454ad6e",
+  "146": "4981bf605547e027",
+  "147": "ead4b5efd48be2be",
+  "148": "49e284bbd2d068ce",
+  "149": "34726dcc5454ad6e",
+  "15": "45db6d38bb608474",
+  "150": "02fff8dfb30ddc01",
+  "151": "a7cbf1ef10ba8987",
+  "152": "548f575df916a4d7",
+  "153": "91f1a16a89ea695d",
+  "154": "60a5ee5b921f372d",
+  "155": "b09ce38a99d64489",
+  "156": "34726dcc5454ad6e",
+  "157": "8a98cb1b2e5897d1",
+  "158": "60a5ee5b921f372d",
+  "159": "f47cca363ad6d075",
+  "16": "f76aa0677a89e83a",
+  "160": "34726dcc5454ad6e",
+  "161": "f47cca363ad6d075",
+  "162": "60a5ee5b921f372d",
+  "163": "60a5ee5b921f372d",
+  "164": "60a5ee5b921f372d",
+  "165": "3e4c97f0d5d2bd41",
+  "166": "f47cca363ad6d075",
+  "167": "19b76300e06444cf",
+  "168": "fe1156591d9cfc9f",
+  "169": "a5695802c4605180",
+  "17": "768773a10a3bbbeb",
+  "170": "1aeecf921c84fa63",
+  "171": "f47cca363ad6d075",
+  "172": "768773a10a3bbbeb",
+  "173": "885dad43d9446903",
+  "174": "f47cca363ad6d075",
+  "175": "f47cca363ad6d075",
+  "176": "83d7d376962e1726",
+  "177": "aac13f6b223f3968",
+  "178": "34726dcc5454ad6e",
+  "179": "768773a10a3bbbeb",
+  "18": "60a5ee5b921f372d",
+  "180": "fe1156591d9cfc9f",
+  "181": "4da26aff71b4a2ec",
+  "182": "885dad43d9446903",
+  "183": "f47cca363ad6d075",
+  "184": "e57ab7a44e98bf19",
+  "185": "f47cca363ad6d075",
+  "186": "f47cca363ad6d075",
+  "187": "c5b3b50173496e16",
+  "188": "768773a10a3bbbeb",
+  "189": "5d124cab9646cfb4",
+  "19": "768773a10a3bbbeb",
+  "190": "f47cca363ad6d075",
+  "191": "fe1156591d9cfc9f",
+  "192": "fe1156591d9cfc9f",
+  "193": "34726dcc5454ad6e",
+  "194": "34726dcc5454ad6e",
+  "195": "768773a10a3bbbeb",
+  "196": "60a5ee5b921f372d",
+  "197": "f47cca363ad6d075",
+  "198": "f47cca363ad6d075",
+  "199": "768773a10a3bbbeb",
+  "2": "afb1e55a1a077831",
+  "20": "60a5ee5b921f372d",
+  "200": "f47cca363ad6d075",
+  "201": "f47cca363ad6d075",
+  "202": "60a5ee5b921f372d",
+  "203": "f47cca363ad6d075",
+  "204": "768773a10a3bbbeb",
+  "205": "60a5ee5b921f372d",
+  "206": "f47cca363ad6d075",
+  "207": "f47cca363ad6d075",
+  "208": "f47cca363ad6d075",
+  "209": "f47cca363ad6d075",
+  "21": "768773a10a3bbbeb",
+  "210": "f47cca363ad6d075",
+  "211": "aac13f6b223f3968",
+  "212": "fe1156591d9cfc9f",
+  "213": "fe1156591d9cfc9f",
+  "214": "34726dcc5454ad6e",
+  "215": "fe1156591d9cfc9f",
+  "216": "f5fe30c15bce5ff3",
+  "217": "fe1156591d9cfc9f",
+  "218": "ef7a6608bc00f405",
+  "219": "c079fe9784efe5f0",
+  "22": "60a5ee5b921f372d",
+  "220": "60a5ee5b921f372d",
+  "221": "f47cca363ad6d075",
+  "222": "16a4ecca4fbbd773",
+  "223": "34726dcc5454ad6e",
+  "224": "768773a10a3bbbeb",
+  "225": "f47cca363ad6d075",
+  "226": "f47cca363ad6d075",
+  "227": "f47cca363ad6d075",
+  "228": "f47cca363ad6d075",
+  "229": "768773a10a3bbbeb",
+  "23": "f47cca363ad6d075",
+  "230": "f47cca363ad6d075",
+  "231": "f47cca363ad6d075",
+  "232": "f47cca363ad6d075",
+  "233": "9a6d5c1473671d4b",
+  "234": "f47cca363ad6d075",
+  "235": "f47cca363ad6d075",
+  "236": "b504cbfa12b5baf1",
+  "237": "f47cca363ad6d075",
+  "238": "f47cca363ad6d075",
+  "239": "f47cca363ad6d075",
+  "24": "91f1a16a89ea695d",
+  "240": "60a5ee5b921f372d",
+  "241": "885dad43d9446903",
+  "242": "60a5ee5b921f372d",
+  "243": "f47cca363ad6d075",
+  "244": "60a5ee5b921f372d",
+  "245": "1e26ee005c653247",
+  "246": "f47cca363ad6d075",
+  "247": "fe1156591d9cfc9f",
+  "248": "60a5ee5b921f372d",
+  "249": "fe1156591d9cfc9f",
+  "25": "4618629d1dbaafb1",
+  "250": "f47cca363ad6d075",
+  "251": "f47cca363ad6d075",
+  "252": "aef19cecd74e72e0",
+  "253": "fe1156591d9cfc9f",
+  "254": "768773a10a3bbbeb",
+  "255": "f47cca363ad6d075",
+  "256": "fe1156591d9cfc9f",
+  "257": "f47cca363ad6d075",
+  "258": "16135c4b1b42bb0c",
+  "259": "e1fb9e3ee5e69c34",
+  "26": "f47cca363ad6d075",
+  "260": "768773a10a3bbbeb",
+  "261": "ef7a6608bc00f405",
+  "262": "f47cca363ad6d075",
+  "263": "f47cca363ad6d075",
+  "264": "4a5b5f1996bec4a5",
+  "265": "768773a10a3bbbeb",
+  "266": "83552ec73c53afea",
+  "267": "2882965930f1660c",
+  "268": "f47cca363ad6d075",
+  "269": "7666ae4429a44889",
+  "27": "656e453afde1a371",
+  "270": "a66e455ba9ea4508",
+  "271": "aac13f6b223f3968",
+  "272": "f47cca363ad6d075",
+  "273": "d97f2467f933260f",
+  "274": "ef7a6608bc00f405",
+  "275": "885dad43d9446903",
+  "276": "885dad43d9446903",
+  "277": "869312f9005a5d1d",
+  "278": "768773a10a3bbbeb",
+  "279": "3e32658c54b422a4",
+  "28": "f47cca363ad6d075",
+  "280": "768773a10a3bbbeb",
+  "281": "76618282b93b4628",
+  "282": "f47cca363ad6d075",
+  "283": "768773a10a3bbbeb",
+  "284": "34726dcc5454ad6e",
+  "285": "3657dcaf6d959995",
+  "286": "f47cca363ad6d075",
+  "287": "768773a10a3bbbeb",
+  "288": "aac13f6b223f3968",
+  "289": "91f1a16a89ea695d",
+  "29": "768773a10a3bbbeb",
+  "290": "34726dcc5454ad6e",
+  "291": "aacdd8a676ea953e",
+  "292": "f47cca363ad6d075",
+  "293": "f47cca363ad6d075",
+  "294": "60a5ee5b921f372d",
+  "295": "f47cca363ad6d075",
+  "296": "885dad43d9446903",
+  "297": "cd90ba8971aebca7",
+  "298": "01c2dc5d692eb216",
+  "299": "a8361a90e432185d",
+  "3": "768773a10a3bbbeb",
+  "30": "f47cca363ad6d075",
+  "300": "885dad43d9446903",
+  "301": "34726dcc5454ad6e",
+  "302": "f47cca363ad6d075",
+  "303": "60a5ee5b921f372d",
+  "304": "768773a10a3bbbeb",
+  "305": "60a5ee5b921f372d",
+  "306": "f47cca363ad6d075",
+  "307": "fe1156591d9cfc9f",
+  "308": "aac13f6b223f3968",
+  "309": "f47cca363ad6d075",
+  "31": "60a5ee5b921f372d",
+  "310": "768773a10a3bbbeb",
+  "311": "040316ade3d3c0ae",
+  "312": "60a5ee5b921f372d",
+  "313": "f47cca363ad6d075",
+  "314": "f47cca363ad6d075",
+  "315": "b121b8bdbd1bd1f5",
+  "316": "60a5ee5b921f372d",
+  "317": "f47cca363ad6d075",
+  "318": "a91cf0d4d6710713",
+  "319": "2aa8de700c6b7ea3",
+  "32": "768773a10a3bbbeb",
+  "320": "60a5ee5b921f372d",
+  "321": "f47cca363ad6d075",
+  "322": "ef7a6608bc00f405",
+  "323": "aac13f6b223f3968",
+  "324": "f25532ba7d386895",
+  "325": "aac13f6b223f3968",
+  "326": "f47cca363ad6d075",
+  "327": "768773a10a3bbbeb",
+  "328": "b3543caf3e1b7986",
+  "329": "0dedada572f8ce37",
+  "33": "f47cca363ad6d075",
+  "330": "fe1156591d9cfc9f",
+  "331": "fe1156591d9cfc9f",
+  "332": "f47cca363ad6d075",
+  "333": "60a5ee5b921f372d",
+  "334": "aac13f6b223f3968",
+  "335": "f47cca363ad6d075",
+  "336": "f47cca363ad6d075",
+  "337": "91dca67b5efbe8c6",
+  "338": "f47cca363ad6d075",
+  "339": "f47cca363ad6d075",
+  "34": "1464b55c48efba19",
+  "340": "60a5ee5b921f372d",
+  "341": "768773a10a3bbbeb",
+  "342": "34726dcc5454ad6e",
+  "343": "8149c532d358d413",
+  "344": "0fd08cc6927505c7",
+  "345": "f47cca363ad6d075",
+  "346": "768773a10a3bbbeb",
+  "347": "f47cca363ad6d075",
+  "348": "60a5ee5b921f372d",
+  "349": "f47cca363ad6d075",
+  "35": "f47cca363ad6d075",
+  "350": "f47cca363ad6d075",
+  "351": "aac13f6b223f3968",
+  "352": "fe1156591d9cfc9f",
+  "353": "f5576b7864c276af",
+  "354": "34726dcc5454ad6e",
+  "355": "885dad43d9446903",
+  "356": "f47cca363ad6d075",
+  "357": "f47cca363ad6d075",
+  "358": "a41cb6a622218fa8",
+  "359": "fe1156591d9cfc9f",
+  "36": "f47cca363ad6d075",
+  "360": "faa4c9939814ebe8",
+  "361": "f47cca363ad6d075",
+  "362": "885dad43d9446903",
+  "363": "f47cca363ad6d075",
+  "364": "f47cca363ad6d075",
+  "365": "60a5ee5b921f372d",
+  "366": "f47cca363ad6d075",
+  "367": "60a5ee5b921f372d",
+  "368": "fe1156591d9cfc9f",
+  "369": "183e62910a9f7702",
+  "37": "aac13f6b223f3968",
+  "370": "f47cca363ad6d075",
+  "371": "34726dcc5454ad6e",
+  "372": "87c07d6c2636e026",
+  "373": "8c9d2c286a30cf8e",
+  "374": "60a5ee5b921f372d",
+  "375": "f26a9fbf534df3df",
+  "376": "60a5ee5b921f372d",
+  "377": "f47cca363ad6d075",
+  "378": "f47cca363ad6d075",
+  "379": "231193d54f43b35c",
+  "38": "f47cca363ad6d075",
+  "380": "807a7fe2f2b0bb20",
+  "381": "ef7a6608bc00f405",
+  "382": "34726dcc5454ad6e",
+  "383": "f47cca363ad6d075",
+  "384": "95ce530ca9ec96da",
+  "385": "f47cca363ad6d075",
+  "386": "f47cca363ad6d075",
+  "387": "f47cca363ad6d075",
+  "388": "34726dcc5454ad6e",
+  "389": "aac13f6b223f3968",
+  "39": "f47cca363ad6d075",
+  "390": "60a5ee5b921f372d",
+  "391": "34726dcc5454ad6e",
+  "392": "8f29fc210fce17d2",
+  "393": "fe1156591d9cfc9f",
+  "394": "f47cca363ad6d075",
+  "395": "f47cca363ad6d075",
+  "396": "a159dafd62aa87f3",
+  "397": "78dd857ee140334d",
+  "398": "fe1156591d9cfc9f",
+  "399": "f47cca363ad6d075",
+  "4": "aac13f6b223f3968",
+  "40": "60a5ee5b921f372d",
+  "400": "60a5ee5b921f372d",
+  "41": "60a5ee5b921f372d",
+  "42": "f47cca363ad6d075",
+  "43": "f47cca363ad6d075",
+  "44": "768773a10a3bbbeb",
+  "45": "f47cca363ad6d075",
+  "46": "f47cca363ad6d075",
+  "47": "fe1156591d9cfc9f",
+  "48": "f47cca363ad6d075",
+  "49": "0282d4c13593de8a",
+  "5": "f47cca363ad6d075",
+  "50": "60a5ee5b921f372d",
+  "51": "f47cca363ad6d075",
+  "52": "a9a59635cfefe274",
+  "53": "aac13f6b223f3968",
+  "54": "60a5ee5b921f372d",
+  "55": "812dff688434356b",
+  "56": "768773a10a3bbbeb",
+  "57": "f47cca363ad6d075",
+  "58": "aac13f6b223f3968",
+  "59": "768773a10a3bbbeb",
+  "6": "f47cca363ad6d075",
+  "60": "f47cca363ad6d075",
+  "61": "f47cca363ad6d075",
+  "62": "60a5ee5b921f372d",
+  "63": "60a5ee5b921f372d",
+  "64": "f47cca363ad6d075",
+  "65": "60a5ee5b921f372d",
+  "66": "77f81056f0edd6f3",
+  "67": "768773a10a3bbbeb",
+  "68": "f47cca363ad6d075",
+  "69": "768773a10a3bbbeb",
+  "7": "20d24045a5db888d",
+  "70": "ae51ec3dbdcf5078",
+  "71": "f47cca363ad6d075",
+  "72": "60a5ee5b921f372d",
+  "73": "b7ae2ed803101e47",
+  "74": "34726dcc5454ad6e",
+  "75": "f47cca363ad6d075",
+  "76": "f47cca363ad6d075",
+  "77": "885dad43d9446903",
+  "78": "768773a10a3bbbeb",
+  "79": "768773a10a3bbbeb",
+  "8": "ef7a6608bc00f405",
+  "80": "4fae4320356cfd9e",
+  "81": "f47cca363ad6d075",
+  "82": "fe1156591d9cfc9f",
+  "83": "fe1156591d9cfc9f",
+  "84": "fe1156591d9cfc9f",
+  "85": "f47cca363ad6d075",
+  "86": "50ed7d6b019da094",
+  "87": "f47cca363ad6d075",
+  "88": "60a5ee5b921f372d",
+  "89": "885dad43d9446903",
+  "9": "aac13f6b223f3968",
+  "90": "f47cca363ad6d075",
+  "91": "f47cca363ad6d075",
+  "92": "34726dcc5454ad6e",
+  "93": "f93bb148c29500fe",
+  "94": "5e436c048e3b3b61",
+  "95": "f965f2b825c04e0c",
+  "96": "f47cca363ad6d075",
+  "97": "f47cca363ad6d075",
+  "98": "768773a10a3bbbeb",
+  "99": "fe1156591d9cfc9f",
+}
+`;
