@@ -136,13 +136,15 @@ describe('EquitySummary — caracterização', () => {
         expect(text('Lucro Total')).toContain('Estimado');
     });
 
-    it('modo privacidade mascara valores e percentuais, mas não o múltiplo', () => {
+    it('modo privacidade mascara valores, percentuais e o múltiplo bruto (antes o múltiplo vazava)', () => {
         setup({}, { isPrivacyMode: true });
         expect(text('Patrimônio Líquido')).not.toContain('22.149');
         expect(text('Patrimônio Líquido')).toContain('+•••%');
         expect(text('Lucro Total')).toContain('•••%');
         expect(text('Lucro Total')).not.toContain('300,84');
-        expect(text('Valor Aplicado')).toContain('1.01x');
+        // Múltiplo × aplicado (este último mascarado) reconstitui o patrimônio: é dado, não enfeite.
+        expect(text('Valor Aplicado')).not.toContain('1.01x');
+        expect(text('Valor Aplicado')).toContain('•••x');
         expect(text('Prov. Acumulados')).not.toContain('7,87');
     });
 

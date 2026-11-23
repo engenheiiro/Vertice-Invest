@@ -80,7 +80,7 @@ export const EquitySummary: React.FC<EquitySummaryProps> = () => {
                 value={money(kpis.totalInvested)}
                 subLabel="Patrimônio + Proventos"
                 subValue={money(view.totalGross)}
-                tag={<><Activity size={11} /> {view.grossMultiple.toFixed(2)}x</>}
+                tag={<><Activity size={11} /> {fixed(view.grossMultiple)}x</>}
                 tagClass="bg-purple-500/10 text-purple-400 border-purple-500/20"
             />
 
