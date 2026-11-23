@@ -1,0 +1,1536 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`caracterização — loadSnapshotContext > cenários de PRNG 1`] = `
+{
+  "1": "day 44438fd6a1f60256",
+  "10": "dayNoOpts de4f7ac2fcf3f36f",
+  "100": "day 84619aa11f1b372b",
+  "101": "emptyOpts bbbc34ffa214d469",
+  "102": "dayNoOpts 94996d66a0da69e0",
+  "103": "day 5f48f5842e7e3e7b",
+  "104": "none 7db8507e7aa36085",
+  "105": "emptyOpts 6363137f769259b0",
+  "106": "ensure 8a5962b4b9e28d9c",
+  "107": "none 17dd774601d0f228",
+  "108": "none b0dbac3909643095",
+  "109": "ensure 3c3d0188bd0d695e",
+  "11": "none c5bf1c1be6e77336",
+  "110": "noEnsure 7cd4fc9451ae9e6b",
+  "111": "none c98c0a8a8d53566c",
+  "112": "dayNoOpts acb67f70697ae503",
+  "113": "dayNoOpts c4f00e04ab996d70",
+  "114": "none c1e08ff58b7e4997",
+  "115": "ensure c9e64299e35e9719",
+  "116": "day ce08e1919cb1b7a3",
+  "117": "ensure 41c1f0d1a8241da7",
+  "118": "day f8d9b855a3588229",
+  "119": "day 4cd7cc89805d48dd",
+  "12": "day 23847d55d4492dc0",
+  "120": "dayNoOpts 39f99cd5bffa3ebf",
+  "121": "dayNoOpts 23eefa83d24fa1cd",
+  "122": "day 6049fa2453d2a1a0",
+  "123": "ensure d14b11be2fc74151",
+  "124": "dayNoOpts 9bcee872ee392f2c",
+  "125": "noEnsure 8c1eb96dc4ea8bb8",
+  "126": "dayNoOpts d2a106c2ac882a77",
+  "127": "noEnsure 40aa562fc06a5ac0",
+  "128": "noEnsure 92ede5026f26d36b",
+  "129": "none 6ef372faf99ae386",
+  "13": "ensure e68b64296cf19642",
+  "130": "emptyOpts 3bbf86eb7a470d48",
+  "131": "none 20055a412ffd8643",
+  "132": "ensure d66159b15d80698b",
+  "133": "noEnsure 7e68d892dd19eedb",
+  "134": "emptyOpts d5e8e022394fd075",
+  "135": "none b1f25574b3cf4e9e",
+  "136": "dayNoOpts 72272004589cc8dd",
+  "137": "day 41c92cc6065750f2",
+  "138": "dayNoOpts f55c68a7aee9a41d",
+  "139": "dayNoOpts b99d1abd9e0f3c6d",
+  "14": "noEnsure ed0342d84a96bd2a",
+  "140": "none bfcdb6acd7039b22",
+  "141": "emptyOpts 43244f001b983953",
+  "142": "day 1257e40666c3ee93",
+  "143": "ensure 02c7acc24ce2bbda",
+  "144": "day b9c49e1a8766b91f",
+  "145": "ensure 09cf273db26a51ff",
+  "146": "none 1153cc7dae03db30",
+  "147": "none d742b6dcf7ef1d62",
+  "148": "dayNoOpts 7c75685f75764b32",
+  "149": "dayNoOpts dcfaedfa1cf47d6e",
+  "15": "none dc798caebdc83e51",
+  "150": "none 5b1e7cce2a775153",
+  "151": "dayNoOpts dddafbfd0560f344",
+  "152": "emptyOpts e2777d8c398408b1",
+  "153": "day 3f171b611403a891",
+  "154": "emptyOpts b9c047e8903f806d",
+  "155": "none 98886eccca1e35ae",
+  "156": "day ff57d917596bea2b",
+  "157": "day 71bdfec9d03000d5",
+  "158": "ensure 7823c81a733dbbe7",
+  "159": "dayNoOpts fba36821af64ec56",
+  "16": "day adba78991393b194",
+  "160": "ensure a2439244cc7e9fef",
+  "161": "none 878d199984c07de9",
+  "162": "noEnsure c60795846969fdc5",
+  "163": "day 5da2bc4b94e26e9d",
+  "164": "none 73e57ff661d7a909",
+  "165": "noEnsure 8b3653b9abb65b91",
+  "166": "day 644c000fac55178a",
+  "167": "day 7d0326ab6d3a926f",
+  "168": "day a8d95333c921f8c3",
+  "169": "noEnsure a42d79adaf616c82",
+  "17": "noEnsure 1aa2d02b0690beb2",
+  "170": "day 442a3a465d71e462",
+  "171": "ensure 68caa7637e16fd23",
+  "172": "ensure 0e1c0f8fe70ac1ef",
+  "173": "ensure 474eee09d07d131f",
+  "174": "none 69c5258bf2f33f1c",
+  "175": "emptyOpts 0a0e441dbd16ed00",
+  "176": "day ade98113c954532b",
+  "177": "noEnsure 24e1f32e582601d5",
+  "178": "dayNoOpts 7dc5ed85d5e5963f",
+  "179": "none d8c82f5750b69750",
+  "18": "noEnsure 6dee4394ce37b6ea",
+  "180": "ensure 0822e29ca96e042d",
+  "181": "none 7ce0f92d787faaf9",
+  "182": "noEnsure 49fc2cedaafb5e55",
+  "183": "emptyOpts 4089b109ffbee1ce",
+  "184": "day f00ee425b2566281",
+  "185": "none ce07c106ae0477c4",
+  "186": "ensure 2705a153db6bd770",
+  "187": "emptyOpts 55a03fdc0dca1be3",
+  "188": "ensure 24c295a353b139df",
+  "189": "none a43bf52835d09fd5",
+  "19": "ensure e737bbdda18e8426",
+  "190": "dayNoOpts 4405ee34d30acb7e",
+  "191": "none 106ef38f1018e2a3",
+  "192": "day 70dde2611313d680",
+  "193": "noEnsure 1c5395abfea367b5",
+  "194": "noEnsure 02156fc21d180ad8",
+  "195": "ensure aca9be30c85d21a6",
+  "196": "none 3c5706832f7c1779",
+  "197": "day 46b95ee839c4a7ca",
+  "198": "none 47ffabed546163e5",
+  "199": "dayNoOpts 234ff8d5363797b6",
+  "2": "none ea9959090af7f1ce",
+  "20": "day bb9c2aa2be4e7f2e",
+  "200": "dayNoOpts 02ea386d437846b1",
+  "201": "day 44b620672914bf11",
+  "202": "none 8365ceb65b91a996",
+  "203": "noEnsure 88c377a375efb6df",
+  "204": "dayNoOpts 88cd54687a2f8f8c",
+  "205": "noEnsure 7319db4cde685f73",
+  "206": "none 0863cec19b7444e1",
+  "207": "dayNoOpts 49015a10231ad8f3",
+  "208": "none 8dda461e5bad0c8d",
+  "209": "emptyOpts d88c42eaa79d6904",
+  "21": "day debbe0054ea0426b",
+  "210": "dayNoOpts 03ba1280b512b098",
+  "211": "ensure c6cd9b9411e6a123",
+  "212": "none 35094b6d79edebcd",
+  "213": "dayNoOpts 380af464dff3dd15",
+  "214": "none 90731e009b431e53",
+  "215": "dayNoOpts ffccc2d24e6335aa",
+  "216": "emptyOpts 26ad12f1c730e290",
+  "217": "ensure c2af1354c16fab39",
+  "218": "none b3fe4105cf5ea136",
+  "219": "ensure 0eb7e5cbc695b8c4",
+  "22": "none 58a595fe17ec63ad",
+  "220": "ensure b2f2ee2f015f46d5",
+  "221": "dayNoOpts 2dcb71b6b741171b",
+  "222": "none a7d74da496a44ff4",
+  "223": "noEnsure e1eac5bb86eb8e70",
+  "224": "ensure dcfaeb33d15aba77",
+  "225": "dayNoOpts 085e7231e7fa56a2",
+  "226": "noEnsure 5f108d367d3ea845",
+  "227": "day 726b2aa554fec028",
+  "228": "day be4223ae98fd34b2",
+  "229": "none 9215abcbddae1b4f",
+  "23": "ensure fbd7dcbae92e9a4b",
+  "230": "ensure f615dcfb4a20f3b0",
+  "231": "none 338ec8190a0ee3ca",
+  "232": "none 60abf85fa1276636",
+  "233": "ensure 9f2d598fab59c7ba",
+  "234": "day 3cfa33e4221264df",
+  "235": "day 8ead2128cacb2d4c",
+  "236": "emptyOpts e0ed989013dd4511",
+  "237": "none 934682b8d4fb4de2",
+  "238": "none 5b84deff7932432d",
+  "239": "dayNoOpts 529ac0451d038420",
+  "24": "dayNoOpts e1781a00fa900629",
+  "240": "emptyOpts 38907f718a8b808b",
+  "241": "emptyOpts 0676d6d4e85d3613",
+  "242": "emptyOpts 478ea5a9368ff7e0",
+  "243": "day 60ca2cf1d0a1aefb",
+  "244": "none 59e9bff6ef295634",
+  "245": "ensure d2d45e2f8fdb9c86",
+  "246": "emptyOpts 7863081b7bf47346",
+  "247": "dayNoOpts d98c98e617cc533d",
+  "248": "noEnsure 0a860c702190f5f7",
+  "249": "emptyOpts a09bb0478d875403",
+  "25": "ensure 6e9c6a0d1da6b033",
+  "250": "noEnsure ba59228131f02b18",
+  "251": "emptyOpts cfce853d60156551",
+  "252": "day e37758aff883d8f6",
+  "253": "day 9dfd795113ad9645",
+  "254": "dayNoOpts 760eb8f23bf80701",
+  "255": "dayNoOpts 649119072fc4b596",
+  "256": "noEnsure a08beb580d6c5a91",
+  "257": "dayNoOpts 847ba65971d16db3",
+  "258": "day ed8f9824c1b691d3",
+  "259": "dayNoOpts df3fb289f5d03d06",
+  "26": "ensure ab9f7c966719b601",
+  "260": "ensure ff4ac49d16bc83ba",
+  "261": "dayNoOpts 785639b14b52635b",
+  "262": "emptyOpts 8eea70d6d2d0f130",
+  "263": "dayNoOpts b012bd8aed982ee3",
+  "264": "none 7ef101b8d4d80ff9",
+  "265": "ensure 8ffd4c9a5ebf4839",
+  "266": "dayNoOpts 83155ccf8ab560e3",
+  "267": "emptyOpts b555ab63916e1c05",
+  "268": "noEnsure d92e55d5bc61b432",
+  "269": "none 96e340778a54c7af",
+  "27": "day 5f926581dcd52bc9",
+  "270": "emptyOpts 8815623b88bb2618",
+  "271": "emptyOpts af32b5835eda3dd5",
+  "272": "ensure e2fb74a49ab40146",
+  "273": "none a7b9a95e8229bf40",
+  "274": "ensure 36ac0a3c5bae9ca7",
+  "275": "emptyOpts 294e2bbae56fda8f",
+  "276": "none 82d5378b379bac58",
+  "277": "noEnsure d3febcc24dca371f",
+  "278": "ensure 027f2fa3aa1b376b",
+  "279": "emptyOpts 5feedd079ac1abcb",
+  "28": "dayNoOpts 8e465841ed443dde",
+  "280": "noEnsure 3faade64fb0f2125",
+  "281": "emptyOpts fb496e895fa5c924",
+  "282": "emptyOpts 1ed327acea3b5b6b",
+  "283": "dayNoOpts 4773dca76fc9024b",
+  "284": "day 1466ed982ccdbfaf",
+  "285": "day ad2dc92379eef60e",
+  "286": "ensure abe4f28fb86dd2d4",
+  "287": "day 2fa78da0e9bf2a01",
+  "288": "ensure 789d2785f76aa646",
+  "289": "dayNoOpts 6a27a19eddc4c05f",
+  "29": "none 9ba300d6ab357785",
+  "290": "emptyOpts 7e3d8c6802b3cd49",
+  "291": "ensure c0ad2f24f56ea99b",
+  "292": "ensure ce1c5c54f90c3097",
+  "293": "day 4df6533240ada840",
+  "294": "dayNoOpts 1bf22379f7c9fe5a",
+  "295": "none f83823fceaadb9eb",
+  "296": "dayNoOpts c322c4cd1702cf14",
+  "297": "dayNoOpts 744e15663e8006f5",
+  "298": "emptyOpts 4d8e0dec64da2877",
+  "299": "day 6a18807e0681a8b1",
+  "3": "day 382b92af01ae50ab",
+  "30": "emptyOpts e7cdaf9f802ad174",
+  "300": "emptyOpts bb5f63c4dde95e69",
+  "31": "noEnsure e0e73a11a90f21db",
+  "32": "ensure fdf78025b263e43b",
+  "33": "day 20ca8a7246c82bdc",
+  "34": "none 998e34db27bc8cda",
+  "35": "day ec81513caf6cb2bc",
+  "36": "emptyOpts 942c74e8b64a2a7a",
+  "37": "noEnsure 074749df7c3da59e",
+  "38": "ensure 9d4ca81e97cf9c1f",
+  "39": "dayNoOpts 23af8ecda7a9bd15",
+  "4": "dayNoOpts c8f949fba39ef3d3",
+  "40": "noEnsure 41d977ba14b590a3",
+  "41": "ensure bbb5f284381e8aec",
+  "42": "none ce61fe9b7f55fc12",
+  "43": "dayNoOpts b9cf3899964a4c28",
+  "44": "day 49a27a949e616464",
+  "45": "emptyOpts 0b80514685bc54e1",
+  "46": "day 2d1a267e2b021d00",
+  "47": "ensure 7329039600e6afc6",
+  "48": "day 7895d3d9962f9410",
+  "49": "dayNoOpts bb900eeb4bb998f4",
+  "5": "noEnsure 8d52912b608eaa22",
+  "50": "emptyOpts c8e2ae36c6f3a382",
+  "51": "none b4c33a6b7fb53168",
+  "52": "dayNoOpts b657755f54909948",
+  "53": "noEnsure 719cb3241fe9db86",
+  "54": "emptyOpts 92c888a9134afd98",
+  "55": "emptyOpts f48df50d7ec77c9d",
+  "56": "noEnsure 06b8b1b212b668c6",
+  "57": "noEnsure cd327bd42a636c44",
+  "58": "ensure 7250ea608038ad25",
+  "59": "day 21abd2a7ecb28577",
+  "6": "emptyOpts fb8ab6c9876175c2",
+  "60": "ensure 913eae95d9e50e1f",
+  "61": "ensure 38025bcd70fa5cf5",
+  "62": "day 892d02ee0c14d48b",
+  "63": "ensure 98bc944b4cf24040",
+  "64": "ensure 9ad2004705aea095",
+  "65": "emptyOpts 8e86a1b5f9284d90",
+  "66": "dayNoOpts 80c6e79e552aee9d",
+  "67": "ensure 18560c5ce64c22db",
+  "68": "none 7dfe7ed15e2e906f",
+  "69": "noEnsure b5bcd6bd99ca3536",
+  "7": "ensure 9019260ecd2934ff",
+  "70": "ensure 500f85a76cbb5af3",
+  "71": "ensure 3a26102a89ade8ef",
+  "72": "dayNoOpts 24c79b7dd977e3db",
+  "73": "emptyOpts f210fb89b0bb2bac",
+  "74": "day 24f1d8446bdb6923",
+  "75": "ensure a5166fd988a49e96",
+  "76": "day c337d8229b784f7d",
+  "77": "ensure 09d143dc441bf525",
+  "78": "day bd01808de31e05cf",
+  "79": "dayNoOpts 25b8249494010f26",
+  "8": "dayNoOpts d74caef0f8526796",
+  "80": "dayNoOpts 71cdc1d879f5973b",
+  "81": "emptyOpts 50c7d46b2a791e8c",
+  "82": "day 20c70a7b7f5c1a61",
+  "83": "none 6519ff889dfd8caa",
+  "84": "ensure b8c8773eba738929",
+  "85": "noEnsure 47dd92e2442c8c8e",
+  "86": "noEnsure a3a02e15e1780d2b",
+  "87": "emptyOpts 90cc384b8fa71ed6",
+  "88": "none d96590939829d553",
+  "89": "emptyOpts c56acc5fb2c3fe87",
+  "9": "emptyOpts 57dfada5593ea59c",
+  "90": "emptyOpts cec50bc14d7cbb56",
+  "91": "day 2eef3890dffdfc36",
+  "92": "day 2e2ed4bc9edfe8b8",
+  "93": "day 9e4daaeb177a4faa",
+  "94": "emptyOpts 5393dc068dc0a933",
+  "95": "dayNoOpts a4a58609a4cfbbd7",
+  "96": "noEnsure fc21662e27de053b",
+  "97": "day c332d5819c06e142",
+  "98": "ensure 7527f83b3a89dbd2",
+  "99": "noEnsure 97bb7f48605743d4",
+}
+`;
+
+exports[`caracterização — loadSnapshotContext > cenários legíveis 1`] = `
+{
+  "1": {
+    "argMode": "day",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [
+          {
+            "startDate": "2026-01-02",
+            "type": "FIXED_INCOME",
+          },
+        ],
+        {
+          "currentRate": 5.42,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "PETR4",
+          "BTC",
+          "IVVB11",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "BTC",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "IVVB11",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-21",
+      ],
+      [
+        "_loadUsdRateResolver",
+        null,
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "PETR4",
+            10,
+          ],
+          [
+            "BTC",
+            10,
+          ],
+          [
+            "IVVB11",
+            10,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 1,
+        },
+        "cdiRate": 5.42,
+        "ipca": "5.1",
+        "selic": "5.1",
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+          [
+            "BTC",
+            {
+              "price": 3,
+            },
+          ],
+          [
+            "IVVB11",
+            {
+              "price": 6,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 0,
+      },
+      "usdRate": null,
+    },
+    "sameResolver": true,
+  },
+  "2": {
+    "argMode": "none",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [],
+        {
+          "currentRate": 5.42,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "HGLG11",
+          "AAPL",
+          "PETR4",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "HGLG11",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "AAPL",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-23",
+      ],
+      [
+        "_loadUsdRateResolver",
+        null,
+      ],
+      [
+        "usdForDate",
+        "2026-11-23",
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [
+          {
+            "ticker": "TD0",
+            "type": "FIXED_INCOME",
+          },
+        ],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "PETR4",
+            10,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 0,
+        },
+        "cdiRate": 5.42,
+        "ipca": "5.1",
+        "selic": 5.42,
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "HGLG11",
+            {
+              "price": 6,
+            },
+          ],
+          [
+            "AAPL",
+            {
+              "price": 4,
+            },
+          ],
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 1,
+      },
+      "usdRate": "$undefined",
+    },
+    "sameResolver": true,
+  },
+  "3": {
+    "argMode": "day",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [],
+        {
+          "currentRate": 14.25,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "PETR4",
+          "HGLG11",
+          "AAPL",
+          "BTC",
+          "IVVB11",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "HGLG11",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "AAPL",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 4,
+            "ticker": "BTC",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 5,
+            "ticker": "IVVB11",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-21",
+      ],
+      [
+        "_loadUsdRateResolver",
+        null,
+      ],
+      [
+        "usdForDate",
+        "2026-11-21",
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [
+          {
+            "ticker": "TD0",
+            "type": "FIXED_INCOME",
+          },
+          {
+            "ticker": "TD1",
+            "type": "FIXED_INCOME",
+          },
+        ],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "PETR4",
+            10,
+          ],
+          [
+            "BTC",
+            10,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 0,
+        },
+        "cdiRate": 14.25,
+        "ipca": 14.9,
+        "selic": "$undefined",
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+          [
+            "HGLG11",
+            {
+              "price": 6,
+            },
+          ],
+          [
+            "AAPL",
+            {
+              "price": 4,
+            },
+          ],
+          [
+            "BTC",
+            {
+              "price": 3,
+            },
+          ],
+          [
+            "IVVB11",
+            {
+              "price": 6,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 2,
+      },
+      "usdRate": "$undefined",
+    },
+    "sameResolver": true,
+  },
+  "4": {
+    "argMode": "dayNoOpts",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [
+          {
+            "startDate": "2026-01-02",
+            "type": "FIXED_INCOME",
+          },
+        ],
+        {
+          "currentRate": 14.25,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "HGLG11",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "HGLG11",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-20",
+      ],
+      [
+        "_loadUsdRateResolver",
+        null,
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [
+          {
+            "ticker": "TD0",
+            "type": "FIXED_INCOME",
+          },
+          {
+            "ticker": "TD1",
+            "type": "FIXED_INCOME",
+          },
+        ],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 1,
+        },
+        "cdiRate": 14.25,
+        "ipca": null,
+        "selic": "$undefined",
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "HGLG11",
+            {
+              "price": 6,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 2,
+      },
+      "usdRate": null,
+    },
+    "sameResolver": true,
+  },
+  "5": {
+    "argMode": "noEnsure",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [
+          {
+            "startDate": "2026-01-02",
+            "type": "FIXED_INCOME",
+          },
+          {
+            "startDate": "2026-02-02",
+            "type": "FIXED_INCOME",
+          },
+        ],
+        {
+          "currentRate": 5.42,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "AAPL",
+          "PETR4",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "AAPL",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-22",
+      ],
+      [
+        "_loadUsdRateResolver",
+        14.9,
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [
+          {
+            "ticker": "TD0",
+            "type": "FIXED_INCOME",
+          },
+        ],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "AAPL",
+            10,
+          ],
+          [
+            "PETR4",
+            10,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 2,
+        },
+        "cdiRate": 5.42,
+        "ipca": "$undefined",
+        "selic": 5.42,
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "AAPL",
+            {
+              "price": 4,
+            },
+          ],
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 1,
+      },
+      "usdRate": 14.9,
+    },
+    "sameResolver": true,
+  },
+  "6": {
+    "argMode": "emptyOpts",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [
+          {
+            "startDate": "2026-01-02",
+            "type": "FIXED_INCOME",
+          },
+        ],
+        {
+          "currentRate": 10.65,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "PETR4",
+          "HGLG11",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "HGLG11",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-23",
+      ],
+      [
+        "_loadUsdRateResolver",
+        null,
+      ],
+      [
+        "usdForDate",
+        "2026-11-23",
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "PETR4",
+            10,
+          ],
+          [
+            "HGLG11",
+            10,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 1,
+        },
+        "cdiRate": 10.65,
+        "ipca": 5.42,
+        "selic": null,
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+          [
+            "HGLG11",
+            {
+              "price": 6,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 0,
+      },
+      "usdRate": "$undefined",
+    },
+    "sameResolver": true,
+  },
+  "7": {
+    "argMode": "ensure",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [],
+        {
+          "currentRate": 14.25,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "PETR4",
+          "IVVB11",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "IVVB11",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-22",
+      ],
+      [
+        "ensureWalletDayCandles",
+        [
+          {
+            "quantity": 1,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "IVVB11",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-22",
+        {
+          "$map": [
+            [
+              "PETR4",
+              10,
+            ],
+            [
+              "IVVB11",
+              11,
+            ],
+          ],
+        },
+      ],
+      [
+        "_loadUsdRateResolver",
+        null,
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [
+          {
+            "ticker": "TD0",
+            "type": "FIXED_INCOME",
+          },
+        ],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "PETR4",
+            10,
+          ],
+          [
+            "IVVB11",
+            11,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 0,
+        },
+        "cdiRate": 14.25,
+        "ipca": "$undefined",
+        "selic": "$undefined",
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+          [
+            "IVVB11",
+            {
+              "price": 6,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 1,
+      },
+      "usdRate": null,
+    },
+    "sameResolver": true,
+  },
+  "8": {
+    "argMode": "dayNoOpts",
+    "calls": [
+      [
+        "SystemConfig.findOne",
+        {
+          "key": "MACRO_INDICATORS",
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$in": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "type taxLots startDate",
+      ],
+      [
+        "loadCdiCurveForAssets",
+        [],
+        {
+          "currentRate": 10.65,
+        },
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": {
+            "$nin": [
+              "CASH",
+              "FIXED_INCOME",
+            ],
+          },
+        },
+      ],
+      [
+        "select",
+        "ticker type quantity",
+      ],
+      [
+        "getMarketDataMap",
+        [
+          "PETR4",
+          "AAPL",
+        ],
+      ],
+      [
+        "loadClosesForDay",
+        [
+          {
+            "quantity": 1,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 2,
+            "ticker": "AAPL",
+            "type": "STOCK",
+          },
+          {
+            "quantity": 3,
+            "ticker": "PETR4",
+            "type": "STOCK",
+          },
+        ],
+        "2026-11-20",
+      ],
+      [
+        "_loadUsdRateResolver",
+        10.65,
+      ],
+      [
+        "UserAsset.find",
+        {
+          "type": "FIXED_INCOME",
+        },
+      ],
+      [
+        "select",
+        "ticker type name maturityDate fixedIncomeIndex",
+      ],
+      [
+        "loadTreasuryPricing",
+        [
+          {
+            "ticker": "TD0",
+            "type": "FIXED_INCOME",
+          },
+        ],
+      ],
+    ],
+    "ctx": {
+      "closeMap": {
+        "$map": [
+          [
+            "PETR4",
+            10,
+          ],
+          [
+            "AAPL",
+            10,
+          ],
+        ],
+      },
+      "getUsdRateForDate": "$function",
+      "macroRates": {
+        "cdiCurve": {
+          "curva": 0,
+        },
+        "cdiRate": 10.65,
+        "ipca": 5.42,
+        "selic": 10.65,
+      },
+      "priceMap": {
+        "$map": [
+          [
+            "PETR4",
+            {
+              "price": 5,
+            },
+          ],
+          [
+            "AAPL",
+            {
+              "price": 4,
+            },
+          ],
+        ],
+      },
+      "treasuryPricing": {
+        "titulos": 1,
+      },
+      "usdRate": 10.65,
+    },
+    "sameResolver": true,
+  },
+}
+`;

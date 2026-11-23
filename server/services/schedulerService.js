@@ -8,7 +8,6 @@ import { marketDataService } from './marketDataService.js';
 import { syncService } from './syncService.js';
 import { holidayService } from './holidayService.js';
 import { financialService } from './financialService.js';
-import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { clearUserCache } from '../utils/userCache.js'; // (I6) limpa cache pós-downgrade em massa
 import { RECURRING_GRACE_DAYS } from '../config/subscription.js';
 import { signalEngine } from './engines/signalEngine.js';
@@ -19,12 +18,9 @@ import Wallet from '../models/Wallet.js';
 import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
-import { loadClosesForDay } from '../utils/dayCloses.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
-import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
-import { loadTreasuryPricing } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import { runAnchorPublication } from './anchorPublicationService.js';
 import {
@@ -37,6 +33,7 @@ import { computeEquityAt } from '../utils/snapshotEquity.js';
 import {
     buildDailySnapshotPayload, dayDividendIncomeBRL, dietzQuotaForDay, isUndueQuotaReset, reportTwrrAnomaly,
 } from './snapshot/dailySnapshotSteps.js';
+import { loadSnapshotContext } from './snapshot/snapshotContext.js';
 import {
     brazilDayKey,
     businessDaysBetween,
@@ -46,7 +43,6 @@ import {
     upsertWalletSnapshotForDay,
 } from '../utils/walletSnapshot.js';
 import { recoverUniverseTipWithB3, timeSeriesWorker } from './workers/timeSeriesWorker.js';
-import { ensureWalletDayCandles } from './walletDayCandleService.js';
 import { reconcilePreviousWalletSnapshot, reconcileTreasurySnapshot } from './walletCandleRecoveryService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { trackJobSafe, closeOrphanRuns } from '../utils/jobRun.js';
@@ -158,45 +154,8 @@ const brDayBounds = (dayStr) => ({
 // pela MESMA lista. Duas cópias divergiriam, e o selo passaria a mentir sobre o
 // que o backfill considera buraco.
 
-// Contexto compartilhado (macro + cotações em lote) de um run de snapshot.
-// `ensureDayCandles` só é ligado por quem vai GRAVAR o snapshot de hoje: o
-// backfill/boot reconstrói a série pelo rebuild (que tem o próprio cache de
-// preços) e não deve pagar dezenas de buscas externas a cada reinício.
-export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensureDayCandles = false } = {}) => {
-    const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-    const macroUsdRate = sysConfig?.dollar > 0 ? sysConfig.dollar : null;
-    const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
-    // A curva viaja DENTRO de macroRates porque `computeEquityAt` já repassa o
-    // objeto inteiro a `valueFixedIncomeAsset` — assim snapshot, KPI ao vivo e
-    // rebuild leem a mesma taxa por dia sem cada um carregar a série por conta.
-    const fixedIncomeAssets = await UserAsset.find({ type: { $in: ['CASH', 'FIXED_INCOME'] } })
-        .select('type taxLots startDate').lean();
-    const cdiCurve = await loadCdiCurveForAssets(fixedIncomeAssets, { currentRate: currentCdi });
-    const macroRates = { cdiRate: currentCdi, selic: sysConfig?.selic, ipca: sysConfig?.ipca, cdiCurve };
-    // (F4) Cotações em LOTE, uma vez por run — evita N+1 de getMarketDataByTicker.
-    const liveAssets = await UserAsset.find({ type: { $nin: ['CASH', 'FIXED_INCOME'] } }).select('ticker type quantity').lean();
-    const priceMap = await marketDataService.getMarketDataMap([...new Set(liveAssets.map((a) => a.ticker))]);
-    const closeMap = await loadClosesForDay(liveAssets, dayStr);
-    // Antes de marcar o dia, garante o candle de fechamento dos ativos que estão
-    // em carteira. Sem isso o fallback abaixo (preço corrente às 23:59) valia para
-    // metade do patrimônio, porque a série de AssetHistory atrasa por design.
-    if (ensureDayCandles) {
-        const resolved = await ensureWalletDayCandles(liveAssets, dayStr, closeMap);
-        for (const [key, close] of resolved) closeMap.set(key, close);
-    }
-    const getUsdRateForDate = await financialService._loadUsdRateResolver(macroUsdRate);
-    // Regra 13: sem cotação na macro, o câmbio do dia vem da série USD/BRL real;
-    // sem série, fica AUSENTE (antes era 5,75 fixo, gravado no snapshot) e a
-    // carteira com dólar não é fotografada (ver persistUserSnapshotForDay).
-    const usdRate = macroUsdRate ?? (getUsdRateForDate.hasSeries === true ? getUsdRateForDate(dayStr) : null);
-    // Séries de PU do Tesouro, uma vez por run: o snapshot precisa marcar a renda
-    // fixa pela MESMA régua do KPI ao vivo, senão o histórico e o card divergem.
-    const treasuryAssets = await UserAsset.find({ type: 'FIXED_INCOME' })
-        .select('ticker type name maturityDate fixedIncomeIndex')
-        .lean();
-    const treasuryPricing = await loadTreasuryPricing(treasuryAssets);
-    return { usdRate, macroRates, priceMap, closeMap, getUsdRateForDate, treasuryPricing };
-};
+// Contexto (macro + cotações em lote) de um run: services/snapshot/snapshotContext.js.
+export { loadSnapshotContext };
 
 // computeEquityAt mora em utils/snapshotEquity.js; re-exportada para scripts e testes.
 export { computeEquityAt };

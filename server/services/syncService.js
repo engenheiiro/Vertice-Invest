@@ -2,23 +2,27 @@
 import YahooFinance from 'yahoo-finance2';
 import logger from '../config/logger.js';
 import MarketAsset from '../models/MarketAsset.js';
-import SystemConfig from '../models/SystemConfig.js';
 import { fundamentusService } from './fundamentusService.js';
 import { macroDataService } from './macroDataService.js';
-import { marketDataService } from './marketDataService.js';
 import { usStocksFundamentalsService } from './usStocksFundamentalsService.js';
 import { resolveSector, deriveFiiSubType } from '../utils/sectorResolver.js';
-import { backfillSectors } from './sectorBackfillService.js';
-import { classifyUsAsset } from '../utils/usClassification.js';
-import { appendSnapshots } from './fundamentalHistoryService.js';
 import {
     createFundamentusStats,
     finalizeFundamentusStats,
     validateFundamentusIngestion,
 } from '../utils/ingestionHealth.js';
 import { trackJob } from '../utils/jobRun.js';
-import { CRYPTO_ASSETS } from '../config/cryptoList.js';
 import { withJobLease } from '../utils/jobLease.js';
+import {
+    loadRetiredTickers,
+    prepareExternalAssets,
+    refreshQuotesInBatches,
+    reportDegradedIngestion,
+    runDailyStep,
+    runPostWriteBackfills,
+    saveFailedSyncStats,
+    saveHealthySyncStats,
+} from './sync/fullSyncSteps.js';
 import { withMongoRetry } from '../utils/mongoResilience.js';
 
 const yahooFinanceLTM = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
@@ -36,6 +40,21 @@ export const LTM_ENRICH_BACKOFF_DAYS = 30;
 // sobre o ativo, e carimbar o backoff por eles calaria um papel bom por 30 dias.
 const LTM_DEFINITIVE_ERROR = /not\s*found|no fundamentals|no data/i;
 
+// Leitura LTM de um quoteSummary do Yahoo; campo ausente/zerado vira null.
+const ltmFromQuoteSummary = (data) => {
+    const fd = data.financialData || {};
+    const ks = data.defaultKeyStatistics || {};
+    const sd = data.summaryDetail || {};
+    const shares = ks.sharesOutstanding || 0;
+    return {
+        marketCap: sd.marketCap || null,
+        netRevenue: fd.totalRevenue || null,
+        netIncome: fd.netIncomeToCommon || null,
+        netDebt: (fd.totalDebt && fd.totalCash != null) ? (fd.totalDebt - fd.totalCash) : null,
+        patrimLiq: (ks.bookValue && shares) ? ks.bookValue * shares : null,
+    };
+};
+
 async function fetchYahooLTM(ticker) {
     try {
         const data = await Promise.race([
@@ -44,17 +63,7 @@ async function fetchYahooLTM(ticker) {
             }, { validateResult: false }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), LTM_TICKER_TIMEOUT_MS))
         ]);
-        const fd = data.financialData || {};
-        const ks = data.defaultKeyStatistics || {};
-        const sd = data.summaryDetail || {};
-        const shares = ks.sharesOutstanding || 0;
-        return {
-            marketCap: sd.marketCap || null,
-            netRevenue: fd.totalRevenue || null,
-            netIncome: fd.netIncomeToCommon || null,
-            netDebt: (fd.totalDebt && fd.totalCash != null) ? (fd.totalDebt - fd.totalCash) : null,
-            patrimLiq: (ks.bookValue && shares) ? ks.bookValue * shares : null,
-        };
+        return ltmFromQuoteSummary(data);
     } catch (err) {
         // Resposta definitiva vira leitura vazia (conta como tentativa); o resto é
         // transitório e devolve null (não conta).
@@ -171,6 +180,9 @@ export const correctSourceTicker = (rawTicker, listed = null) => {
     return target;
 };
 
+// Número da fonte; vazio, texto ou NaN viram 0.
+const num = (value) => Number(value) || 0;
+
 /**
  * Gravação de UMA linha do Fundamentus no MarketAsset (PURA, sem banco).
  *
@@ -189,7 +201,7 @@ export const buildFundamentusAssetUpdate = ({ ticker, type, data, liquidity, tim
     const finalSector = resolveSector({ ticker, type, scrapedSector: data.sector });
 
     const updateFields = {
-        lastPrice: Number(data.price) || 0,
+        lastPrice: num(data.price),
         // Assinatura do preço. Este caminho grava `lastPrice` e NÃO grava
         // `priceDate` — o scraping não diz de que sessão é o número —,
         // então depois de uma passada aqui o par (preço, data) pode ter
@@ -197,28 +209,28 @@ export const buildFundamentusAssetUpdate = ({ ticker, type, data, liquidity, tim
         // magnitude precisa saber antes de acusar o preço novo de
         // destoar do guardado (ver utils/quoteSanity.js).
         priceSource: 'FUNDAMENTUS',
-        dy: Number(data.dy) || 0,
-        p_vp: Number(data.pvp) || 0,
+        dy: num(data.dy),
+        p_vp: num(data.pvp),
         liquidity,
 
-        pl: Number(data.pl) || 0,
-        roe: Number(data.roe) || 0,
-        roic: Number(data.roic) || 0,
-        netMargin: Number(data.netMargin) || 0,
-        evEbitda: Number(data.evEbitda) || 0,
-        revenueGrowth: Number(data.cresRec5a) || 0,
-        debtToEquity: Number(data.debtToEquity ?? data.divBrutaPatrim) || 0,
+        pl: num(data.pl),
+        roe: num(data.roe),
+        roic: num(data.roic),
+        netMargin: num(data.netMargin),
+        evEbitda: num(data.evEbitda),
+        revenueGrowth: num(data.cresRec5a),
+        debtToEquity: num(data.debtToEquity ?? data.divBrutaPatrim),
 
-        vacancy: Number(data.vacancy) || 0,
-        capRate: Number(data.capRate) || 0,
-        qtdImoveis: Number(data.qtdImoveis) || 0,
+        vacancy: num(data.vacancy),
+        capRate: num(data.capRate),
+        qtdImoveis: num(data.qtdImoveis),
         // FFO do FII. O scraper já entregava estes três campos; sem esta linha
         // eles morriam aqui (o schema também não os tinha) e o P/FFO — múltiplo
         // padrão do setor — ficava indisponível para todo o universo de FIIs.
         // Ação não devolve FFO: cai em 0, mesma convenção de vacancy/capRate.
-        ffoYield: Number(data.ffoYield) || 0,
-        vpCota: Number(data.vpCota) || 0,
-        ffoCota: Number(data.ffoCota) || 0,
+        ffoYield: num(data.ffoYield),
+        vpCota: num(data.vpCota),
+        ffoCota: num(data.ffoCota),
 
         sector: finalSector,
         fiiSubType: type === 'FII' ? deriveFiiSubType(finalSector) : null,
@@ -232,13 +244,13 @@ export const buildFundamentusAssetUpdate = ({ ticker, type, data, liquidity, tim
     // significativo, evitando que um scrape parcial zere dados bons
     // (corrige lacunas intermitentes no modal "Financials (LTM)").
     const ltmFields = {
-        marketCap: Number(data.marketCap) || 0,
-        netDebt: Number(data.netDebt) || 0,
-        netRevenue: Number(data.netRevenue) || 0,
-        netIncome: Number(data.netIncome) || 0,
-        totalAssets: Number(data.totalAssets) || 0,
-        patrimLiq: Number(data.patrimLiq) || 0,
-        payout: Number(data.payout) || 0,
+        marketCap: num(data.marketCap),
+        netDebt: num(data.netDebt),
+        netRevenue: num(data.netRevenue),
+        netIncome: num(data.netIncome),
+        totalAssets: num(data.totalAssets),
+        patrimLiq: num(data.patrimLiq),
+        payout: num(data.payout),
     };
     for (const [k, v] of Object.entries(ltmFields)) {
         if (v !== 0) updateFields[k] = v;
@@ -257,6 +269,171 @@ export const buildFundamentusAssetUpdate = ({ ticker, type, data, liquidity, tim
         },
     };
 };
+
+const MIN_SOURCE_LIQUIDITY = 5000;
+const MIN_LIQUIDITY_FOR_LIVE_QUOTE = 100000;
+
+/**
+ * Uma linha do Fundamentus: correção de typo, duplicidade pós-correção,
+ * aposentadoria (terminal — vale mesmo com dado bom na fonte) e liquidez mínima
+ * para não sujar o banco com lixo. Aceita, vira operação + leitura da série.
+ */
+function ingestFundamentusRow(run, rawTicker, data, type) {
+    const classStats = run.ingestionStats[type];
+    // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
+    const ticker = correctSourceTicker(rawTicker, type === 'FII' ? run.fiiMap : run.stocksMap);
+    if (ticker !== rawTicker) run.typosFixed++;
+
+    // 2. FILTRO DE DUPLICIDADE PÓS-CORREÇÃO
+    if (run.processedTickers.has(ticker)) {
+        classStats.duplicates++;
+        return;
+    }
+    run.processedTickers.add(ticker);
+
+    // 3. FILTRO DE APOSENTADORIA
+    if (run.retiredTickers.has(ticker)) {
+        classStats.retired++;
+        return;
+    }
+
+    const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
+    if (liquidity < MIN_SOURCE_LIQUIDITY) {
+        classStats.rejectedLowLiquidity++;
+        return;
+    }
+    classStats.accepted++;
+
+    const update = buildFundamentusAssetUpdate({ ticker, type, data, liquidity, timestamp: run.timestamp });
+    const updateFields = update.$set;
+    run.operations.push({ updateOne: { filter: { ticker: ticker }, update, upsert: true } });
+
+    // (Fase 3) Coleta a leitura de fundamentos para a série temporal (track record).
+    // payout vem por carry-forward em ltmFields; aqui usamos o dado bruto do scrape.
+    run.snapshotRecords.push({
+        ticker,
+        type,
+        roe: updateFields.roe,
+        netMargin: updateFields.netMargin,
+        payout: num(data.payout),
+        dy: updateFields.dy,
+        revenueGrowth: updateFields.revenueGrowth,
+        pl: updateFields.pl,
+    });
+}
+
+/** Etapa 2: as duas listagens do Fundamentus viram operações de gravação. */
+function ingestFundamentus({ stocksMap, fiiMap, retiredTickers, ingestionStats, timestamp }) {
+    const run = {
+        stocksMap, fiiMap, retiredTickers, ingestionStats, timestamp,
+        processedTickers: new Set(),
+        typosFixed: 0, // Contador para Monitor de Qualidade
+        operations: [],
+        // (Fase 3) Leituras de fundamentos a anexar na série temporal (track record).
+        snapshotRecords: [],
+    };
+    if (stocksMap.size > 0) stocksMap.forEach((v, k) => ingestFundamentusRow(run, k, v, 'STOCK'));
+    if (fiiMap.size > 0) fiiMap.forEach((v, k) => ingestFundamentusRow(run, k, v, 'FII'));
+    return run;
+}
+
+/** Tickers da Etapa 3: BR com liquidez para cotação ao vivo + exterior/cripto. */
+function collectLiveQuoteTickers(operations, externalTickers) {
+    const validTickers = [];
+    // Reconstrói a lista de validTickers baseada nos dados JÁ SANITIZADOS
+    operations.forEach(op => {
+        const update = op.updateOne?.update?.$set;
+        if (update?.liquidity > MIN_LIQUIDITY_FOR_LIVE_QUOTE) validTickers.push(op.updateOne.filter.ticker);
+    });
+    // Exterior/cripto entram direto: a escrita de cotação deles saiu da
+    // Etapa 2 (ver `externalTickers`), e o filtro de liquidez acima lia
+    // justamente a `liquidity` que aquela escrita punha em `operations`.
+    validTickers.push(...externalTickers);
+    return validTickers;
+}
+
+/** Etapas 2 (estatísticas), 3, 4 e 4.5 — depois de o acervo ter sido gravado. */
+async function finishPersistedSync({ operations, typosFixed, ingestionHealth, externalTickers }) {
+    await saveHealthySyncStats(typosFixed, operations.length, ingestionHealth.stats);
+    const { STOCK, FII } = ingestionHealth.stats;
+    logger.info(
+        `ℹ️ [Sync] Etapa 2: STOCK ${STOCK.accepted}/${STOCK.parsed} · ` +
+        `FII ${FII.accepted}/${FII.parsed} aceitos ` +
+        `(operações totais: ${operations.length}; typos: ${typosFixed}).`
+    );
+
+    logger.info("ℹ️ [Sync] Etapa 3: Cotações em tempo real");
+    await refreshQuotesInBatches(collectLiveQuoteTickers(operations, externalTickers));
+
+    // Etapa 4: Fundamentals US (1x/dia via guard de tempo)
+    await runDailyStep({
+        stampField: 'lastUSFundamentalsSync',
+        stepLabel: 'Etapa 4',
+        skipMessage: "ℹ️ [Sync] Etapa 4: Fundamentals US — já sincronizados nas últimas 23h, pulando.",
+        run: async () => {
+            logger.info("ℹ️ [Sync] Etapa 4: Fundamentals S&P 500 (sincronização diária)");
+            await usStocksFundamentalsService.syncUSStocksFundamentals();
+            // ETFs nacionais (B3) — dy/marketCap via Yahoo .SA (o seed não traz fundamentos)
+            await usStocksFundamentalsService.syncBrEtfFundamentals();
+        },
+    });
+    // Etapa 4.5: Enriquecimento LTM via Yahoo Finance para ações BR (1x/dia)
+    await runDailyStep({
+        stampField: 'lastBRLTMEnrichSync',
+        stepLabel: 'Etapa 4.5',
+        skipMessage: "ℹ️ [Sync] Etapa 4.5: LTM BR — já enriquecido nas últimas 23h, pulando.",
+        run: enrichBRStocksLTM,
+    });
+
+    return {
+        success: true,
+        count: operations.length,
+        fundamentalsProcessed: STOCK.accepted + FII.accepted,
+        fundamentals: ingestionHealth.stats,
+    };
+}
+
+async function runFullSyncStages() {
+    logger.info("ℹ️ [Sync] Etapa 1: Macroeconomia");
+    await macroDataService.performMacroSync();
+
+    logger.info("ℹ️ [Sync] Etapa 2: Fundamentos (Scraping)");
+    const timestamp = new Date();
+    const stocksMap = await fundamentusService.getStocksMap();
+    const fiiMap = await fundamentusService.getFIIsMap();
+    const ingestionStats = createFundamentusStats({ stockParsed: stocksMap.size, fiiParsed: fiiMap.size });
+
+    if (stocksMap.size === 0 && fiiMap.size === 0) {
+        const stats = finalizeFundamentusStats(ingestionStats);
+        await saveFailedSyncStats({ typosFixed: 0, errorCode: 'FUNDAMENTUS_BLOCKED', fundamentals: stats, timestamp });
+        return { success: false, error: "Scraping blocked.", errorCode: 'FUNDAMENTUS_BLOCKED', fundamentals: stats };
+    }
+
+    const retiredTickers = await loadRetiredTickers();
+    const { operations, snapshotRecords, typosFixed } = ingestFundamentus({
+        stocksMap, fiiMap, retiredTickers, ingestionStats, timestamp,
+    });
+    const ingestionHealth = validateFundamentusIngestion(ingestionStats);
+    if (!ingestionHealth.ok) return reportDegradedIngestion(ingestionHealth, typosFixed, timestamp);
+
+    // 3. Atualiza Ativos Internacionais e Cripto (seed; a cotação é da Etapa 3)
+    const externalTickers = await prepareExternalAssets(operations);
+
+    // Etapa 3.5: Seed inicial S&P 500 + ETFs nacionais (cria registros se não existirem)
+    logger.info("ℹ️ [Sync] Etapa 3.5: Seed S&P 500 + ETFs nacionais (se necessário)");
+    await usStocksFundamentalsService.seedSP500Assets();
+    await usStocksFundamentalsService.seedBrEtfAssets();
+
+    if (operations.length === 0) return { success: false, count: 0, error: "Nenhum ativo válido encontrado." };
+
+    // A gravação do acervo é o ÚNICO write desta etapa sem rede de
+    // proteção: um timeout aqui derruba o sync inteiro (a etapa é
+    // crítica). Todos os ops são $set+upsert por ticker, então
+    // re-aplicar é seguro. Ver utils/mongoResilience.js.
+    await withMongoRetry(() => MarketAsset.bulkWrite(operations), { label: 'acervo de ativos' });
+    await runPostWriteBackfills(snapshotRecords, timestamp);
+    return finishPersistedSync({ operations, typosFixed, ingestionHealth, externalTickers });
+}
 
 export const syncService = {
     /**
@@ -282,413 +459,7 @@ export const syncService = {
 
     async _runFullSync() {
         try {
-            logger.info("ℹ️ [Sync] Etapa 1: Macroeconomia");
-            await macroDataService.performMacroSync();
-
-            logger.info("ℹ️ [Sync] Etapa 2: Fundamentos (Scraping)");
-            const operations = [];
-            // (Fase 3) Leituras de fundamentos a anexar na série temporal (track record).
-            const snapshotRecords = [];
-            const timestamp = new Date();
-
-            const stocksMap = await fundamentusService.getStocksMap();
-            const fiiMap = await fundamentusService.getFIIsMap();
-            const ingestionStats = createFundamentusStats({
-                stockParsed: stocksMap.size,
-                fiiParsed: fiiMap.size,
-            });
-            
-            const isScrapingFailed = stocksMap.size === 0 && fiiMap.size === 0;
-
-            if (isScrapingFailed) {
-                const stats = finalizeFundamentusStats(ingestionStats);
-                await SystemConfig.findOneAndUpdate(
-                    { key: 'MACRO_INDICATORS' },
-                    { $set: { lastSyncStats: {
-                        typosFixed: 0,
-                        assetsProcessed: 0,
-                        fundamentalsHealthy: false,
-                        errorCode: 'FUNDAMENTUS_BLOCKED',
-                        fundamentals: stats,
-                        timestamp,
-                    } } },
-                    { upsert: true },
-                );
-                return { success: false, error: "Scraping blocked.", errorCode: 'FUNDAMENTUS_BLOCKED', fundamentals: stats };
-            }
-
-            // Aposentados, lidos UMA vez por sync. A blacklist é estado TERMINAL, mas a
-            // fonte não sabe disso: o Fundamentus segue listando o papel (com a liquidez
-            // velha, que passa no filtro de 5k) e o $set abaixo grava
-            // `isActive: true, failCount: 0` — ou seja, o sync desfazia a aposentadoria a
-            // cada run. Era assim que `isBlacklisted=true` + `isActive=true` nascia: em
-            // 05/09/2026 eram 23 ativos nesse estado, e o painel de Saúde ("Aposentado
-            // que ainda é cotado") mostrava o resultado, não a origem. Fonte listar papel
-            // morto não desfaz a baixa: quem saiu, saiu.
-            const retiredTickers = new Set(
-                (await MarketAsset.find({ isBlacklisted: true }).select('ticker').lean())
-                    .map((a) => a.ticker),
-            );
-
-            const processedTickers = new Set();
-            let typosFixedCount = 0; // Contador para Monitor de Qualidade
-
-            const pushOp = (rawTicker, data, type) => {
-                const classStats = ingestionStats[type];
-                // 1. CAMADA DE SANITIZAÇÃO (CORREÇÃO DE TYPOS)
-                const ticker = correctSourceTicker(rawTicker, type === 'FII' ? fiiMap : stocksMap);
-                if (ticker !== rawTicker) typosFixedCount++;
-
-                // 2. FILTRO DE DUPLICIDADE PÓS-CORREÇÃO
-                if (processedTickers.has(ticker)) {
-                    classStats.duplicates++;
-                    return;
-                }
-                processedTickers.add(ticker);
-
-                // 3. FILTRO DE APOSENTADORIA (terminal — vale mesmo com dado bom na fonte)
-                if (retiredTickers.has(ticker)) {
-                    classStats.retired++;
-                    return;
-                }
-
-                const liquidity = Number(data.liq2m) || Number(data.liquidity) || 0;
-                
-                // Filtro de liquidez mínima para não sujar o banco com lixo
-                if (liquidity < 5000) {
-                    classStats.rejectedLowLiquidity++;
-                    return;
-                }
-                classStats.accepted++;
-
-                const update = buildFundamentusAssetUpdate({ ticker, type, data, liquidity, timestamp });
-                const updateFields = update.$set;
-
-                operations.push({
-                    updateOne: {
-                        filter: { ticker: ticker },
-                        update,
-                        upsert: true
-                    }
-                });
-
-                // (Fase 3) Coleta a leitura de fundamentos para a série temporal (track record).
-                // payout vem por carry-forward em ltmFields; aqui usamos o dado bruto do scrape.
-                snapshotRecords.push({
-                    ticker,
-                    type,
-                    roe: updateFields.roe,
-                    netMargin: updateFields.netMargin,
-                    payout: Number(data.payout) || 0,
-                    dy: updateFields.dy,
-                    revenueGrowth: updateFields.revenueGrowth,
-                    pl: updateFields.pl,
-                });
-            };
-
-            if (stocksMap.size > 0) stocksMap.forEach((v, k) => pushOp(k, v, 'STOCK'));
-            if (fiiMap.size > 0) fiiMap.forEach((v, k) => pushOp(k, v, 'FII'));
-
-            // Fail closed antes de qualquer bulkWrite: uma queda abrupta na taxa
-            // parseado→aceito indica layout deslocado ou fonte parcial. Não mistura
-            // operações externas no denominador e não persiste fundamentos suspeitos.
-            const ingestionHealth = validateFundamentusIngestion(ingestionStats);
-            if (!ingestionHealth.ok) {
-                logger.error(`❌ [Sync] Fundamentos degradados: ${ingestionHealth.reason}`, {
-                    errorCode: ingestionHealth.code,
-                    fundamentals: ingestionHealth.stats,
-                });
-                await SystemConfig.findOneAndUpdate(
-                    { key: 'MACRO_INDICATORS' },
-                    { $set: { lastSyncStats: {
-                        typosFixed: typosFixedCount,
-                        assetsProcessed: 0,
-                        fundamentalsHealthy: false,
-                        errorCode: ingestionHealth.code,
-                        fundamentals: ingestionHealth.stats,
-                        timestamp,
-                    } } },
-                    { upsert: true },
-                );
-                return {
-                    success: false,
-                    error: ingestionHealth.reason,
-                    errorCode: ingestionHealth.code,
-                    fundamentals: ingestionHealth.stats,
-                };
-            }
-
-            // 3. Atualiza Ativos Internacionais e Cripto
-            // isActive filter: ativos delistados já desativados pela blacklist dinâmica
-            // não devem ser re-cotados aqui (a reativação tem varredura própria). Sem
-            // isto, tickers mortos (SGEN, ABC, MRO...) eram tentados todo sync.
-            // isBlacklisted também: os dois campos não andam juntos sozinhos, e ler só
-            // `isActive` deixava o aposentado-mas-ativo entrar no lote, ser cotado e
-            // sair daqui com `isActive: true` regravado — a mesma ressurreição do
-            // caminho de fundamentos, agora no exterior/cripto.
-            let assetsForExternal = await MarketAsset.find({
-                type: { $in: ['CRYPTO', 'STOCK_US'] },
-                isActive: { $ne: false },
-                isBlacklisted: { $ne: true }
-            }).select('ticker type failCount lastFailDate marketCap liquidity');
-
-            logger.info("ℹ️ [Sync] Verificando/Seeding default cryptocurrencies...");
-            // O universo e o SÍMBOLO de cada moeda moram no mesmo lugar
-            // (config/cryptoList.js). Eram duas listas inline — esta e uma cópia no
-            // externalMarketService — que precisavam concordar e não tinham dono;
-            // a cópia de lá montava o símbolo por concatenação e servia o token
-            // errado nas siglas disputadas.
-            const existingCryptos = new Set(assetsForExternal.filter(a => a.type === 'CRYPTO').map(a => a.ticker));
-
-            // TICKER QUE JÁ TEM DONO DE OUTRA CLASSE NÃO É SEMEADO NEM COTADO.
-            //
-            // `MarketAsset.ticker` é único: a sigla é um namespace global, e a
-            // classe é campo da linha, não parte da chave. Este seed usa
-            // `filter: { ticker }` + `$setOnInsert` — quando a sigla já pertence a
-            // outra classe, o upsert CASA com a linha alheia, não insere nada e
-            // segue em silêncio. Até 16/09/2026 o loop empurrava a moeda para a
-            // fila de cotação assim mesmo, e a gravação (também por `{ ticker }`)
-            // punha o preço da MOEDA na linha da AÇÃO: `STX` era Stacks aqui e
-            // Seagate no S&P 500, e a linha da Seagate ia a US$ 0,24 todo run até
-            // o `refreshQuotesBatch` seguinte devolvê-la a US$ 771,81. O único
-            // sintoma era o juiz de magnitude acusando 319888% — que parece erro
-            // de fonte e era, na verdade, duas identidades numa linha só.
-            //
-            // O catálogo em si está travado por `tests/ticker_namespace.spec.js`
-            // (ver `config/tickerNamespace.js`), mas a linha do banco pode ter
-            // vindo de onde nenhum catálogo alcança — holding de usuário, ticker
-            // herdado, renome. Por isso a régua aqui é o BANCO, e ela é
-            // fail-closed: na dúvida a moeda fica de fora, nomeada no log. Ficar
-            // de fora custa uma moeda ausente do ranking; entrar custa o preço
-            // errado num ativo que alguém tem em carteira.
-            const foreignOwned = new Map(
-                (await MarketAsset.find({
-                    ticker: { $in: CRYPTO_ASSETS.map(c => c.ticker) },
-                    type: { $ne: 'CRYPTO' },
-                }).select('ticker type name').lean()).map(d => [d.ticker, d]),
-            );
-            if (foreignOwned.size > 0) {
-                logger.warn(
-                    `⚠️ [Sync] ${foreignOwned.size} moeda(s) do catálogo têm o ticker ocupado por outra classe — não semeadas nem cotadas: ` +
-                    [...foreignOwned.values()].map(d => `${d.ticker} (${d.type}: ${d.name})`).join(', '),
-                    { colisaoDeTicker: [...foreignOwned.keys()] },
-                );
-            }
-
-            for (const cripto of CRYPTO_ASSETS) {
-                const ticker = cripto.ticker;
-                if (foreignOwned.has(ticker)) continue;
-                operations.push({
-                    updateOne: {
-                        filter: { ticker },
-                        update: {
-                            $setOnInsert: {
-                                name: cripto.name,
-                                type: 'CRYPTO',
-                                currency: 'USD',
-                                sector: 'Criptomoeda',
-                                isIgnored: false,
-                                isBlacklisted: false
-                            }
-                        },
-                        upsert: true
-                    }
-                });
-
-                if (!existingCryptos.has(ticker)) {
-                    assetsForExternal.push({ ticker, type: 'CRYPTO' });
-                }
-            }
-
-            // EXTERIOR/CRIPTO SÃO COTADOS UMA VEZ SÓ, pelo `refreshQuotesBatch` da Etapa 3.
-            //
-            // Até 22/11/2026 este trecho cotava a mesma lista e gravava por conta
-            // própria `lastPrice`, `isActive: true` e `failCount: 0` — sem nenhum dos
-            // juízes do caminho oficial (eco, sessão velha, barra sem negócio). Três
-            // estragos: (1) o `isActive: true` desfazia a desativação que a própria
-            // blacklist dinâmica acabara de fazer, e o ticker morto voltava todo dia;
-            // (2) preço ecoado era gravado como sucesso, renovando `updatedAt`; (3) a
-            // `liquidity` saía como VOLUME EM AÇÕES, enquanto o `refreshQuotesBatch`
-            // grava volume × preço para STOCK_US — o mesmo campo em duas unidades,
-            // conforme quem escreveu por último. Agora o seed continua aqui e a lista
-            // segue para a segunda passada, que é o único escritor de preço.
-            const externalTickers = assetsForExternal
-                .map(a => a.ticker)
-                .filter(t => typeof t === 'string' && t.trim().length > 0);
-
-            // Etapa 3.5: Seed inicial S&P 500 + ETFs nacionais (cria registros se não existirem)
-            logger.info("ℹ️ [Sync] Etapa 3.5: Seed S&P 500 + ETFs nacionais (se necessário)");
-            await usStocksFundamentalsService.seedSP500Assets();
-            await usStocksFundamentalsService.seedBrEtfAssets();
-
-            if (operations.length > 0) {
-                // A gravação do acervo é o ÚNICO write desta etapa sem rede de
-                // proteção: um timeout aqui derruba o sync inteiro (a etapa é
-                // crítica). Todos os ops são $set+upsert por ticker, então
-                // re-aplicar é seguro. Ver utils/mongoResilience.js.
-                await withMongoRetry(() => MarketAsset.bulkWrite(operations), { label: 'acervo de ativos' });
-
-                // (Fase 3) Anexa a leitura mensal de fundamentos à série temporal (track record).
-                // Idempotente por mês; falha aqui não pode derrubar o sync.
-                //
-                // Perdido no run de 22/08/2026 11:30 por um flap de conexão de ~2min
-                // ("secureConnect timed out after 60397ms"): a série de fundamentos
-                // ficou sem a leitura daquele run, e 11s depois o banco já respondia.
-                // A função inteira é idempotente (lê a série, reescreve o mês), então
-                // re-tentar o conjunto é seguro.
-                try {
-                    const snap = await withMongoRetry(
-                        () => appendSnapshots(snapshotRecords, timestamp),
-                        { label: 'snapshots de fundamentos' });
-                    if (snap.appended > 0) logger.info(`🗂️ [Sync] Snapshots de fundamentos atualizados: ${snap.appended}`);
-                } catch (err) {
-                    logger.error(`❌ [Sync] Append de snapshots de fundamentos falhou: ${err.message}`);
-                }
-
-                // Backfill de setores: corrige setores incorretos/ausentes em
-                // TODO o acervo (inclusive ativos fora do scraping). Idempotente.
-                try {
-                    const bf = await withMongoRetry(() => backfillSectors(), { label: 'backfill de setores' });
-                    if (bf.updated > 0) logger.info(`🩹 [Sync] Setores corrigidos no backfill: ${bf.updated}`);
-                } catch (err) {
-                    logger.error(`❌ [Sync] Backfill de setores falhou: ${err.message}`);
-                }
-
-                // Backfill de sub-tipo de Exterior (STOCK_US): STOCK | ETF | REIT | DOLLAR.
-                // Idempotente; só grava quando a classificação heurística muda. O sub-tipo
-                // alimenta os sub-filtros do Research e o viés por sub-meta do rebalance (PR3).
-                try {
-                    const usAssets = await withMongoRetry(
-                        () => MarketAsset.find({ type: 'STOCK_US' })
-                            .select('ticker sector name currency usSubType type').lean(),
-                        { label: 'ativos do Exterior' });
-                    const usOps = [];
-                    for (const a of usAssets) {
-                        const sub = classifyUsAsset({
-                            ticker: a.ticker, sector: a.sector, type: a.type,
-                            currency: a.currency, name: a.name,
-                        });
-                        if (sub && sub !== a.usSubType) {
-                            usOps.push({ updateOne: { filter: { ticker: a.ticker }, update: { $set: { usSubType: sub } } } });
-                        }
-                    }
-                    if (usOps.length > 0) {
-                        await withMongoRetry(() => MarketAsset.bulkWrite(usOps), { label: 'sub-tipos do Exterior' });
-                        logger.info(`🩹 [Sync] Sub-tipos de Exterior classificados: ${usOps.length}`);
-                    }
-                } catch (err) {
-                    logger.error(`❌ [Sync] Backfill de usSubType (Exterior) falhou: ${err.message}`);
-                }
-
-                // SALVA ESTATÍSTICAS DE QUALIDADE
-                await withMongoRetry(() => SystemConfig.findOneAndUpdate(
-                    { key: 'MACRO_INDICATORS' },
-                    {
-                        $set: {
-                            lastSyncStats: {
-                                typosFixed: typosFixedCount,
-                                assetsProcessed: operations.length,
-                                fundamentalsHealthy: true,
-                                errorCode: null,
-                                fundamentals: ingestionHealth.stats,
-                                timestamp: new Date()
-                            }
-                        }
-                    },
-                    { upsert: true }
-                ), { label: 'estatísticas do sync' });
-
-                logger.info(
-                    `ℹ️ [Sync] Etapa 2: STOCK ${ingestionHealth.stats.STOCK.accepted}/${ingestionHealth.stats.STOCK.parsed} · ` +
-                    `FII ${ingestionHealth.stats.FII.accepted}/${ingestionHealth.stats.FII.parsed} aceitos ` +
-                    `(operações totais: ${operations.length}; typos: ${typosFixedCount}).`
-                );
-
-                logger.info("ℹ️ [Sync] Etapa 3: Cotações em tempo real");
-                
-                const validTickers = [];
-                const MIN_LIQUIDITY_FOR_LIVE_QUOTE = 100000; 
-
-                // Reconstrói a lista de validTickers baseada nos dados JÁ SANITIZADOS
-                operations.forEach(op => {
-                    if (op.updateOne && op.updateOne.update && op.updateOne.update.$set) {
-                        const t = op.updateOne.filter.ticker;
-                        const update = op.updateOne.update.$set;
-                        if (update.liquidity && update.liquidity > MIN_LIQUIDITY_FOR_LIVE_QUOTE) {
-                            validTickers.push(t);
-                        }
-                    }
-                });
-                // Exterior/cripto entram direto: a escrita de cotação deles saiu da
-                // Etapa 2 (ver `externalTickers`), e o filtro de liquidez acima lia
-                // justamente a `liquidity` que aquela escrita punha em `operations`.
-                validTickers.push(...externalTickers);
-                
-                // Batch
-                const BATCH_SIZE = 50;
-                // Remove duplicatas de validTickers
-                const uniqueValidTickers = [...new Set(validTickers)];
-
-                for (let i = 0; i < uniqueValidTickers.length; i += BATCH_SIZE) {
-                    const batch = uniqueValidTickers.slice(i, i + BATCH_SIZE);
-                    await marketDataService.refreshQuotesBatch(batch, true);
-                    await new Promise(r => setTimeout(r, 200)); 
-                }
-                
-                // Etapa 4: Fundamentals US (1x/dia via guard de tempo)
-                try {
-                    const macroConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-                    const lastUSFundamentals = macroConfig?.lastUSFundamentalsSync;
-                    const shouldSyncFundamentals = !lastUSFundamentals ||
-                        Date.now() - new Date(lastUSFundamentals).getTime() > 23 * 60 * 60 * 1000;
-
-                    if (shouldSyncFundamentals) {
-                        logger.info("ℹ️ [Sync] Etapa 4: Fundamentals S&P 500 (sincronização diária)");
-                        await usStocksFundamentalsService.syncUSStocksFundamentals();
-                        // ETFs nacionais (B3) — dy/marketCap via Yahoo .SA (o seed não traz fundamentos)
-                        await usStocksFundamentalsService.syncBrEtfFundamentals();
-                        await SystemConfig.findOneAndUpdate(
-                            { key: 'MACRO_INDICATORS' },
-                            { $set: { lastUSFundamentalsSync: new Date() } },
-                            { upsert: true }
-                        );
-                    } else {
-                        logger.info("ℹ️ [Sync] Etapa 4: Fundamentals US — já sincronizados nas últimas 23h, pulando.");
-                    }
-                } catch (err) {
-                    logger.error(`❌ [Sync] Etapa 4 falhou: ${err.message}`);
-                }
-
-                // Etapa 4.5: Enriquecimento LTM via Yahoo Finance para ações BR (1x/dia)
-                try {
-                    const macroConfig4 = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-                    const lastLTMEnrich = macroConfig4?.lastBRLTMEnrichSync;
-                    const shouldEnrich = !lastLTMEnrich ||
-                        Date.now() - new Date(lastLTMEnrich).getTime() > 23 * 60 * 60 * 1000;
-                    if (shouldEnrich) {
-                        await enrichBRStocksLTM();
-                        await SystemConfig.findOneAndUpdate(
-                            { key: 'MACRO_INDICATORS' },
-                            { $set: { lastBRLTMEnrichSync: new Date() } },
-                            { upsert: true }
-                        );
-                    } else {
-                        logger.info("ℹ️ [Sync] Etapa 4.5: LTM BR — já enriquecido nas últimas 23h, pulando.");
-                    }
-                } catch (err) {
-                    logger.error(`❌ [Sync] Etapa 4.5 falhou: ${err.message}`);
-                }
-
-                return {
-                    success: true,
-                    count: operations.length,
-                    fundamentalsProcessed: ingestionHealth.stats.STOCK.accepted + ingestionHealth.stats.FII.accepted,
-                    fundamentals: ingestionHealth.stats,
-                };
-            } else {
-                return { success: false, count: 0, error: "Nenhum ativo válido encontrado." };
-            }
-
+            return await runFullSyncStages();
         } catch (error) {
             logger.error(`❌ [Sync Interno] Falha: ${error.message}`);
             return { success: false, error: error.message };
