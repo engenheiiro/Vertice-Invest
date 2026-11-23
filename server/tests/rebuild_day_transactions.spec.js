@@ -40,14 +40,14 @@ describe('applyDayTransactions — fluxo ajustado pelo candle', () => {
 describe('applyDayTransactions — renda fixa', () => {
   const cdb = { ticker: 'CDB', type: 'FIXED_INCOME', fixedIncomeRate: 0 };
 
-  it('renda fixa não consulta candle e abre o estado com taxa 10 quando a taxa falta', () => {
+  it('RF sem taxa abre o estado com 100 (% do CDI), como o caminho ao vivo (abria com 10)', () => {
     const findPrice = vi.fn(noPrice);
     const ctx = context([tx({ ticker: 'CDB', quantity: 1, price: 1000, totalValue: 1000 })], {
       assetMetadataMap: new Map([['CDB', cdb]]),
     });
     applyDayTransactions(ctx, findPrice);
     expect(findPrice).not.toHaveBeenCalled();
-    expect(ctx.fixedIncomeState.CDB).toMatchObject({ rate: 10, currentValue: 1000, lots: [{ dateIso: DAY, cost: 1000, qty: 1 }] });
+    expect(ctx.fixedIncomeState.CDB).toMatchObject({ rate: 100, currentValue: 1000, lots: [{ dateIso: DAY, cost: 1000, qty: 1 }] });
   });
 
   it('posição que já existia sem estado ganha o estado tardio, com taxa 100', () => {
@@ -59,6 +59,37 @@ describe('applyDayTransactions — renda fixa', () => {
     expect(ctx.fixedIncomeState.CDB.rate).toBe(100);
   });
 
+  it('taxa negativa vale como ausente também no estado tardio (passava -1)', () => {
+    const ctx = context([tx({ ticker: 'CDB', quantity: 1, price: 1000, totalValue: 1000 })], {
+      assetMetadataMap: new Map([['CDB', { ...cdb, fixedIncomeRate: -1 }]]),
+      portfolio: { CDB: { qty: 1, cost: 900, costBrl: 900 } },
+    });
+    applyDayTransactions(ctx, noPrice);
+    expect(ctx.fixedIncomeState.CDB.rate).toBe(100);
+  });
+
+  it('estado de abertura e tardio saem com a mesma taxa para a mesma RF', () => {
+    const meta = { ...cdb, fixedIncomeRate: 112 };
+    const opening = context([tx({ ticker: 'CDB', quantity: 1, totalValue: 1000 })], { assetMetadataMap: new Map([['CDB', meta]]) });
+    const late = context([tx({ ticker: 'CDB', quantity: 1, totalValue: 1000 })], {
+      assetMetadataMap: new Map([['CDB', meta]]), portfolio: { CDB: { qty: 1, cost: 900, costBrl: 900 } },
+    });
+    applyDayTransactions(opening, noPrice);
+    applyDayTransactions(late, noPrice);
+    expect(opening.fixedIncomeState.CDB.rate).toBe(112);
+    expect(late.fixedIncomeState.CDB.rate).toBe(112);
+  });
+
+  it('venda de RF numa posição sem estado de RF não lança TypeError (lançava)', () => {
+    const ctx = context([tx({ ticker: 'CDB', type: 'SELL', quantity: 1, price: 1000, totalValue: 1000 })], {
+      assetMetadataMap: new Map([['CDB', cdb]]),
+      portfolio: { CDB: { qty: 2, cost: 1800, costBrl: 1800 } },
+    });
+    expect(() => applyDayTransactions(ctx, noPrice)).not.toThrow();
+    expect(ctx.portfolio.CDB).toEqual({ qty: 1, cost: 900, costBrl: 900 });
+    expect(ctx.fixedIncomeState.CDB).toMatchObject({ rate: 100, currentValue: 0, lots: [] });
+  });
+
   it('compra anterior ao início da série de PU abandona a marcação do título', () => {
     const series = [{ date: '2026-03-10', pu: 1000, puBuy: 1000 }];
     const ctx = context([tx({ ticker: 'TD', quantity: 1, price: 900, totalValue: 900, date: new Date('2026-02-01T12:00:00Z') })], {
@@ -67,6 +98,17 @@ describe('applyDayTransactions — renda fixa', () => {
     });
     applyDayTransactions(ctx, noPrice);
     expect(ctx.fixedIncomeState.TD.history).toBeNull();
+  });
+
+  it('custo, valor da RF e fluxo somam em 4 casas (somavam float cru: 0,1 + 0,2 = 0,30000000000000004)', () => {
+    const ctx = context([
+      tx({ ticker: 'CDB', quantity: 1, price: 0.1, totalValue: 0.1 }),
+      tx({ ticker: 'CDB', quantity: 1, price: 0.2, totalValue: 0.2 }),
+    ], { assetMetadataMap: new Map([['CDB', cdb]]) });
+    const result = applyDayTransactions(ctx, noPrice);
+    expect(ctx.portfolio.CDB).toEqual({ qty: 2, cost: 0.3, costBrl: 0.3 });
+    expect(ctx.fixedIncomeState.CDB.currentValue).toBe(0.3);
+    expect(result).toEqual({ txIndex: 2, dayFlowAdjusted: 0.3, dayFlowNominal: 0.3 });
   });
 
   it('lote sem quantidade derruba o resgate para a baixa proporcional', () => {

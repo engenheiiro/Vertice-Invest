@@ -6,15 +6,19 @@
  * o fluxo do dia (ajustado e nominal, em BRL) para o Modified Dietz.
  *
  * Saiu de `financialService._applyDayTransactions` (complexidade 43) em partes
- * por tipo de lançamento e classe de ativo, com a aritmética intacta — a
- * caracterização em `tests/apply_day_transactions_characterization.spec.js` foi
- * gravada no código anterior à divisão.
+ * por tipo de lançamento e classe de ativo (caracterização em
+ * `tests/apply_day_transactions_characterization.spec.js`).
+ *
+ * Dinheiro em 4 casas (regra 7): somas por `safeAdd`/`safeSub`; produto por
+ * câmbio, razão ou fração é feito cheio e só o resultado passa por `safeFloat` —
+ * como o `safeCurrency(total × câmbio)` de `recalculatePosition`. `safeMult`
+ * arredondaria o próprio fator a 4 casas. Quantidade e preço médio ficam crus.
  */
 import { resolveTransactionCurrency } from './assetCurrency.js';
 import { effectiveFxRate } from './fxRate.js';
 import { findTreasuryPu } from './fixedIncome.js';
 import { toDateKey } from './dateUtils.js';
-import { QUANTITY_EPSILON } from './mathUtils.js';
+import { QUANTITY_EPSILON, safeAdd, safeFloat, safeSub } from './mathUtils.js';
 
 /** Renda fixa não busca candle: o fluxo ajustado é o próprio valor do lançamento. */
 const NO_PRICE = Object.freeze({ close: 0, adjClose: 0 });
@@ -24,14 +28,20 @@ const isFixedIncomeMeta = (meta) => meta?.type === 'FIXED_INCOME' || meta?.type 
 const maturityIsoOf = (meta) => (meta?.maturityDate ? toDateKey(meta.maturityDate) : null);
 
 /**
- * Estado de renda fixa de uma posição vista pela primeira vez.
+ * Estado de renda fixa de uma posição: na primeira vez que ela aparece, ou mais
+ * tarde (compra ou venda numa posição que veio de fora sem ele) — a mesma regra
+ * nos dois casos.
  * Marcação a mercado: série de PU do título público (null = segue na curva) +
  * lotes em `{dateIso, cost}` para a razão de PU, que é o que torna a marcação
  * independente de como quantidade e preço foram cadastrados.
+ *
+ * Taxa ausente, zero ou negativa vira 100 (% do CDI), para CASH e RF: é o que o
+ * caminho ao vivo faz (`fixedIncomeDailyFactor`). O 10 que valia aqui rendia a
+ * RF sem taxa como prefixado de 10% a.a. só no rebuild (regra 9).
  */
-const openingFixedIncomeState = (meta, treasuryPricing) => ({
+const fixedIncomeStateFor = (meta, treasuryPricing) => ({
     currentValue: 0,
-    rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : (meta.type === 'CASH' ? 100 : 10),
+    rate: meta.fixedIncomeRate > 0 ? meta.fixedIncomeRate : 100,
     index: meta.fixedIncomeIndex || null,
     spread: meta.fixedIncomeSpread || 0,
     history: treasuryPricing.historyFor(meta),
@@ -39,27 +49,17 @@ const openingFixedIncomeState = (meta, treasuryPricing) => ({
     lots: [],
 });
 
-/**
- * Estado criado na compra quando a posição já existia sem ele (portfolio vindo
- * de fora). Os defaults são os da regra original desse caminho — taxa 100, não
- * 10 — e não foram unificados com `openingFixedIncomeState` de propósito.
- */
-const lateFixedIncomeState = (meta, treasuryPricing) => ({
-    currentValue: 0,
-    rate: meta?.fixedIncomeRate || 100,
-    index: meta?.fixedIncomeIndex || null,
-    spread: meta?.fixedIncomeSpread || 0,
-    history: meta ? treasuryPricing.historyFor(meta) : null,
-    maturityIso: maturityIsoOf(meta),
-    lots: [],
-});
+const fixedIncomeStateOf = ({ fixedIncomeState, treasuryPricing }, ticker, meta) => {
+    if (!fixedIncomeState[ticker]) fixedIncomeState[ticker] = fixedIncomeStateFor(meta, treasuryPricing);
+    return fixedIncomeState[ticker];
+};
 
 /** cost = moeda nativa; costBrl = mesmo custo com o câmbio de cada compra congelado. */
 const ensurePosition = ({ portfolio, fixedIncomeState, assetMetadataMap, treasuryPricing }, ticker) => {
     if (portfolio[ticker]) return;
     portfolio[ticker] = { qty: 0, cost: 0, costBrl: 0 };
     const meta = assetMetadataMap.get(ticker);
-    if (meta && isFixedIncomeMeta(meta)) fixedIncomeState[ticker] = openingFixedIncomeState(meta, treasuryPricing);
+    if (meta && isFixedIncomeMeta(meta)) fixedIncomeState[ticker] = fixedIncomeStateFor(meta, treasuryPricing);
 };
 
 /**
@@ -81,9 +81,9 @@ const adjustedFlowOf = (tx, pData) => {
     if (!(pData.adjClose > 0)) return { txAdjPrice: tx.price, trueAdjustedFlow: tx.totalValue };
     if (pData.close > 0) {
         const ratio = pData.adjClose / pData.close;
-        return { txAdjPrice: pData.adjClose, trueAdjustedFlow: tx.totalValue * ratio };
+        return { txAdjPrice: pData.adjClose, trueAdjustedFlow: safeFloat(tx.totalValue * ratio) };
     }
-    return { txAdjPrice: pData.adjClose, trueAdjustedFlow: tx.quantity * pData.adjClose };
+    return { txAdjPrice: pData.adjClose, trueAdjustedFlow: safeFloat(tx.quantity * pData.adjClose) };
 };
 
 /**
@@ -92,10 +92,9 @@ const adjustedFlowOf = (tx, pData) => {
  * não rende no próprio dia). Compra anterior ao início da série de PU abandona a
  * marcação do título de vez — metade marcada e metade na curva não tem régua.
  */
-const addFixedIncomeLot = ({ fixedIncomeState, treasuryPricing }, tx, { meta, txDateIso }) => {
-    if (!fixedIncomeState[tx.ticker]) fixedIncomeState[tx.ticker] = lateFixedIncomeState(meta, treasuryPricing);
-    const state = fixedIncomeState[tx.ticker];
-    state.currentValue += tx.totalValue;
+const addFixedIncomeLot = (ctx, tx, { meta, txDateIso }) => {
+    const state = fixedIncomeStateOf(ctx, tx.ticker, meta);
+    state.currentValue = safeAdd(state.currentValue, tx.totalValue);
     state.lots.push({ dateIso: txDateIso, cost: tx.totalValue, qty: tx.quantity });
     if (state.history && !findTreasuryPu(state.history, txDateIso)) state.history = null;
 };
@@ -103,11 +102,11 @@ const addFixedIncomeLot = ({ fixedIncomeState, treasuryPricing }, tx, { meta, tx
 const applyBuy = (ctx, tx, step) => {
     const position = ctx.portfolio[tx.ticker];
     position.qty += tx.quantity;
-    position.cost += tx.totalValue;
-    position.costBrl += tx.totalValue * step.txUsdRate;
+    position.cost = safeAdd(position.cost, tx.totalValue);
+    position.costBrl = safeAdd(position.costBrl, safeFloat(tx.totalValue * step.txUsdRate));
     if (step.isFixed) addFixedIncomeLot(ctx, tx, step);
     if (!ctx.lastKnownPrices[tx.ticker]) ctx.lastKnownPrices[tx.ticker] = { close: tx.price, adjClose: step.txAdjPrice };
-    return { adjusted: step.trueAdjustedFlow * step.txUsdRate, nominal: tx.totalValue * step.txUsdRate };
+    return { adjusted: safeFloat(step.trueAdjustedFlow * step.txUsdRate), nominal: safeFloat(tx.totalValue * step.txUsdRate) };
 };
 
 /**
@@ -121,7 +120,7 @@ const consumeFixedIncomeLotsFifo = (state, soldQty, soldFraction) => {
     if (!(soldQty > 0) || !state?.lots?.length) return;
     if (state.lots.some((lot) => !(lot.qty > 0))) {
         const remaining = Math.max(0, 1 - soldFraction);
-        state.lots = state.lots.map((lot) => ({ ...lot, cost: lot.cost * remaining }));
+        state.lots = state.lots.map((lot) => ({ ...lot, cost: safeFloat(lot.cost * remaining) }));
         return;
     }
     let toSell = soldQty;
@@ -130,7 +129,7 @@ const consumeFixedIncomeLotsFifo = (state, soldQty, soldFraction) => {
         if (toSell <= QUANTITY_EPSILON) { kept.push(lot); continue; }
         if (lot.qty > toSell + QUANTITY_EPSILON) {
             const left = lot.qty - toSell;
-            kept.push({ ...lot, qty: left, cost: lot.cost * (left / lot.qty) });
+            kept.push({ ...lot, qty: left, cost: safeFloat(lot.cost * (left / lot.qty)) });
             toSell = 0;
         } else {
             toSell -= lot.qty;
@@ -139,21 +138,25 @@ const consumeFixedIncomeLotsFifo = (state, soldQty, soldFraction) => {
     state.lots = kept;
 };
 
-/** Baixa proporcional em BRL: a venda não reprecifica o câmbio das compras que ficaram. */
-const applySell = ({ portfolio, fixedIncomeState }, tx, step) => {
-    const position = portfolio[tx.ticker];
+/**
+ * Baixa proporcional em BRL: a venda não reprecifica o câmbio das compras que ficaram.
+ * RF sem estado (posição vinda de fora) ganha o estado como na compra, sem lotes:
+ * o ao vivo também não tem lote a baixar quando não houve compra registrada.
+ */
+const applySell = (ctx, tx, step) => {
+    const position = ctx.portfolio[tx.ticker];
     const qtyBefore = position.qty;
     const currentAvg = qtyBefore > 0 ? position.cost / qtyBefore : 0;
     const soldFraction = qtyBefore > 0 ? tx.quantity / qtyBefore : 0;
     position.qty -= tx.quantity;
-    position.cost -= (tx.quantity * currentAvg);
-    position.costBrl -= position.costBrl * soldFraction;
+    position.cost = safeSub(position.cost, safeFloat(tx.quantity * currentAvg));
+    position.costBrl = safeSub(position.costBrl, safeFloat(position.costBrl * soldFraction));
     if (step.isFixed) {
-        const state = fixedIncomeState[tx.ticker];
-        state.currentValue = Math.max(0, state.currentValue - tx.totalValue);
+        const state = fixedIncomeStateOf(ctx, tx.ticker, step.meta);
+        state.currentValue = Math.max(0, safeSub(state.currentValue, tx.totalValue));
         consumeFixedIncomeLotsFifo(state, tx.quantity, soldFraction);
     }
-    return { adjusted: -(step.trueAdjustedFlow * step.txUsdRate), nominal: -(tx.totalValue * step.txUsdRate) };
+    return { adjusted: -safeFloat(step.trueAdjustedFlow * step.txUsdRate), nominal: -safeFloat(tx.totalValue * step.txUsdRate) };
 };
 
 const closeIfEmpty = ({ portfolio, fixedIncomeState }, ticker) => {
@@ -201,8 +204,8 @@ export const applyDayTransactions = (ctx, findPrice) => {
         if (txDateIso > cursorIso) break;
         const flow = applyTransaction(ctx, tx, txDateIso, findPrice);
         if (flow) {
-            dayFlowAdjusted += flow.adjusted;
-            dayFlowNominal += flow.nominal;
+            dayFlowAdjusted = safeAdd(dayFlowAdjusted, flow.adjusted);
+            dayFlowNominal = safeAdd(dayFlowNominal, flow.nominal);
         }
         txIndex++;
     }
