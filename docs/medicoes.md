@@ -29,35 +29,35 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.server.services` — Cobertura de linhas — server/services (%) | 76.5 | 76.6 |
 | `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 93.5 | 93.7 |
 | `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.3 |
-| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 79.5 | 79.9 |
+| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 81 | 81.4 |
 | `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 77.5 | 77.7 |
 | `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 100 | 100 |
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89 | 89.3 |
-| `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87 |
+| `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 88 | 88 |
 | `testes.server` — Casos de teste do server | 3389 | 3389 |
-| `testes.client` — Casos de teste do client | 1771 | 1771 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 32.9 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 37.6 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 40 | 40 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1143 | 1143 |
+| `testes.client` — Casos de teste do client | 1923 | 1923 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 39.9 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 46.6 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 38 | 38 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1089 | 1089 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 |
 | `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 |
 | `tsDiretivas` — Diretivas de supressão do TypeScript (ignore / expect-error / nocheck) | 0 | 0 |
-| `naoNulo` — Asserções de não-nulo "x!" (TS) | 58 | 58 |
+| `naoNulo` — Asserções de não-nulo "x!" (TS) | 54 | 54 |
 | `focoEmTeste` — Testes com .only / fit / fdescribe | 0 | 0 |
 | `testesComData` — Arquivos de teste que leem o relógio sem fixá-lo | 0 | 0 |
 | `testesEmQuarentena` — Testes pulados em quarentena (0 no fim da semana) | info | 0 |
 | `quarentenaIrregular` — Teste pulado sem data, vencido ou com prazo > 7 dias | 0 | 0 |
 | `cssSemUso` — Classes do CSS próprio sem uso | 9 | 9 |
 | `imgSemSrcset` — <img> sem srcSet | 23 | 23 |
-| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 702 |
+| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 704 |
 | `lint.erros` — Erros do ESLint | 0 | 0 |
 | `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 13 | 13 |
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 112 | 112 |
-| `complexidadeMax` — Maior complexidade ciclomática de uma função | 51 | 51 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 109 | 109 |
+| `complexidadeMax` — Maior complexidade ciclomática de uma função | 48 | 48 |
 | `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.63 | 0.63 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 |
 | `vulnAltas` — Vulnerabilidades altas/críticas (npm audit) | 0 | 0 |

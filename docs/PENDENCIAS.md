@@ -5,13 +5,28 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-22) Maior complexidade agora é 51.** Já quebrados: perfil
+- **(dono, 2026-11-22) Maior complexidade agora é 48.** Já quebrados: perfil
   FII do scoring e `auditDividendPaymentSources.js` (73), `dataSourceStatus.js`
-  (60), Indicators e AuditDetailModal (53) e o gate `isEligibleForDefensive`
-  (52, agora em `engines/defensiveGate.js`). O teto passa a ser
-  `PerformanceOverview.tsx` e `WalletView.tsx` (51), seguidos de
-  `AssetDetailModal.tsx` (49). No scoring, o maior é `calculateIntrinsicValue`
-  (42).
+  (60), Indicators e AuditDetailModal (53), o gate `isEligibleForDefensive`
+  (52), PerformanceOverview e WalletView (51) e AssetDetailModal da Pesquisa
+  (49). O teto passa a ser `EquitySummary.tsx`, `CreateGoalModal.tsx` e o
+  `WalletContext.tsx` (48), seguidos de `DataSourcesPanel.tsx` e
+  `financialService.js` (46).
+- **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
+  tela** (o comportamento foi congelado como estava; cada uma é decisão
+  própria):
+  - Pesquisa (AssetDetailModal): fundo do modal `bg-black/90`, não o
+    `bg-black/95` do design system; em CRIPTO, "Market Cap" e "Liquidez Est."
+    saem em `R$` enquanto o preço sai em `US$`; D/E acima de 10 é dividido por
+    100.
+  - Carteira (WalletView): fora do demo a marcação recebe uma classe literal
+    `false`; sem usuário, o Aporte não mostra cadeado (o clique segue
+    bloqueado); a carteira vazia tem `<h3>` logo abaixo do `<h1>` (axe
+    `heading-order`, desligado só nesse teste).
+  - Admin (AuditDetailModal): nota "C" com veredito "descartado" entre 60 e
+    64; botão de fechar o painel de detalhe sem nome acessível.
+  - Admin (PerformanceOverview): a linha da janela pode imprimir "null"
+    quando `rssMinMb`/`rssMaxMb` faltam.
 
 ## Decididas
 
