@@ -25,9 +25,27 @@ mesmo commit que o resolve.
   e `healWalletCandleGaps` (31), `describeTesouroDownloadProblem` (30),
   `buildFundamentalsOp` e `ingestTreasuryPrices` (26),
   `parseTesouroDiretoQuotes` (25), `ensureWalletDayCandles` (22),
-  `detectExDateDividends` (20), `retireStaleInactiveAssets` (16). Faltam as
-  ondas 4–5: motores (`signalEngine.runScanner` 37 é o próximo), telas. `dataHealthRules.js` ainda tem
+  `detectExDateDividends` (20), `retireStaleInactiveAssets` (16). Onda 4
+  (23/11): `applyWeeklyRetention` (43), `runScanner` (37),
+  `calculateStockCalibrationConfidence` (32), `passesBuyAndHoldGate` e
+  `formatMetrics` (31), `applyBrasil10Retention` (29),
+  `detectBullishDivergence` (25), `scoreBuyAndHold` e `formatRankingItem`
+  (18), `runBacktest` (17). O teto agora é PerformanceChart (41); depois
+  CoursePlayer (35), SecuritySection e AssetSection (33), DayMoversModal (30)
+  — a onda 5 (telas). `dataHealthRules.js` ainda tem
   7 funções acima de 15 (24, 23, 19, 19, 18, 18, 17).
+- **(dono, 2026-11-23) Estranhezas congeladas na onda 4** (mesma regra):
+  - `signalEngine.runScanner`: se um check lança depois de outro já ter
+    gravado, o upsert do primeiro fica mas o ticker sai de `scannedTickers`
+    (a auto-invalidação o trata como não varrido); `roe` em texto passa em
+    `> 0` e quebra em `toFixed`, e o ativo cai no catch; a divergência valida a
+    correlação como `'RSI_OVERSOLD'` e por isso escapa do veto de dia de crash.
+    `runBacktest` não devolve `success: true` nem `expired` no caminho normal.
+  - `calculateStockCalibrationConfidence`: `legacyConfidence = ''` derruba a
+    confiança a 0 (`Number('')`); `requiredCoverage` em texto vira teto 0;
+    ativo nulo lança.
+  - Relatório TXT do ranking: no bloco "Indicadores Cripto", Market Cap e
+    Liquidez saem em `R$`, enquanto a "Liquidez Média" do mesmo item sai em `$`.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 3** (mesma regra):
   - Fundamentos US/ETF (`yahooFundamentalsMapper`), regra 13: `pvp`, `beta` e
     `vpa` são gravados com o que vier truthy do Yahoo (objeto `{raw}`, texto,
