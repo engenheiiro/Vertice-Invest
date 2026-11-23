@@ -13,9 +13,17 @@ import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv, fetchTesouroDiretoQuotes, expectedTreasuryDataBase } from './treasuryPriceService.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
-import { trackSource, recordEscalation, recordSourceSkip } from '../utils/sourceHealth.js';
+import { trackSource, recordSourceSkip } from '../utils/sourceHealth.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { brNow } from '../utils/sourceSchedule.js';
+import { NTNB_REAL_MIN, NTNB_REAL_MAX, isPlausibleNtnbRate, parseNtnbFromCsv } from './macro/ntnbRate.js';
+import {
+    collectOfficialRates, applyMissingRatesFallback, logRatesSummary, reportRatesEscalations, buildOfficialRatesResult,
+} from './macro/officialRates.js';
+import { normalizeUsdEntries, mergeUsdHistory } from './macro/usdHistory.js';
+import { applyMacroReadings } from './macro/macroConfigWriter.js';
+import { reportCurrencyEscalations } from './macro/currencyLedger.js';
+import { looksLikeBondTitle, classifyBond, isReferenceNtnbTitle } from './macro/treasuryCatalog.js';
 
 const SERIES_BCB = { SELIC_META: 432, IPCA_12M: 13522, CDI_MONTHLY: 4391, SELIC_DAILY: 11 };
 
@@ -26,16 +34,8 @@ const parseBcbDate = (raw) => {
     return Number.isFinite(date.getTime()) ? date : null;
 };
 
-// --- Plausibilidade da taxa REAL da NTN-B (Tesouro IPCA+) longa ---
-// Yields reais brasileiros de longo prazo historicamente vivem em ~2%–9%.
-// Um valor bem acima disso (ex.: ~12%) quase sempre é contaminação da fonte:
-// o retorno NOMINAL projetado = taxa real ⊕ IPCA (7,3% ⊕ 4,7% ≈ 12,4%), e não
-// a taxa real de referência. Esta faixa rejeita leituras corrompidas antes que
-// cheguem ao scoring (Bazin/spread vs Tesouro em ações e FIIs).
-export const NTNB_REAL_MIN = 2.0;
-export const NTNB_REAL_MAX = 9.5;
-export const isPlausibleNtnbRate = (rate) =>
-    Number.isFinite(rate) && rate >= NTNB_REAL_MIN && rate <= NTNB_REAL_MAX;
+// Plausibilidade da taxa REAL da NTN-B longa: mora em macro/ntnbRate.js.
+export { NTNB_REAL_MIN, NTNB_REAL_MAX, isPlausibleNtnbRate };
 
 // --- Taxa oficial da NTN-B: uma leitura por hora, não por rodada ---
 // O CSV do Tesouro é publicado UMA vez por dia útil (~10:20) e o macro-sync roda a
@@ -241,107 +241,28 @@ export const macroDataService = {
     //   fonte secundária que diverja do último valor bom é CONGELADA (evita que uma
     //   BrasilAPI atrasada durante uma queda do BCB propague Selic velha p/ a carteira).
     async updateOfficialRates(lastGoodSelic = null) {
-        let selicVal = await this._fetchBcbSeries(SERIES_BCB.SELIC_META, 'SELIC');
-        let ipcaVal = await this._fetchBcbSeries(SERIES_BCB.IPCA_12M, 'IPCA');
-
-        let selicSource = selicVal != null ? 'BCB' : null;
-        let ipcaSource = ipcaVal != null ? 'BCB' : null;
-
-        // Trilha por INDICADOR, pelo mesmo motivo do câmbio: o IBGE só publica
-        // IPCA, e uma trilha por chamada o acusaria de ter falhado na Selic, que
-        // ele nunca teve como responder. O BCB é sempre tentado nos dois — são
-        // duas séries, duas chamadas.
-        const trilha = { selic: ['bcb.series'], ipca: ['bcb.series'] };
-
-        // Secundária unificada: BrasilAPI entrega Selic e IPCA numa única chamada (tokenless).
-        if (selicVal == null || ipcaVal == null) {
-            if (selicVal == null) trilha.selic.push('brasilapi');
-            if (ipcaVal == null) trilha.ipca.push('brasilapi');
-            const brasilApi = await this.fetchRatesFromBrasilApi();
-            if (selicVal == null && brasilApi.selic != null) { selicVal = brasilApi.selic; selicSource = 'BrasilAPI'; }
-            if (ipcaVal == null && brasilApi.ipca != null) { ipcaVal = brasilApi.ipca; ipcaSource = 'BrasilAPI'; }
-        }
-
-        // Terciária para IPCA: IBGE SIDRA (fonte autoritativa do índice, tokenless).
-        if (ipcaVal == null) {
-            trilha.ipca.push('ibge');
-            ipcaVal = await this.fetchIpcaFromIbge();
-            if (ipcaVal != null) ipcaSource = 'IBGE';
-        }
+        const reading = await collectOfficialRates(this, {
+            selic: await this._fetchBcbSeries(SERIES_BCB.SELIC_META, 'SELIC'),
+            ipca: await this._fetchBcbSeries(SERIES_BCB.IPCA_12M, 'IPCA'),
+        });
 
         // Sem fonte nenhuma: NADA de constante nossa. Até 22/11/2026 a Selic caía
-        // em DEFAULT_SELIC_FALLBACK (14,25) e o IPCA em 4,50, e `performMacroSync`
-        // gravava os dois — mais CDI e riskFree derivados — POR CIMA do último
-        // valor real do banco, só com `ratesStale` de aviso. Uma queda do BCB e
-        // da BrasilAPI ao mesmo tempo bastava para a carteira inteira render por
-        // uma Selic que podia estar pontos percentuais longe da vigente.
-        //
-        // Agora a Selic sem fonte devolve a ÚLTIMA BOA (a âncora que o chamador
-        // já passa para o guard), e o IPCA sem fonte devolve null; as flags
-        // por indicador dizem ao gravador o que NÃO deve ser escrito.
-        let selicIsFallback = false;
-        let ipcaIsFallback = false;
-        if (selicVal == null) {
-            selicVal = lastGoodSelic > 0 ? lastGoodSelic : null;
-            selicIsFallback = true;
-            logger.warn(`⚠️ [Macro] SELIC: BCB e fonte secundária falharam. Mantendo o último valor gravado (${selicVal ?? 'nenhum'}%, ratesStale=true).`);
-        }
-        if (ipcaVal == null) {
-            ipcaIsFallback = true;
-            logger.warn('⚠️ [Macro] IPCA: BCB, BrasilAPI e IBGE falharam. Mantendo o último valor gravado (ratesStale=true).');
-        }
+        // em 14,25 e o IPCA em 4,50, gravados POR CIMA do último valor real.
+        const fallback = applyMissingRatesFallback(reading, lastGoodSelic);
 
         // (Guard de autoridade) Só o BCB (meta COPOM, propagada no mesmo dia) MOVE a
         // Selic. Uma fonte secundária que diverge do último valor bom é rejeitada e o
-        // valor bom é mantido (congelado), sinalizando ratesStale. O fallback hardcoded
-        // preserva o comportamento antigo (não é congelado — é o default intencional).
-        const guard = this._reconcileSelic(selicVal, selicSource, lastGoodSelic);
+        // valor bom é mantido (congelado), sinalizando ratesStale.
+        const guard = this._reconcileSelic(reading.selic, reading.selicSource, lastGoodSelic);
         const selicFrozen = guard.frozen;
         if (selicFrozen) {
-            selicVal = guard.selic;
-            logger.warn(`⚠️ [Macro] SELIC de fonte não-autoritativa (${guard.rejectedSource} ${guard.rejectedValue}%) divergiu do último valor bom ${lastGoodSelic}%. Mantendo ${selicVal}% (congelado, ratesStale=true).`);
+            reading.selic = guard.selic;
+            logger.warn(`⚠️ [Macro] SELIC de fonte não-autoritativa (${guard.rejectedSource} ${guard.rejectedValue}%) divergiu do último valor bom ${lastGoodSelic}%. Mantendo ${reading.selic}% (congelado, ratesStale=true).`);
         }
 
-        logger.info(`📊 [Macro] Taxas oficiais: SELIC ${selicVal}% (${selicFrozen ? 'congelado' : selicSource || 'fallback'}) · IPCA 12m ${ipcaVal}% (${ipcaSource || 'fallback'}).`);
-
-        // Para o painel: quem precisou de reserva, e quem ficou sem fonte alguma.
-        //
-        // Duas afirmações honestas que o número sozinho não faz. O fallback
-        // hardcoded NÃO é fonte: o indicador entra como não resolvido, porque foi
-        // isso que aconteceu — nenhuma fonte publicou e o sistema seguiu com uma
-        // constante nossa. A Selic CONGELADA pelo guard de autoridade também
-        // entra como não resolvida, e pelo mesmo motivo: o valor que ficou no
-        // banco é o último bom que já tínhamos, não o que a secundária trouxe.
-        const ID_TAXA = { BCB: 'bcb.series', BrasilAPI: 'brasilapi', IBGE: 'ibge' };
-        const registrarTaxa = (assunto, tried, source, motivo) => {
-            const resolvedBy = ID_TAXA[source] || null;
-            if (tried.length <= 1 && resolvedBy) return;
-            recordEscalation({ chain: 'rates', subject: assunto, tried, resolvedBy, reason: motivo });
-        };
-        registrarTaxa(
-            'SELIC',
-            trilha.selic,
-            selicFrozen ? null : selicSource,
-            selicFrozen
-                ? `Fonte secundária divergiu do último valor bom (${lastGoodSelic}%) e só o Banco Central pode mover a Selic — valor congelado`
-                : 'O Banco Central não trouxe este indicador',
-        );
-        registrarTaxa('IPCA', trilha.ipca, ipcaSource, 'O Banco Central não trouxe este indicador');
-
-        // Sem `cdi12m` aqui: "Selic de hoje − 0,10" é a taxa VIGENTE, não o
-        // retorno REALIZADO nos últimos 12 meses — num ciclo de corte ou de alta
-        // os dois divergem por pontos. O acumulado vem da série diária real
-        // (`computeCdiReturn12m`), ou não vem.
-        return {
-            selic: selicVal,
-            ipca: ipcaVal,
-            cdi: selicVal != null ? Math.max(0, selicVal - 0.10) : null,
-            isFallback: selicIsFallback || ipcaIsFallback,
-            selicIsFallback,
-            ipcaIsFallback,
-            selicFrozen,
-            sources: { selic: selicFrozen ? 'frozen' : (selicSource || 'fallback'), ipca: ipcaSource || 'fallback' }
-        };
+        logRatesSummary(reading, selicFrozen);
+        reportRatesEscalations(reading, selicFrozen, lastGoodSelic);
+        return buildOfficialRatesResult(reading, fallback, selicFrozen);
     },
 
     // (Guard PURO) Decide a Selic final a partir da fonte e do último valor bom.
@@ -472,7 +393,7 @@ export const macroDataService = {
             const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados?formato=json&dataInicial=${startDateStr}`;
             const res = await axios.get(url, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 8000 });
 
-            if (res.data && Array.isArray(res.data)) {
+            if (Array.isArray(res.data)) {
                 if (res.data.length > 0) {
                     await this.processDailyData(res.data);
                     logger.info(`✅ [Macro] Sucesso via HTTPS: ${res.data.length} registros.`);
@@ -487,7 +408,7 @@ export const macroDataService = {
             try {
                 const urlUltimos = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${SERIES_BCB.SELIC_DAILY}/dados/ultimos/50?formato=json`;
                 const resUlt = await axios.get(urlUltimos, { headers: BASE_HEADERS, httpsAgent: bcbAgent, timeout: 5000 });
-                if (resUlt.data && Array.isArray(resUlt.data) && resUlt.data.length > 0) {
+                if (Array.isArray(resUlt.data) && resUlt.data.length > 0) {
                     await this.processDailyData(resUlt.data);
                     logger.info(`✅ [Macro] Sucesso via HTTPS (Últimos 50): ${resUlt.data.length} registros.`);
                     return;
@@ -714,23 +635,12 @@ export const macroDataService = {
             logger.error(`❌ [Câmbio] Nenhuma fonte devolveu ${missingLabel()}. O valor anterior é PRESERVADO e marcado como defasado.`);
         }
 
-        // Escalada é a moeda que a PRIMEIRA fonte não trouxe. Quando o Yahoo
-        // entrega as duas, a trilha tem um elo só e nada é registrado — o ledger
-        // é a lista de quem precisou de reserva, não o log de toda coleta.
-        const porNome = new Map(CURRENCY_SOURCES.map((f) => [f.name, f.id]));
-        for (const [moeda, assunto] of [['usd', 'USD'], ['btc', 'BTC']]) {
-            const tried = trilha[moeda];
-            const resolvedBy = porNome.get(reading[`${moeda}Source`]) || null;
-            if (tried.length <= 1 && resolvedBy) continue;
-            recordEscalation({
-                chain: 'fx',
-                subject: assunto,
-                tried,
-                skipped: [...naoConsultadas],
-                resolvedBy,
-                reason: 'O Yahoo não trouxe esta cotação',
-            });
-        }
+        reportCurrencyEscalations({
+            trilha,
+            reading,
+            skipped: naoConsultadas,
+            idByName: new Map(CURRENCY_SOURCES.map((f) => [f.name, f.id])),
+        });
 
         return reading;
     },
@@ -1000,7 +910,7 @@ export const macroDataService = {
         cols.each((i, td) => {
             const text = $(td).text().trim().replace(/\s+/g, ' ');
 
-            if (!title && text.length > 5 && (text.includes('Tesouro') || text.includes('IPCA') || text.includes('Prefixado') || text.includes('Selic') || text.includes('Renda+'))) {
+            if (!title && looksLikeBondTitle(text)) {
                 title = text;
                 titleIdx = i;
             }
@@ -1142,71 +1052,9 @@ export const macroDataService = {
     // Extrai a taxa REAL da NTN-B longa (Tesouro IPCA+, venc. >= 2035) na Data Base
     // mais recente do CSV oficial. Função pura (sem rede) para ser testável.
     // Robusta a reordenação de colunas: resolve índices pelo cabeçalho, não por posição.
+    // A leitura mora em macro/ntnbRate.js (pura, sem rede).
     _parseNtnbFromCsv(csv) {
-        if (!csv || typeof csv !== 'string') return null;
-        const lines = csv.split(/\r?\n/);
-        if (lines.length < 2) return null;
-
-        const header = lines[0].split(';').map(h => h.trim().toLowerCase());
-        const col = (name) => header.indexOf(name.toLowerCase());
-        const iTipo = col('Tipo Titulo');
-        const iVenc = col('Data Vencimento');
-        const iBase = col('Data Base');
-        const iVenda = col('Taxa Venda Manha');
-        const iCompra = col('Taxa Compra Manha');
-        if (iTipo < 0 || iVenc < 0 || iBase < 0 || (iVenda < 0 && iCompra < 0)) return null;
-
-        const toTs = (s) => {
-            const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
-            return m ? Date.UTC(+m[3], +m[2] - 1, +m[1]) : NaN;
-        };
-        const toNum = (s) => {
-            const v = parseFloat(String(s || '').replace(/\./g, '').replace(',', '.'));
-            return Number.isFinite(v) ? v : NaN;
-        };
-
-        // Passo 1: coleta só IPCA+ longos (nunca Educa+/Renda+) e acha a Data Base máxima.
-        let maxBaseTs = -Infinity;
-        const rows = [];
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (!line) continue;
-            const c = line.split(';');
-            const tipo = (c[iTipo] || '').trim();
-            if (!/IPCA\+/i.test(tipo) || /Educa|Renda/i.test(tipo)) continue;
-            const vencTs = toTs(c[iVenc]);
-            const vencYear = Number.isFinite(vencTs) ? new Date(vencTs).getUTCFullYear() : 0;
-            if (vencYear < 2035) continue; // NTN-B longa de referência
-            const baseTs = toTs(c[iBase]);
-            if (!Number.isFinite(baseTs)) continue;
-            // Taxa Venda Manhã: o que o investidor paga — mais conservador para benchmark.
-            const rate = toNum(iVenda >= 0 ? c[iVenda] : c[iCompra]);
-            if (!Number.isFinite(rate)) continue;
-            rows.push({ baseTs, vencYear, rate });
-            if (baseTs > maxBaseTs) maxBaseTs = baseTs;
-        }
-        if (!rows.length || maxBaseTs < 0) return null;
-
-        // Passo 2: entre os títulos da Data Base mais recente, prioriza a mesma
-        // escada de vencimentos do benchmark anterior e valida a faixa de yield real.
-        const latest = rows.filter(r => r.baseTs === maxBaseTs);
-        const preferred = [2035, 2040, 2045, 2050, 2055, 2060];
-        for (const year of preferred) {
-            const hit = latest.find(r => r.vencYear === year && isPlausibleNtnbRate(r.rate));
-            if (hit) {
-                logger.debug(`🏛️ [NTN-B] Fonte oficial (Tesouro Transparente CSV): ${hit.rate}% a.a. (IPCA+ ${year})`);
-                return hit.rate;
-            }
-        }
-        // Fallback: qualquer plausível na data mais recente (vencimento mais longo primeiro).
-        const anyPlausible = latest
-            .filter(r => isPlausibleNtnbRate(r.rate))
-            .sort((a, b) => b.vencYear - a.vencYear)[0];
-        if (anyPlausible) {
-            logger.debug(`🏛️ [NTN-B] Fonte oficial (CSV): ${anyPlausible.rate}% a.a. (IPCA+ ${anyPlausible.vencYear})`);
-            return anyPlausible.rate;
-        }
-        return null;
+        return parseNtnbFromCsv(csv);
     },
 
     // Mesma escolha do CSV (IPCA+ longo, sem Educa+/Renda+, escada 2035→2060)
@@ -1345,25 +1193,13 @@ export const macroDataService = {
         list.forEach(bond => {
             const cleanTitle = normalizeBondTitle(bond.title);
 
-            let type = 'IPCA';
-            let index = 'IPCA';
-            if (cleanTitle.includes('Prefixado') || cleanTitle.includes('LTN')) { type = 'PREFIXADO'; index = 'PRE'; }
-            else if (cleanTitle.includes('Selic') || cleanTitle.includes('LFT')) { type = 'SELIC'; index = 'SELIC'; }
-            else if (/Renda\+/i.test(cleanTitle)) { type = 'RENDAMAIS'; }
-            else if (/Educa\+/i.test(cleanTitle)) { type = 'EDUCA'; }
-            // O nome nem sempre revela o indexador ("Tesouro Reserva 2036" é Selic).
-            // Quando não revela, vale o índice DECLARADO na coluna de rentabilidade —
-            // o default IPCA só sobra quando nenhuma das duas fontes diz nada.
-            else if (bond.index === 'SELIC') { type = 'SELIC'; index = 'SELIC'; }
-            else if (bond.index === 'PRE') { type = 'PREFIXADO'; index = 'PRE'; }
+            const { type, index } = classifyBond(cleanTitle, bond.index);
 
             // Só usa a taxa do scraping se ainda não temos taxa ao vivo E se for
             // uma NTN-B de referência (IPCA+ longa, nunca Educa+/Renda+) E se a
             // taxa for plausível como YIELD REAL. Isso rejeita a contaminação
             // NOMINAL (~12% = real ⊕ IPCA) que o Investidor10 passou a exibir.
-            const isGenuineNtnb = type === 'IPCA' && /IPCA\+/i.test(cleanTitle) && !/Educa|Renda/i.test(cleanTitle);
-            const isLong = /20(3[5-9]|[4-9]\d)/.test(cleanTitle); // vencimento >= 2035
-            if (!ntnbLongRate && isGenuineNtnb && isLong) {
+            if (!ntnbLongRate && isReferenceNtnbTitle(type, cleanTitle)) {
                 if (isPlausibleNtnbRate(bond.rate)) {
                     ntnbLongRate = bond.rate;
                     ntnbSource = 'Investidor10';
@@ -1447,18 +1283,7 @@ export const macroDataService = {
      * para o rebuild remarcar posições antigas pelo câmbio errado.
      */
     async _persistUsdHistory(entries, source) {
-        const incoming = new Map();
-        for (const entry of entries || []) {
-            const close = Number(entry?.close);
-            const adj = Number(entry?.adjClose ?? entry?.close);
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(entry?.date || '')) continue;
-            if (!Number.isFinite(close) || close <= 0) continue;
-            incoming.set(entry.date, {
-                date: entry.date,
-                close,
-                adjClose: Number.isFinite(adj) && adj > 0 ? adj : close,
-            });
-        }
+        const incoming = normalizeUsdEntries(entries);
 
         if (incoming.size === 0) {
             logger.warn(`⚠️ [Câmbio] Nenhuma entrada válida na resposta (${source}); série preservada.`);
@@ -1466,13 +1291,7 @@ export const macroDataService = {
         }
 
         const existing = await AssetHistory.findOne({ ticker: 'USD-BRL' }).select('history').lean();
-        const merged = new Map();
-        for (const entry of existing?.history || []) {
-            if (entry?.date && !incoming.has(entry.date)) merged.set(entry.date, entry);
-        }
-        for (const [date, entry] of incoming) merged.set(date, entry);
-
-        const history = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date));
+        const history = mergeUsdHistory(existing?.history, incoming);
 
         await AssetHistory.findOneAndUpdate(
             { ticker: 'USD-BRL' },
@@ -1601,88 +1420,9 @@ export const macroDataService = {
         let config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
         if (!config) config = new SystemConfig({ key: 'MACRO_INDICATORS' });
 
-        if (official) {
-            // Gravação POR INDICADOR, e só do que alguma fonte trouxe. Indicador
-            // sem fonte mantém o valor do banco; `ratesStale` (abaixo) é o aviso.
-            // O congelado pelo guard é o último valor bom — regravar é idempotente.
-            if (!official.selicIsFallback && official.selic > 0) {
-                config.selic = official.selic;
-                config.cdi = official.cdi;
-                config.riskFree = official.selic;
-            }
-            if (!official.ipcaIsFallback && Number.isFinite(official.ipca)) {
-                config.ipca = official.ipca;
-            }
-
-            // Observabilidade: marca a fonte efetiva de cada taxa e se houve fallback.
-            // ratesUpdatedAt só é carimbado quando a Selic veio fresca e autoritativa —
-            // nem fallback hardcoded nem valor congelado pelo guard contam como fresco.
-            config.ratesStale = !!official.isFallback || !!official.selicFrozen;
-            // A fonte da NTN-B é do bloco do Tesouro (abaixo): sobrevive aqui para
-            // não sumir num run em que o Tesouro não trouxe taxa nova.
-            const priorNtnbSource = config.ratesSources?.ntnb ?? null;
-            config.ratesSources = { ...(official.sources || { selic: null, ipca: null }), ntnb: priorNtnbSource };
-            if (!official.isFallback && !official.selicFrozen) {
-                config.ratesUpdatedAt = new Date();
-            }
-        }
-        
-        // Escrita por moeda, não em bloco: uma fonte que cobre só o dólar não pode
-        // arrastar o BTC junto, nem o inverso. `currenciesUpdatedAt` só é carimbado
-        // quando AS DUAS vieram frescas — é o carimbo que o painel de Saúde e a
-        // barra de indicadores leem, e ele não pode herdar a honestidade do
-        // `lastUpdated` do documento, que avança mesmo com o bloco inteiro falhando.
-        if (currencies.usd !== null) {
-            config.dollar = currencies.usd;
-            config.dollarChange = currencies.usdChange;
-        }
-        if (currencies.btc !== null) {
-            config.btc = currencies.btc;
-            config.btcChange = currencies.btcChange;
-        }
-        config.currenciesSources = { usd: currencies.usdSource, btc: currencies.btcSource };
-        config.currenciesStale = currencies.usd === null || currencies.btc === null;
-        if (!config.currenciesStale) {
-            config.currenciesUpdatedAt = new Date();
-        }
-        
-        // Escrita por ÍNDICE e com carimbo próprio, pelo mesmo motivo do bloco de
-        // moedas logo acima: `lastUpdated` avança a cada run do macro-sync, então
-        // sozinho ele dava frescor verde a um Ibovespa que a fonte não trouxe.
-        // Índice que não veio preserva o valor anterior — e agora isso APARECE,
-        // em vez de ficar escondido atrás do relógio do documento.
-        if (globalIndices) {
-            if (globalIndices.ibov) {
-                config.ibov = globalIndices.ibov.value;
-                config.ibovChange = globalIndices.ibov.change;
-            }
-            if (globalIndices.spx) {
-                config.spx = globalIndices.spx.value;
-                config.spxChange = globalIndices.spx.change;
-            }
-        }
-        config.indicesSources = {
-            ibov: globalIndices?.ibov?.source || null,
-            spx: globalIndices?.spx?.source || null,
-        };
-        config.indicesStale = !globalIndices?.ibov || !globalIndices?.spx;
-        if (!config.indicesStale) {
-            config.indicesUpdatedAt = new Date();
-        }
-
-        // CDI 12m REALIZADO (série diária acumulada). null = série insuficiente ou
-        // parada: o valor gravado fica, em vez de virar a taxa de hoje.
-        if (Number.isFinite(cdiReturn12m)) config.cdiReturn12m = cdiReturn12m;
-        if (Number.isFinite(spxReturn12m)) config.spxReturn12m = spxReturn12m;
-        if (Number.isFinite(ibovReturn12m)) config.ibovReturn12m = ibovReturn12m;
-
-        if (treasury && treasury.ntnbLong) {
-            config.ntnbLong = treasury.ntnbLong;
-            // Observabilidade: fonte efetiva da NTN-B (oficial / scraping / último-conhecido / hardcoded)
-            config.ratesSources = { ...(config.ratesSources || {}), ntnb: treasury.ntnbSource };
-        }
-
-        config.lastUpdated = new Date();
+        // Cada bloco grava só o que alguma fonte trouxe, com carimbo próprio
+        // (regra 13): ver macro/macroConfigWriter.js.
+        applyMacroReadings(config, { official, currencies, globalIndices, cdiReturn12m, spxReturn12m, ibovReturn12m, treasury });
         await config.save();
         
         return config;
