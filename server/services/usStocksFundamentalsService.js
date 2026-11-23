@@ -6,6 +6,7 @@ import { US_ETF_LIST } from '../config/usEtfList.js';
 import { BR_ETF_LIST } from '../config/brEtfList.js';
 import { toYahooSymbol, externalMarketService } from './externalMarketService.js';
 import { safeFloat } from '../utils/mathUtils.js';
+import { extractFundamentals, assignKnownFundamentals } from './fundamentals/yahooFundamentalsMapper.js';
 import logger from '../config/logger.js';
 
 // Universo completo do Exterior: ações do S&P 500 + ETFs/REITs/Ouro curados.
@@ -63,82 +64,18 @@ async function getBlacklistedSet(tickers) {
     }
 }
 
-function extractFundamentals(ticker, data) {
-    const sd = data.summaryDetail || {};
-    const ks = data.defaultKeyStatistics || {};
-    const fd = data.financialData || {};
-    const ap = data.assetProfile || {};
-    const pr = data.price || {};
-
-    // P/L é o TRAILING, e só ele. O fallback para `forwardPE` misturava estimativa
-    // de analista com lucro realizado na mesma coluna: empresa com prejuízo nos
-    // últimos 12 meses (sem trailingPE) aparecia com o P/L projetado como se fosse
-    // o histórico, e o Graham/PEG a tratavam como lucrativa. Sem trailing → null.
-    const pl = Number.isFinite(sd.trailingPE) && sd.trailingPE !== 0 ? sd.trailingPE : null;
-    const pvp = ks.priceToBook || null;
-    // DY ciente de fundo: ETFs/REITs frequentemente NÃO expõem `summaryDetail.dividendYield`
-    // (campo de ação) — o yield do fundo vem em `yield` ou `trailingAnnualDividendYield`.
-    // Sem este fallback, todo ETF saía com dy=0 (VOO/SCHD/VYM zerados).
-    // Number.isFinite descarta null/undefined E NaN — o Yahoo às vezes devolve NaN nesses
-    // campos, e um NaN aqui quebrava o cast Mongoose do `dy` (abortava todo o sync).
-    // safeFloat nas conversões fração→percentual: o *100 sobre floats binários do Yahoo
-    // gera ruído (0.0845*100 = 8.450000000000001) que vazava até o ranking salvo.
-    //
-    // `null` quando NENHUM dos campos veio: resposta parcial do Yahoo (módulo
-    // `summaryDetail` ausente) não é "não paga dividendo". O `0` antigo gravava
-    // dy=0 por cima de um yield real toda vez que o módulo faltava. Não-pagador de
-    // verdade vem com `trailingAnnualDividendYield: 0`, que é finito e passa.
-    const dyRaw = [sd.dividendYield, sd.yield, sd.trailingAnnualDividendYield].find(Number.isFinite);
-    const dy = Number.isFinite(dyRaw) ? safeFloat(dyRaw * 100) : null;
-    const beta = ks.beta || sd.beta || null;
-    // Valor de mercado é o do equity. `enterpriseValue` (equity + dívida − caixa)
-    // NÃO é substituto: em empresa alavancada a diferença é de vezes, e o número
-    // caía no gate de porte e no ranking como se fosse market cap. Sem dado → null.
-    const marketCap = Number.isFinite(sd.marketCap) && sd.marketCap > 0 ? sd.marketCap : null;
-    const roe = fd.returnOnEquity ? safeFloat(fd.returnOnEquity * 100) : null;
-    const netMargin = fd.profitMargins ? safeFloat(fd.profitMargins * 100) : null;
-    const revenueGrowth = fd.revenueGrowth ? safeFloat(fd.revenueGrowth * 100) : null;
-    const earningsGrowth = fd.earningsGrowth ? safeFloat(fd.earningsGrowth * 100) : null;
-    // Yahoo Finance retorna debtToEquity em formato percentual (ex: 47.49 = 47.49% = ratio 0.4749)
-    const debtToEquity = fd.debtToEquity != null ? fd.debtToEquity / 100 : null;
-    const lastPrice = fd.currentPrice || sd.regularMarketPrice || null;
-    // Liquidez em VALOR financeiro (US$/dia), não em nº de ações — alinha com a
-    // liquidez dos ativos BR (Liq.2meses, em R$) que o scoringEngine compara contra
-    // o piso de 1M. Sem isso, ações caras de baixo giro de papéis (AZO ~$3000,
-    // <1M ações/dia mas >$2bi/dia em valor) levavam -30 de confiança indevidamente.
-    const avgVolumeShares = sd.averageVolume || ks.averageDailyVolume10Day || null;
-    const avgLiquidity = (avgVolumeShares && lastPrice) ? avgVolumeShares * lastPrice : null;
-    const payoutRatio = sd.payoutRatio ? safeFloat(sd.payoutRatio * 100) : null;
-    const vpa = ks.bookValue || null;
-    // Só o lucro REALIZADO (trailing). O forwardEps é projeção de analista: no
-    // Graham (√22,5 × LPA × VPA) ele virava preço justo de um lucro que não houve —
-    // mesmo motivo do P/L, que já deixou de cair no forwardPE.
-    const lpa = Number.isFinite(ks.trailingEps) ? ks.trailingEps : null;
-    const sector = ap.sector || null;
-    const industry = ap.industry || null;
-    // Nome da empresa vem do módulo `price` (longName/shortName). NUNCA usar
-    // companyOfficers — isso retornava o nome do CEO (ex.: "Mr. Timothy D. Cook").
-    const name = pr.longName || pr.shortName || null;
-
-    // PEG ratio: P/E ÷ earnings growth
-    let peg = null;
-    if (pl && earningsGrowth && earningsGrowth > 0) {
-        peg = pl / earningsGrowth;
-    }
-
-    return {
-        pl, pvp, dy, beta, marketCap, roe, netMargin, revenueGrowth, earningsGrowth,
-        debtToEquity, avgLiquidity, lastPrice, payoutRatio, vpa, lpa, sector, industry, name, peg,
-    };
+// quoteSummary com teto de relógio: chamada ao Yahoo sem prazo não falha, fica.
+function quoteSummaryWithTimeout(symbol) {
+    return Promise.race([
+        yahooFinance.quoteSummary(symbol, { modules: QUOTESUMMARY_MODULES }, { validateResult: false }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), TICKER_TIMEOUT_MS))
+    ]);
 }
 
 async function fetchFundamentalsForTicker(ticker) {
     try {
-        const data = await Promise.race([
-            // Ticker canônico (BRK.B) → símbolo do Yahoo (BRK-B); mantém `ticker` como chave do DB.
-            yahooFinance.quoteSummary(toYahooSymbol(ticker), { modules: QUOTESUMMARY_MODULES }, { validateResult: false }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), TICKER_TIMEOUT_MS))
-        ]);
+        // Ticker canônico (BRK.B) → símbolo do Yahoo (BRK-B); mantém `ticker` como chave do DB.
+        const data = await quoteSummaryWithTimeout(toYahooSymbol(ticker));
         return { ticker, data, ok: true };
     } catch (err) {
         return { ticker, ok: false, error: err.message };
@@ -180,21 +117,7 @@ function buildFundamentalsOp(ticker, data) {
     //  - `isActive: true` em todo ticker do universo desfazia, uma vez por dia, a
     //    desativação feita pela blacklist dinâmica de cotação. Só nasce ativo
     //    (`$setOnInsert` abaixo); depois, quem decide é o caminho de cotação.
-    if (fundamentals.pl !== null) updatePayload.pl = fundamentals.pl;
-    if (fundamentals.pvp !== null) updatePayload.pvp = fundamentals.pvp;
-    if (fundamentals.dy !== null) updatePayload.dy = fundamentals.dy;
-    if (fundamentals.beta !== null) updatePayload.beta = fundamentals.beta;
-    if (fundamentals.marketCap) updatePayload.marketCap = fundamentals.marketCap;
-    if (fundamentals.roe !== null) updatePayload.roe = fundamentals.roe;
-    if (fundamentals.netMargin !== null) updatePayload.netMargin = fundamentals.netMargin;
-    if (fundamentals.revenueGrowth !== null) updatePayload.revenueGrowth = fundamentals.revenueGrowth;
-    if (fundamentals.earningsGrowth !== null) updatePayload.earningsGrowth = fundamentals.earningsGrowth;
-    if (fundamentals.debtToEquity !== null) updatePayload.debtToEquity = fundamentals.debtToEquity;
-    if (fundamentals.avgLiquidity) updatePayload.liquidity = fundamentals.avgLiquidity;
-    if (fundamentals.payoutRatio !== null) updatePayload.payout = fundamentals.payoutRatio;
-    if (fundamentals.vpa !== null) updatePayload.vpa = fundamentals.vpa;
-    if (fundamentals.lpa !== null) updatePayload.lpa = fundamentals.lpa;
-    if (fundamentals.peg !== null) updatePayload.peg = fundamentals.peg;
+    assignKnownFundamentals(updatePayload, fundamentals);
 
     // Linha nova (upsert) precisa de nome — o schema exige. Sem nome de fonte,
     // a sigla serve de rótulo provisório, e só na criação: nunca sobrescreve.
@@ -208,6 +131,101 @@ function buildFundamentalsOp(ticker, data) {
             upsert: true
         }
     };
+}
+
+// ETFs nacionais (B3): fundamentos via Yahoo `.SA`, com Brapi e proventos de apoio.
+
+async function fetchBrEtfQuoteSummary(etf) {
+    try {
+        const data = await quoteSummaryWithTimeout(`${etf.ticker}.SA`);
+        return { etf, data, ok: true };
+    } catch (err) {
+        return { etf, ok: false, error: err.message };
+    }
+}
+
+// Liquidez + preço de fallback via Brapi (Yahoo costuma dar volume/preço
+// 0 p/ ETF .SA). Busca única, reusada para liquidez E para o cálculo de DY.
+async function resolveBrEtfLiquidityAndPrice(etf, f) {
+    let liquidity = f.avgLiquidity || 0;
+    let price = f.lastPrice || 0;
+    if (!liquidity || !price) {
+        const brapi = await externalMarketService.fetchFromBrapi(`${etf.ticker}.SA`);
+        if (brapi?.price > 0 && !price) price = brapi.price;
+        if (brapi?.volume > 0 && brapi.price > 0 && !liquidity) liquidity = brapi.volume * brapi.price;
+    }
+    return { liquidity, price };
+}
+
+// Soma dos proventos dos últimos 12 meses.
+function trailingTwelveMonthsAmount(hist) {
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    return hist.filter(d => d.date >= cutoff).reduce((s, d) => s + d.amount, 0);
+}
+
+// DY: Yahoo .SA raramente devolve yield de fundo. Fallback: soma dos
+// proventos dos últimos 12 meses ÷ preço. ETF de ACUMULAÇÃO não distribui
+// — dy 0 é o valor correto, não um dado faltando, e é o caso de TODOS os
+// ETFs de BR_ETF_LIST hoje. NÃO existe mais fallback semeado à mão: até
+// 29/08/2026 um `seedYield` curado dava 4,5% a BOVA11, 6% a DIVO11 e 2% a
+// SMAL11 — os três acumuladores —, e como a fonte viva nunca respondia p/
+// `.SA`, o seed era a única fonte. Resultado: a carteira projetava renda
+// mensal de ativo que jamais gera um evento de provento, e o ranking dava
+// bônus de "ETF de Renda". Ver o histórico completo em config/brEtfList.js.
+//
+// Devolve `{ dy, dyKnown }`: `dyKnown: false` quando a fonte de proventos está
+// fora — não sabemos se distribui, então o DY gravado é preservado (o $set sem
+// a chave mantém o anterior) em vez de zerado.
+async function resolveBrEtfDy(etf, f, price) {
+    let dy = (f.dy != null && f.dy > 0) ? f.dy : 0;
+    if (dy || !(price > 0)) return { dy, dyKnown: true };
+    const hist = await externalMarketService.getDividendsHistory(etf.ticker, 'ETF', { nullOnError: true });
+    if (hist === null) return { dy, dyKnown: false };
+    if (hist.length) {
+        const ttm = trailingTwelveMonthsAmount(hist);
+        if (ttm > 0) dy = safeFloat((ttm / price) * 100);
+    }
+    return { dy, dyKnown: true };
+}
+
+// Mesma regra do caminho US: preço é do passo de cotação e `isActive` não é
+// reafirmado aqui (só nasce ativo, via $setOnInsert). Preserva
+// type:'ETF'/currency:'BRL'/sector da lista curada.
+async function buildBrEtfOp(etf, data) {
+    const f = extractFundamentals(etf.ticker, data);
+    const updatePayload = {
+        type: 'ETF',
+        currency: 'BRL',
+        sector: etf.sector,
+        allocationClass: etf.allocationClass || null,
+        lastFundamentalsDate: new Date(),
+    };
+    if (f.beta != null) updatePayload.beta = f.beta;
+    if (f.marketCap) updatePayload.marketCap = f.marketCap;
+
+    const { liquidity, price } = await resolveBrEtfLiquidityAndPrice(etf, f);
+    if (liquidity) updatePayload.liquidity = liquidity;
+
+    const { dy, dyKnown } = await resolveBrEtfDy(etf, f, price);
+    if (dyKnown) updatePayload.dy = dy;
+
+    const update = { $set: updatePayload, $setOnInsert: { isActive: true, name: etf.name } };
+    return { updateOne: { filter: { ticker: etf.ticker }, update, upsert: true } };
+}
+
+// Processa os resultados de um lote: sucesso vira op em `bulkOps`, falha conta.
+// Sequencial de propósito — cada ETF pode chamar Brapi e proventos.
+async function collectBrEtfBatch(results, bulkOps) {
+    let processed = 0, failed = 0;
+    for (const r of results) {
+        if (r.status !== 'fulfilled') continue;
+        const { etf, ok, data, error } = r.value;
+        if (!ok) { failed++; logger.debug(`[BR ETF Fundamentals] Falhou ${etf.ticker}: ${error}`); continue; }
+        bulkOps.push(await buildBrEtfOp(etf, data));
+        processed++;
+    }
+    return { processed, failed };
 }
 
 // Exposto para os testes (mapeamento puro Yahoo → MarketAsset).
@@ -368,76 +386,10 @@ export const usStocksFundamentalsService = {
 
         for (let i = 0; i < list.length; i += BATCH_SIZE) {
             const batch = list.slice(i, i + BATCH_SIZE);
-            const results = await Promise.allSettled(batch.map(async (etf) => {
-                try {
-                    const data = await Promise.race([
-                        yahooFinance.quoteSummary(`${etf.ticker}.SA`, { modules: QUOTESUMMARY_MODULES }, { validateResult: false }),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), TICKER_TIMEOUT_MS)),
-                    ]);
-                    return { etf, data, ok: true };
-                } catch (err) {
-                    return { etf, ok: false, error: err.message };
-                }
-            }));
-
-            for (const r of results) {
-                if (r.status !== 'fulfilled') continue;
-                const { etf, ok, data, error } = r.value;
-                if (!ok) { failed++; logger.debug(`[BR ETF Fundamentals] Falhou ${etf.ticker}: ${error}`); continue; }
-
-                const f = extractFundamentals(etf.ticker, data);
-                // Mesma regra do caminho US: preço é do passo de cotação e
-                // `isActive` não é reafirmado aqui (só nasce ativo, via $setOnInsert).
-                const updatePayload = {
-                    type: 'ETF',
-                    currency: 'BRL',
-                    sector: etf.sector,
-                    allocationClass: etf.allocationClass || null,
-                    lastFundamentalsDate: new Date(),
-                };
-                if (f.beta != null) updatePayload.beta = f.beta;
-                if (f.marketCap) updatePayload.marketCap = f.marketCap;
-
-                // Liquidez + preço de fallback via Brapi (Yahoo costuma dar volume/preço
-                // 0 p/ ETF .SA). Busca única, reusada para liquidez E para o cálculo de DY.
-                let liquidity = f.avgLiquidity || 0;
-                let price = f.lastPrice || 0;
-                if (!liquidity || !price) {
-                    const brapi = await externalMarketService.fetchFromBrapi(`${etf.ticker}.SA`);
-                    if (brapi?.price > 0 && !price) price = brapi.price;
-                    if (brapi?.volume > 0 && brapi.price > 0 && !liquidity) liquidity = brapi.volume * brapi.price;
-                }
-                if (liquidity) updatePayload.liquidity = liquidity;
-
-                // DY: Yahoo .SA raramente devolve yield de fundo. Fallback: soma dos
-                // proventos dos últimos 12 meses ÷ preço. ETF de ACUMULAÇÃO não distribui
-                // — dy 0 é o valor correto, não um dado faltando, e é o caso de TODOS os
-                // ETFs de BR_ETF_LIST hoje. NÃO existe mais fallback semeado à mão: até
-                // 29/08/2026 um `seedYield` curado dava 4,5% a BOVA11, 6% a DIVO11 e 2% a
-                // SMAL11 — os três acumuladores —, e como a fonte viva nunca respondia p/
-                // `.SA`, o seed era a única fonte. Resultado: a carteira projetava renda
-                // mensal de ativo que jamais gera um evento de provento, e o ranking dava
-                // bônus de "ETF de Renda". Ver o histórico completo em config/brEtfList.js.
-                let dy = (f.dy != null && f.dy > 0) ? f.dy : 0;
-                let dyKnown = true;
-                if (!dy && price > 0) {
-                    const hist = await externalMarketService.getDividendsHistory(etf.ticker, 'ETF', { nullOnError: true });
-                    if (hist === null) {
-                        // Fonte fora: não sabemos se distribui. Mantém o DY gravado
-                        // em vez de zerá-lo (o $set sem a chave preserva o anterior).
-                        dyKnown = false;
-                    } else if (hist.length) {
-                        const cutoff = new Date();
-                        cutoff.setFullYear(cutoff.getFullYear() - 1);
-                        const ttm = hist.filter(d => d.date >= cutoff).reduce((s, d) => s + d.amount, 0);
-                        if (ttm > 0) dy = safeFloat((ttm / price) * 100);
-                    }
-                }
-                if (dyKnown) updatePayload.dy = dy;
-
-                bulkOps.push({ updateOne: { filter: { ticker: etf.ticker }, update: { $set: updatePayload, $setOnInsert: { isActive: true, name: etf.name } }, upsert: true } });
-                processed++;
-            }
+            const results = await Promise.allSettled(batch.map(fetchBrEtfQuoteSummary));
+            const counts = await collectBrEtfBatch(results, bulkOps);
+            processed += counts.processed;
+            failed += counts.failed;
 
             if (bulkOps.length >= 50) await MarketAsset.bulkWrite(bulkOps.splice(0, bulkOps.length));
             if (i + BATCH_SIZE < list.length) await sleep(BATCH_DELAY_MS);
