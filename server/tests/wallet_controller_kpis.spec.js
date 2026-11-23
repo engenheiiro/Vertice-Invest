@@ -112,10 +112,13 @@ describe('GET /wallet — carteira vazia', () => {
         expect(res.body.meta).toEqual({ usdRate: 5.2 });
     });
 
-    it('sem macro gravado, o câmbio da carteira vazia cai no fallback', async () => {
+    // Regra 13: antes saía 5,75 fixo como se fosse cotação.
+    it('sem macro gravado, o câmbio da carteira vazia é o último candle real da série, nunca 5,75', async () => {
         state.config = null;
-        const { res } = await call(getWalletData);
-        expect(res.body.meta.usdRate).toBe(5.75);
+        AssetHistory.findOne.mockReturnValueOnce({ lean: async () => ({ history: [{ date: '2026-11-19', close: 5.31 }] }) });
+        expect((await call(getWalletData)).res.body.meta.usdRate).toBe(5.31);
+        AssetHistory.findOne.mockReturnValueOnce({ lean: async () => null });
+        expect((await call(getWalletData)).res.body.meta.usdRate).toBeNull();
     });
 
     it('devolve as metas salvas da carteira', async () => {

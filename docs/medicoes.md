@@ -35,10 +35,10 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89 | 89.3 | 89.3 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 | 87.1 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89 | 89.1 | 89.1 |
-| `testes.server` — Casos de teste do server | 3414 | 3404 | 3414 |
+| `testes.server` — Casos de teste do server | 3417 | 3404 | 3417 |
 | `testes.client` — Casos de teste do client | 2110 | 2110 | 2110 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 34.2 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 40.5 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 37.1 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 50.9 |
 | `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 37 | 37 | 37 |
 | `linhasLongas` — Linhas com mais de 160 caracteres | 1079 | 1079 | 1079 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |

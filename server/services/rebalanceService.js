@@ -23,8 +23,7 @@ import {
 } from '../utils/subAllocation.js';
 import { gapHeadline, planBuysForGap } from './rebalanceBuySide.js';
 import { BUY_THRESHOLD, CAPITAL_GAINS_TAX, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
-import { isDollarized } from '../utils/assetCurrency.js';
-import { positionCostBRL } from '../utils/fxRate.js';
+import { loadDisplayUsdRate, positionCostBRL, usdMultiplierFor } from '../utils/fxRate.js';
 import logger from '../config/logger.js';
 import { allocationBucket as resolveAllocationBucket, exteriorSubType, resolveAllocationClass } from '../utils/assetAllocation.js';
 
@@ -72,7 +71,7 @@ export const computeWalletValuation = async (userId, walletId) => {
     const activeAssets = userAssets.filter((a) => a.quantity > QUANTITY_EPSILON);
 
     const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
-    const usdRate = safeFloat(config?.dollar || 5.75);
+    const { rate: usdRate } = await loadDisplayUsdRate(config);
     const currentCdi =
         config?.cdi > 0 ? safeFloat(config.cdi)
         : config?.selic > 0 ? safeFloat(config.selic)
@@ -101,7 +100,7 @@ export const computeWalletValuation = async (userId, walletId) => {
     const assets = [];
 
     for (const asset of activeAssets) {
-        const multiplier = isDollarized(asset) ? usdRate : 1;
+        const multiplier = usdMultiplierFor(asset, usdRate);
         let priceNative = 0; // preço unitário na moeda nativa do ativo
         let valueNative = 0; // valor da posição na moeda nativa
 

@@ -13,13 +13,13 @@ mesmo commit que o resolve.
   `rebuildUserHistory` (46). O teto passa a ser `WalletSummary.tsx` (45),
   seguido de `TopPicksCard.tsx` e `Research.tsx` (44) e de `ProfileIdentity.tsx`
   e `_applyDayTransactions` do `financialService.js` (43).
-- **(dono, 2026-11-23) Telas ainda exibem câmbio 5,75 quando a macro não
-  tem cotação.** Os dois caminhos que GRAVAM já seguem a regra 13: rebuild e
-  snapshot diário não persistem IPCA nem câmbio inventados (`missingMacroRates`;
-  sem cotação, o snapshot usa a série USD/BRL real). Mas KPIs e telas ao vivo
-  (`walletKpis`, `walletPayload`, `rebalanceService`, `goalsController`,
-  `walletPerformanceController`) seguem com `config?.dollar || 5.75` para
-  exibir — não grava, mas mostra número inventado como cotação.
+- **(dono, 2026-11-23) Último 5,75 vive no resolvedor de câmbio.** Telas e
+  gravações já não inventam câmbio (`loadDisplayUsdRate`: macro → último candle
+  real → nulo; `missingMacroRates` no rebuild e no snapshot). Sobra o
+  `FALLBACK_USD_RATE` de `buildUsdRateResolver`, devolvido só quando NÃO há
+  série USD/BRL nem cotação — caso em que o carimbo de `fxRate` de um
+  lançamento novo sairia 5,75. Trocar por nulo exige decidir o que o
+  lançamento faz sem câmbio (recusar? gravar sem carimbo?).
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):

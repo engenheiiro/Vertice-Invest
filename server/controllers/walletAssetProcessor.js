@@ -16,7 +16,7 @@ import { brazilDateKey } from '../utils/dateUtils.js';
 import { assetDailyFactor, valueFixedIncomeAsset, PRICING_SOURCE, brazilToday, isMatured } from '../utils/fixedIncome.js';
 import { EMPTY_TREASURY_PRICING } from '../services/treasuryPriceService.js';
 import { isDollarized } from '../utils/assetCurrency.js';
-import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
+import { positionCostBRL, positionRealizedProfitBRL, usdMultiplierFor } from '../utils/fxRate.js';
 import { historyStorageKey } from '../utils/assetHistory.js';
 import { DAY_CHANGE_REASON } from '../utils/dayChangeReason.js';
 import { resolveAllocationClass } from '../utils/assetAllocation.js';
@@ -458,8 +458,8 @@ export const processWalletAsset = (asset, {
     });
 
     const dollarized = isDollarized(asset);
-    const currentMultiplier = dollarized ? usdRate : 1;
-    const prevMultiplier = previousFxMultiplier(dollarized, usdRate, usdChange, anchorUsdRate);
+    const currentMultiplier = usdMultiplierFor(asset, usdRate);
+    const prevMultiplier = previousFxMultiplier(dollarized, currentMultiplier, usdChange, anchorUsdRate);
     const totalValueBr = positionValueBr(asset, day.currentPrice, day.accruedTotalValue, currentMultiplier);
 
     // Custo em BRL com o câmbio de CADA compra congelado. Reconverter o custo em

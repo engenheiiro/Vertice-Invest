@@ -9,8 +9,7 @@ import { computeQuotaSharpe, snapshotDayKey } from '../utils/walletRisk.js';
 import { brazilDateKey, toDateKey } from '../utils/dateUtils.js';
 import { valueFixedIncomeAsset, brazilToday } from '../utils/fixedIncome.js';
 import { loadTreasuryPricing } from '../services/treasuryPriceService.js';
-import { isDollarized } from '../utils/assetCurrency.js';
-import { positionCostBRL, positionRealizedProfitBRL } from '../utils/fxRate.js';
+import { loadDisplayUsdRate, positionCostBRL, positionRealizedProfitBRL, usdMultiplierFor } from '../utils/fxRate.js';
 import { businessDaysBetween, sumTransactionFlowBRL, transactionsAfterSnapshotFilter } from '../utils/walletSnapshot.js';
 import { loadCdiCurveForAssets, EMPTY_CDI_CURVE } from '../utils/cdiCurve.js';
 import { cdiAnnualRateForYear, DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
@@ -87,7 +86,7 @@ export const calculateLiveKPIS = async (userId, currentCdi, walletId, { sinceDay
     ]);
     const { totalDividends, dividendsSinceAnchor } = liveDividendTotals(divData, sinceDayKey);
 
-    const usdRate = usdConfig?.dollar || 5.75;
+    const { rate: usdRate } = await loadDisplayUsdRate(usdConfig);
     const selic = usdConfig?.selic;
     const ipca = usdConfig?.ipca;
     const calcDate = brazilToday();
@@ -95,7 +94,7 @@ export const calculateLiveKPIS = async (userId, currentCdi, walletId, { sinceDay
 
     const valuationCtx = { currentCdi, selic, ipca, calcDate, cdiCurve, treasuryPricing, marketMap };
     for (const asset of activeAssets) {
-        const multiplier = isDollarized(asset) ? usdRate : 1;
+        const multiplier = usdMultiplierFor(asset, usdRate);
         const val = liveNativeValue(asset, valuationCtx);
 
         totalEquity += safeMult(val, multiplier);
@@ -142,7 +141,7 @@ export const sumRealizedProfitBRL = (userAssets, usdRate) =>
 export const usdRateLoaderOnce = (currentUsd) => {
     let pending = null;
     return () => {
-        if (!pending) pending = financialService._loadUsdRateResolver(currentUsd || 5.75);
+        if (!pending) pending = financialService._loadUsdRateResolver(currentUsd);
         return pending;
     };
 };
@@ -163,7 +162,7 @@ export const computePendingFlowBRL = async ({ userId, walletId, anchor, currentU
     // (o /performance) carrega por conta, como sempre carregou.
     const getUsdRateForDate = loadUsdRate
         ? await loadUsdRate()
-        : await financialService._loadUsdRateResolver(currentUsd || 5.75);
+        : await financialService._loadUsdRateResolver(currentUsd);
     return sumTransactionFlowBRL(txs, assetsByTicker, getUsdRateForDate);
 };
 

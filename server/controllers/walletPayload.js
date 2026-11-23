@@ -29,6 +29,7 @@ import logger from '../config/logger.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { computePendingFlowBRL, computeWalletMetrics, sumRealizedProfitBRL, usdRateLoaderOnce } from './walletKpis.js';
 import { processWalletAsset } from './walletAssetProcessor.js';
+import { loadDisplayUsdRate } from '../utils/fxRate.js';
 
 // (6.2) Limite de profundidade do auto-heal: getWalletData recursa no máximo
 // MAX_WALLET_HEAL_DEPTH vezes para nunca entrar em loop infinito caso o
@@ -82,7 +83,7 @@ const autoHealPositions = async (userId, walletId) => {
 // Resposta para carteira vazia (sem holdings).
 const buildEmptyWalletResponse = async (targets) => {
     const emptyConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-    const emptyUsdRate = safeFloat(emptyConfig?.dollar || 5.75);
+    const { rate: emptyUsdRate } = await loadDisplayUsdRate(emptyConfig);
     return {
         assets: [],
         kpis: {
@@ -266,8 +267,8 @@ const rebuildAfterHeal = async (userId, walletId, depth) => {
     return null;
 };
 
-const macroInputsFrom = (config) => ({
-    usdRate: safeFloat(config?.dollar || 5.75),
+const macroInputsFrom = async (config) => ({
+    usdRate: (await loadDisplayUsdRate(config)).rate,
     usdChange: safeFloat(config?.dollarChange || 0),
     currentCdi: resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK),
 });
@@ -374,7 +375,7 @@ export const buildWalletPayload = async (userId, walletId, _depth = 0) => {
             dayDividendsTotal, dayDividendsByTicker, dayDividendsSinceKey, snapshots, riskSnapshots, treasuryPricing } =
             await fetchWalletMarketContext(userId, liveTickers, walletId, activeAssets);
 
-        const { usdRate, usdChange, currentCdi } = macroInputsFrom(config);
+        const { usdRate, usdChange, currentCdi } = await macroInputsFrom(config);
         // Curva histórica do CDI junto do macro: `processWalletAsset` já repassa
         // `macroRates` inteiro a `valueFixedIncomeAsset`, então a renda fixa do card
         // rende pela taxa vigente em cada dia — a mesma régua do rebuild. Carteira

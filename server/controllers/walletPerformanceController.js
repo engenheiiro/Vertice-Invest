@@ -40,7 +40,7 @@ const appendLivePoint = async (history, { userId, walletId, config, today, today
         userId,
         walletId,
         anchor,
-        currentUsd: config?.dollar || 5.75,
+        currentUsd: config?.dollar > 0 ? config.dollar : null,
     });
 
     // Fonte única da cota live — idêntica ao KPI (weightedRentability).

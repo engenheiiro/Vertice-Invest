@@ -127,3 +127,45 @@ export const positionCostBRL = (asset, spotUsdRate) =>
 /** Lucro realizado da posição em BRL. */
 export const positionRealizedProfitBRL = (asset, spotUsdRate) =>
     nativeToBRL(asset, asset?.realizedProfit, asset?.realizedProfitBrl, spotUsdRate);
+
+/**
+ * Câmbio para EXIBIR (KPI, carteira, metas, rebalanceamento) — regra 13.
+ *
+ * Ordem: a cotação da macro; sem ela, o último candle REAL da série USD/BRL
+ * (último valor bom, com a data junto); sem nenhum dos dois, `null`. Antes era
+ * `config?.dollar || 5.75`: a tela mostrava um câmbio inventado como cotação.
+ */
+export const pickDisplayUsdRate = (macroDollar, lastCandle) => {
+    const spot = Number(macroDollar);
+    if (Number.isFinite(spot) && spot > 0) return { rate: spot, source: 'macro', asOf: null };
+    const candle = Number(lastCandle?.adjClose ?? lastCandle?.close);
+    if (isValidDayKey(lastCandle?.date) && Number.isFinite(candle) && candle > 0) {
+        return { rate: candle, source: 'series', asOf: lastCandle.date };
+    }
+    return { rate: null, source: null, asOf: null };
+};
+
+/** Lê só o último candle da série (`$slice: -1`) quando a macro não tem cotação. */
+export const loadDisplayUsdRate = async (config) => {
+    if (Number(config?.dollar) > 0) return pickDisplayUsdRate(config.dollar, null);
+    try {
+        const { default: AssetHistory } = await import('../models/AssetHistory.js');
+        const doc = await AssetHistory.findOne({ ticker: 'USD-BRL' }, { history: { $slice: -1 } }).lean();
+        return pickDisplayUsdRate(null, doc?.history?.[0]);
+    } catch {
+        return pickDisplayUsdRate(null, null); // leitura falhou: sem câmbio, nunca um número fixo
+    }
+};
+
+/**
+ * Multiplicador BRL de uma posição. Sem câmbio nenhum, a posição em dólar usa o
+ * câmbio MÉDIO das próprias compras (custo BRL ÷ custo nativo, ambos reais) —
+ * sem ganho cambial, mas sem inventar cotação. Sem nem isso, 0.
+ */
+export const usdMultiplierFor = (asset, usdRate) => {
+    if (!isDollarized(asset)) return 1;
+    if (Number(usdRate) > 0) return Number(usdRate);
+    const brl = Number(asset?.totalCostBrl);
+    const native = Number(asset?.totalCost);
+    return brl > 0 && native > 0 ? brl / native : 0;
+};

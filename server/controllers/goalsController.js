@@ -15,7 +15,7 @@ import { suggestExpectedRate, annualizedWalletReturn, rateDrift } from '../utils
 import { orderChainFrom } from '../utils/goalChain.js';
 import { safeCurrency, safeFloat, safeSub, safeMult, safeValue, QUANTITY_EPSILON, resolveCurrentCdiRate } from '../utils/mathUtils.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
-import { isDollarized } from '../utils/assetCurrency.js';
+import { loadDisplayUsdRate, usdMultiplierFor } from '../utils/fxRate.js';
 import { LIMITS_CONFIG } from '../config/subscription.js';
 import logger from '../config/logger.js';
 
@@ -99,7 +99,7 @@ const getLiveWalletEquity = async (userId, walletId) => {
         const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }).lean();
         // Mesma cadeia do card e do snapshot (CDI → Selic → padrão); ver resolveCurrentCdiRate.
         const cdi = resolveCurrentCdiRate(config, DEFAULT_SELIC_FALLBACK);
-        const usdRate = config?.dollar || 5.75;
+        const { rate: usdRate } = await loadDisplayUsdRate(config);
         const calcDate = brazilToday();
 
         const tickers = assets.filter((a) => !['CASH', 'FIXED_INCOME'].includes(a.type)).map((a) => a.ticker);
@@ -119,7 +119,7 @@ const getLiveWalletEquity = async (userId, walletId) => {
         // podem discordar sobre quanto vale cada ativo.
         const composition = {};
         for (const asset of assets) {
-            const multiplier = isDollarized(asset) ? usdRate : 1;
+            const multiplier = usdMultiplierFor(asset, usdRate);
             let val;
             if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
                 val = valueFixedIncomeAsset(asset, {
