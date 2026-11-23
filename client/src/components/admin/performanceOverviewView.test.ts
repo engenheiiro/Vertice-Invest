@@ -92,7 +92,8 @@ describe('buildPerformanceSummary', () => {
 
     it('janela sem mín./máx. de RSS não imprime "null" (imprimia)', () => {
         const sem = buildPerformanceSummary(snap({ memoryTrend: trend({ rssMinMb: null, rssMaxMb: null }) }));
-        expect(sem.memoryDetailTitle).not.toMatch(/null|Janela medida/);
+        expect(sem.memoryDetailTitle).not.toMatch(/null/);
+        expect(sem.memoryDetailTitle).toMatch(/Janela medida: 288 amostras em 24\.0h$/);
         expect(sem.memoryNote?.title).toBe('Memória estável há 24h — 300 MB agora');
         const soMin = buildPerformanceSummary(snap({ memoryTrend: trend({ rssMaxMb: null }) }));
         expect(soMin.memoryDetailTitle).toMatch(/Janela medida: 288 amostras em 24\.0h \(mín\. 300 MB\)$/);

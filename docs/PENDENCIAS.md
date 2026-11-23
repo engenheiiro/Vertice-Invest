@@ -38,16 +38,16 @@ mesmo commit que o resolve.
   77 arquivos (61 entre 20 e 29, 57 entre 16 e 19). `dataHealthRules.js` ainda tem
   7 funções acima de 15 (24, 23, 19, 19, 18, 18, 17).
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 5 (telas)** (mesma regra):
-  - SecuritySection: o `Button` espalha as props depois do próprio `disabled`
-    de carregando, então "Continuar" (senha do MFA) e "Desativar" seguem
-    clicáveis durante a requisição; resposta do `setupMfa` sem `secret`/`qr`
-    abre o QR com `img` sem `src`; status de MFA que falha (500/corpo vazio)
-    mostra 2FA desligado sem avisar.
+  - SecuritySection: resposta do `setupMfa` sem `secret`/`qr` abre o QR com
+    `img` sem `src`; status de MFA que falha (500/corpo vazio) mostra 2FA
+    desligado sem avisar. (Corrigido em 23/11: o `Button` carregando sempre
+    desabilita — vale também para AddAsset, RenameWallet e RenameReserve.)
   - CoursePlayer: curso sem aulas mostra "Marcar esta aula como concluída" (o
-    clique só gera `console.error`); falha de rede no progresso derruba a tela
-    para "Acesso Restrito", mas resposta recusada é ignorada; escolher aula
-    recarrega curso e progresso e some com conclusão que o servidor não
-    devolveu; aula sem `duration` mostra "NaN min".
+    clique só gera `console.error`); progresso recusado pelo servidor é
+    ignorado; escolher aula recarrega curso e progresso e some com conclusão
+    que o servidor não devolveu. (Corrigidos em 23/11: falha de rede mostra
+    "Tentar de novo" em vez de "Acesso Restrito" — resposta 200 com corpo
+    malformado também cai aí —; aula sem duração não mostra "NaN min".)
   - PerformanceChart: a ordenação muta o array da API; o timer da demo não é
     cancelado ao desmontar; o eixo X agrupa mês com `getUTCMonth` sobre data
     local à meia-noite (erraria a leste de UTC).
@@ -57,33 +57,29 @@ mesmo commit que o resolve.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 4** (mesma regra):
   - `signalEngine.runScanner`: se um check lança depois de outro já ter
     gravado, o upsert do primeiro fica mas o ticker sai de `scannedTickers`
-    (a auto-invalidação o trata como não varrido); `roe` em texto passa em
-    `> 0` e quebra em `toFixed`, e o ativo cai no catch; a divergência valida a
-    correlação como `'RSI_OVERSOLD'` e por isso escapa do veto de dia de crash.
-    `runBacktest` não devolve `success: true` nem `expired` no caminho normal.
+    (a auto-invalidação o trata como não varrido). `runBacktest` não devolve
+    `success: true` nem `expired` no caminho normal. (Corrigidos em 23/11: a
+    divergência passa pelo veto de dia de crash; `roe` em texto não derruba o
+    ativo.)
   - `calculateStockCalibrationConfidence`: `legacyConfidence = ''` derruba a
     confiança a 0 (`Number('')`); `requiredCoverage` em texto vira teto 0;
     ativo nulo lança.
-  - Relatório TXT do ranking: no bloco "Indicadores Cripto", Market Cap e
-    Liquidez saem em `R$`, enquanto a "Liquidez Média" do mesmo item sai em `$`.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 3** (mesma regra):
-  - Fundamentos US/ETF (`yahooFundamentalsMapper`), regra 13: `pvp`, `beta` e
-    `vpa` são gravados com o que vier truthy do Yahoo (objeto `{raw}`, texto,
-    `Infinity`, negativo); `debtToEquity` divide sem checar tipo (`'47.49'` →
-    0,4749, `{raw}` → NaN); `roe`/margem/crescimentos/payout usam truthy, então
-    `Infinity` passa e ROE real de 0 vira nulo; DY negativo é aceito;
-    `avgLiquidity` não checa finitude nem sinal. `syncBrEtfFundamentals` cai
-    inteiro se `quoteSummary` resolve `undefined` ou se o histórico de
-    proventos vem `undefined` (TypeError fora de try), sem gravar o lote.
-  - Candles da carteira, regra 13: candle de fim de semana de classe só de
-    dias úteis (STOCK_US no sábado) volta como fechamento do dia e conta
-    `fetched`, mas a mescla o descarta — o snapshot usa um close que não foi
-    gravado, e sem série guardada faz upsert de `history: []`.
-    `healWalletCandleGaps`: `AssetHistory.find` e a B3 sem try/catch (o erro
-    sobe), ao contrário do aggregate, que é fail-open.
-  - Tesouro: `toIso` não valida dia/mês (`32/13/2026` entra como
-    `2026-13-32`); título repetido no JSON do Tesouro Direto: vale o primeiro;
-    Data Base repetida no CSV: vale o último.
+  - Fundamentos US/ETF, regra 13 (o leitor único de número do Yahoo e o ETF
+    que não derruba o lote foram corrigidos em 23/11; achados na correção):
+    no caminho US, `quoteSummary` resolvendo `undefined` ainda lança fora de
+    try e derruba o `syncUSStocksFundamentals` inteiro (o mesmo defeito que o
+    ETF tinha); `resolveBrEtfDy` grava `dy: 0` com `dyKnown: true` quando não
+    há preço > 0 (zero sem fonte); `lastPrice` negativo ainda é aceito e, no
+    ETF, impede a busca na Brapi. Beta/P/VP/VPA/volume/preço iguais a 0 seguem
+    tratados como ausentes (marcador do Yahoo), de propósito.
+  - Candles da carteira: `healWalletCandleGaps` faz `AssetHistory.find` e a B3
+    sem try/catch (o erro sobe), ao contrário do aggregate, que é fail-open.
+    (Corrigido em 23/11: candle de fim de semana de classe só de dias úteis não
+    vira mais fechamento do dia.)
+  - Tesouro: título repetido no JSON do Tesouro Direto: vale o primeiro;
+    Data Base repetida no CSV: vale o último. (Corrigido em 23/11: data
+    inexistente descarta a linha.)
   - `marketDataService`: `getMarketDataByTicker` ordena `history.history` no
     lugar (o lote ordena cópia) e aceita fallback com `length > 0` que não é
     lista; o lote conta dois acertos para ticker repetido e consulta a chave
@@ -91,20 +87,15 @@ mesmo commit que o resolve.
     `updateOne` falha no meio, mesmo tendo gravado eventos antes.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 2** (mesma regra: cada
   uma é decisão própria; a caracterização trava o comportamento atual):
-  - `updateProfile`: `cpf` que não é texto (ex.: número) lança `TypeError` e
-    responde 500, não 400; `$set` leva `name`/`phone`/`occupation` como
+  - `updateProfile`: `$set` leva `name`/`phone`/`occupation` como
     `undefined` quando vêm vazios (o Mongoose ignora, mas não é intencional).
-  - `refreshToken`: falha do `deleteMany` na revogação por reuso é engolida
-    pelo mesmo `catch` do JWT inválido — responde 401 sem revogar e sem o registro `TOKEN_REUSE_DETECTED`.
-  - `performMacroSync`: `usd: undefined` passa no `!== null` e gravaria
-    `dollar = undefined` sem marcar o câmbio como defasado (hoje a fonte só
-    devolve número ou null). `syncDailyEconomicIndexes` com resposta que não é
-    lista (HTML) não tenta o endpoint `ultimos/50`. A data de início da
-    consulta ao BCB sai de `setDate`/`toLocaleDateString` no fuso do PROCESSO:
-    no Render (UTC) é o dia seguinte ao último gravado; numa máquina em
-    Brasília, a data gravada à meia-noite UTC cai na véspera e a consulta
-    começa um dia antes (a caracterização usa meio-dia UTC para não depender
-    do fuso).
+    (Corrigido em 23/11: `cpf` que não é texto responde 400.)
+  - `refreshToken` (corrigido em 23/11: o reuso é registrado antes de revogar
+    e a falha ao revogar vira erro logado): a mensagem de auditoria segue
+    dizendo "todas as sessões revogadas" mesmo quando a revogação falhou.
+  - `syncDailyEconomicIndexes` com resposta que não é lista (HTML) não tenta
+    o endpoint `ultimos/50`. (Corrigidos em 23/11: câmbio não numérico conta
+    como ausente e marca defasado; o início da consulta ao BCB sai em UTC.)
   - `_runFullSync`: o ramo "Nenhum ativo válido encontrado." é inalcançável (a
     validação de ingestão exige ≥ 50 aceitos por classe antes).
   - `auditTreasuryCatalog`: `rate: null` é auditado como taxa 0 (`Number(null)`),
@@ -126,28 +117,23 @@ mesmo commit que o resolve.
     mês/categoria desconhecidos saem crus.
   - `computeWalletKpis`/`buildDayMovers`: NaN de um ativo se propaga ao total;
     variação NaN não é tratada na ordenação.
-- **(dono, 2026-11-23) Renda fixa no rebuild (`utils/rebuildDayTransactions.js`),
-  congelado como estava na quebra:** (a) o estado criado na primeira compra usa
-  taxa 10 (100 para CASH) quando a taxa falta ou é ≤ 0, mas o criado depois
-  (`lateFixedIncomeState`) usa `|| 100`, e taxa negativa passa; (b) VENDA de RF
-  numa posição que existe sem estado de RF lança `TypeError`; (c) a aritmética é
-  float cru, não `safeAdd`/`safeMult` (regra 7). Cada um é decisão própria — a
-  caracterização de 400 cenários trava o comportamento atual.
+- **(dono, 2026-11-23) Rebuild com `safeMath` transforma NaN em 0.** Desde a
+  correção de 23/11 (taxa 100 como o caminho ao vivo, venda sem estado de RF,
+  aritmética em 4 casas), um `totalValue` não numérico, que antes propagava
+  NaN até a validação do schema, entra como 0 sem aviso (regra 13). A escrita
+  de lançamento valida o valor por Zod, então hoje não acontece; a matriz da
+  caracterização não gera o caso.
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):
-  - Pesquisa (AssetDetailModal): fundo do modal `bg-black/90`, não o
-    `bg-black/95` do design system; em CRIPTO, "Market Cap" e "Liquidez Est."
-    saem em `R$` enquanto o preço sai em `US$`; D/E acima de 10 é dividido por
-    100.
-  - Carteira (WalletView): fora do demo a marcação recebe uma classe literal
-    `false`; sem usuário, o Aporte não mostra cadeado (o clique segue
-    bloqueado); a carteira vazia tem `<h3>` logo abaixo do `<h1>` (axe
-    `heading-order`, desligado só nesse teste).
+  - Pesquisa (AssetDetailModal): D/E acima de 10 é dividido por 100.
+    (Corrigidos em 23/11: fundo `bg-black/95`; cripto em `$`.)
+  - Carteira (WalletView): sem usuário, o Aporte não mostra cadeado (o clique
+    segue bloqueado); a carteira vazia tem `<h3>` logo abaixo do `<h1>` (axe
+    `heading-order`, desligado só nesse teste). (Corrigido em 23/11: a classe
+    literal `false`.)
   - Admin (AuditDetailModal): nota "C" com veredito "descartado" entre 60 e
     64; botão de fechar o painel de detalhe sem nome acessível.
-  - Admin (PerformanceOverview): a linha da janela pode imprimir "null"
-    quando `rssMinMb`/`rssMaxMb` faltam.
 
 ## Decididas
 

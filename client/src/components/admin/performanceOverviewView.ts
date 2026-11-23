@@ -158,7 +158,8 @@ const rssRange = (trend: Trend, both: (min: number, max: number) => string) => {
 const trendWindowLine = (trend: Trend | null) => {
     if (!trend?.direction) return 'Janela medida: ainda acumulando amostras';
     const range = rssRange(trend, (min, max) => `mín. ${min} / máx. ${max} MB`);
-    return range === null ? null : `Janela medida: ${trend.points} amostras em ${trend.spanHours.toFixed(1)}h (${range})`;
+    // Sem mín./máx., a contagem de amostras segue valendo; só o parêntese sai.
+    return `Janela medida: ${trend.points} amostras em ${trend.spanHours.toFixed(1)}h` + (range === null ? '' : ` (${range})`);
 };
 
 interface MemoryInputs {
