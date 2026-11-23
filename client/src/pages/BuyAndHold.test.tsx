@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { BuyAndHold } from './BuyAndHold';
@@ -30,8 +30,9 @@ vi.mock('../services/research', async () => {
   return { ...actual, researchService: { getAnchorReport: vi.fn() } };
 });
 vi.mock('../components/dashboard/Header', () => ({ Header: () => null }));
+const navigate = vi.hoisted(() => vi.fn());
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
   Link: ({ children }: { children: React.ReactNode }) => <a href="/research">{children}</a>,
 }));
 
@@ -151,5 +152,27 @@ describe('BuyAndHold', () => {
     renderPage();
     expect(screen.getByText('Disponível a partir do plano Pro')).toBeInTheDocument();
     expect(researchService.getAnchorReport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Ver planos/ }));
+    expect(navigate).toHaveBeenCalledWith('/pricing');
+  });
+
+  it('aba FIIs pede a apuração de FII', async () => {
+    vi.mocked(researchService.getAnchorReport).mockResolvedValue(report([item('WEGE3', 'BUY', 80)]) as never);
+    renderPage();
+    await waitFor(() => expect(researchService.getAnchorReport).toHaveBeenCalledWith('STOCK'));
+    fireEvent.click(screen.getByRole('button', { name: /FIIs/ }));
+    await waitFor(() => expect(researchService.getAnchorReport).toHaveBeenCalledWith('FII'));
+  });
+
+  it('"Como a lista é montada" abre e fecha o método, com os limites da apuração', async () => {
+    vi.mocked(researchService.getAnchorReport).mockResolvedValue(report([item('WEGE3', 'BUY', 80)]) as never);
+    renderPage();
+    const toggle = screen.getByRole('button', { name: /Como a lista é montada/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/portão, não nota/)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.queryByText(/portão, não nota/)).not.toBeInTheDocument();
   });
 });

@@ -201,6 +201,47 @@ describe('erro de servidor', () => {
       expect(screen.getByText(/indisponível/i)).toBeInTheDocument()
     );
   });
+
+  it('resposta sem usuário nem token vira erro "Resposta inválida do servidor"', async () => {
+    vi.mocked(authService.login).mockResolvedValue({} as any);
+
+    renderLogin();
+    fillLoginForm();
+    submitForm();
+
+    await waitFor(() => expect(screen.getByText('Resposta inválida do servidor')).toBeInTheDocument());
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
+  it.each(['Email', 'Senha'])('digitar de novo em "%s" apaga o erro do servidor', async (campo) => {
+    vi.mocked(authService.login).mockRejectedValue(new Error('Credenciais inválidas.'));
+
+    renderLogin();
+    fillLoginForm();
+    submitForm();
+    await waitFor(() => expect(screen.getByText('Credenciais inválidas.')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(campo), { target: { value: 'outro@email.com' } });
+    expect(screen.queryByText('Credenciais inválidas.')).not.toBeInTheDocument();
+  });
+
+  it('digitar o código 2FA de novo apaga o erro do servidor', async () => {
+    vi.mocked(authService.login)
+      .mockResolvedValueOnce({ mfaRequired: true } as any)
+      .mockRejectedValueOnce(new Error('Código inválido.'));
+
+    renderLogin();
+    fillLoginForm();
+    submitForm();
+    await waitFor(() => expect(screen.getByLabelText('Código de verificação')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('Código de verificação'), { target: { value: '123456' } });
+    submitForm();
+    await waitFor(() => expect(screen.getByText('Código inválido.')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText('Código de verificação'), { target: { value: '654321' } });
+    expect(screen.queryByText('Código inválido.')).not.toBeInTheDocument();
+  });
 });
 
 // ─── Fluxo MFA ────────────────────────────────────────────────────────────────

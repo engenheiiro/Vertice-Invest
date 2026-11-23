@@ -58,4 +58,36 @@ describe('useCoursePlayer', () => {
         expect(result.current.showQuiz).toBe(true);
         await waitFor(() => expect(result.current.quizAnswers).toEqual([-1]));
     });
+
+    it('enviar com pergunta sem resposta só avisa, sem chamar o servidor', async () => {
+        const { result } = renderHook(() => useCoursePlayer(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        act(() => result.current.handleVideoEnded());
+        await waitFor(() => expect(result.current.quizAnswers).toEqual([-1]));
+        await act(() => result.current.handleQuizSubmit());
+        expect(mocks.addToast).toHaveBeenCalledWith('Por favor, responda todas as perguntas.', 'info');
+        expect(mocks.api).not.toHaveBeenCalledWith('/api/academy/quiz/submit', expect.anything());
+    });
+
+    it('botão do teste não faz nada enquanto falta aula', async () => {
+        progress.progress = [{ lessonId: 'l1', completed: true }];
+        const { result } = renderHook(() => useCoursePlayer(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        act(() => result.current.handleTestButtonClick());
+        expect(result.current.showQuiz).toBe(false);
+    });
+
+    it('falha ao salvar o progresso automático não marca a aula como concluída', async () => {
+        progress.progress = [];
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { result } = renderHook(() => useCoursePlayer(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        mocks.api.mockImplementation((url: string) => (url === '/api/academy/progress'
+            ? Promise.reject(new Error('sem rede'))
+            : ok({})));
+        await act(() => result.current.handleProgress({ played: 0.95, playedSeconds: 50 }));
+        expect(spy).toHaveBeenCalledWith('Erro ao salvar progresso automático:', expect.any(Error));
+        expect(result.current.completedLessons).toEqual([]);
+        spy.mockRestore();
+    });
 });
