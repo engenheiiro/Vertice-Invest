@@ -15,9 +15,28 @@ mesmo commit que o resolve.
   `scoringEngine` (42/41/32/25/25), `persistUserSnapshotForDay` (41),
   `computeWalletKpis` (40), `buildDayMovers` (35), `buildTaxPdf` (34),
   `_loadPriceCacheMap` e `resolveRows` (31), `accrueDividendsByTicker` (26).
-  O teto segue `utils/weeklyRetention.js` (43); depois PerformanceChart (41),
-  `authController.updateProfile` e `dataHealthService.collectFacts` (39). Plano
-  das ondas 2–5 na conversa de 23/11: jobs, dados de mercado, motores, telas.
+  Onda 2 (23/11): `updateProfile` e `collectFacts` (39), `performMacroSync`
+  (38), `auditTreasuryCatalog` (37), `_runFullSync` (30), `updateOfficialRates`
+  (29), `buildFundamentusAssetUpdate` (28), `_parseNtnbFromCsv` (25),
+  `_persistUsdHistory` (22) e mais sete entre 16 e 18. O teto segue
+  `utils/weeklyRetention.js` (43); depois PerformanceChart (41). Faltam as
+  ondas 3–5: dados de mercado, motores, telas. `dataHealthRules.js` ainda tem
+  7 funções acima de 15 (24, 23, 19, 19, 18, 18, 17).
+- **(dono, 2026-11-23) Estranhezas congeladas na onda 2** (mesma regra: cada
+  uma é decisão própria; a caracterização trava o comportamento atual):
+  - `updateProfile`: `cpf` que não é texto (ex.: número) lança `TypeError` e
+    responde 500, não 400; `$set` leva `name`/`phone`/`occupation` como
+    `undefined` quando vêm vazios (o Mongoose ignora, mas não é intencional).
+  - `refreshToken`: falha do `deleteMany` na revogação por reuso é engolida
+    pelo mesmo `catch` do JWT inválido — responde 401 sem revogar e sem o registro `TOKEN_REUSE_DETECTED`.
+  - `performMacroSync`: `usd: undefined` passa no `!== null` e gravaria
+    `dollar = undefined` sem marcar o câmbio como defasado (hoje a fonte só
+    devolve número ou null). `syncDailyEconomicIndexes` com resposta que não é
+    lista (HTML) não tenta o endpoint `ultimos/50`.
+  - `_runFullSync`: o ramo "Nenhum ativo válido encontrado." é inalcançável (a
+    validação de ingestão exige ≥ 50 aceitos por classe antes).
+  - `auditTreasuryCatalog`: `rate: null` é auditado como taxa 0 (`Number(null)`),
+    não como ausente.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 1** (cada uma é decisão
   própria; a caracterização trava o comportamento atual):
   - `persistUserSnapshotForDay`: `calculatedAt` inválido ou lançamento que não
