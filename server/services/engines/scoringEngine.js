@@ -4,7 +4,6 @@ import {
     BAZIN_MIN_YIELD,
     BAZIN_NTNB_PREMIUM,
 } from '../../config/financialConstants.js';
-import { isCyclicalSector } from '../../config/sectorTaxonomy.js';
 import {
     classifyStockArchetype,
     getScoringNotApplicableMetrics,
@@ -13,7 +12,9 @@ import {
     resolveRoeReading,
 } from '../../config/stockCalibration.js';
 import { asObservedNumber } from '../../utils/metricObservation.js';
+import { isEligibleForDefensive } from './defensiveGate.js';
 import { scoreFiiProfileRules } from './fiiProfileRules.js';
+import { isFinancialSector, resolvePapel } from './sectorRules.js';
 import { scoreStockProfileRules } from './stockProfileRules.js';
 import {
     cryptoStructuralScores,
@@ -27,35 +28,6 @@ const safeVal = (val) => {
     if (val === Infinity || val === -Infinity || isNaN(val) || val === null || val === undefined) return 0;
     return Number(val.toFixed(2));
 };
-
-// Helper: resolve isPapel a partir de fiiSubType (explícito) ou setor (fallback por substring).
-// Rótulos de FII de Papel na base: "Papel", "Recebíveis" (CRI/CRA). Hints específicos
-// para não gerar falso-positivo com setores de tijolo (ex.: "Shoppings", "Logística").
-const PAPEL_SECTOR_HINTS = ['papel', 'recebív', 'recebiv'];
-const resolvePapel = (fiiSubType, sector) => {
-    if (fiiSubType) return fiiSubType === 'PAPEL';
-    if (!sector) return false;
-    const s = sector.toLowerCase();
-    return PAPEL_SECTOR_HINTS.some(h => s.includes(h));
-};
-
-// (H) Classificação setorial centralizada — antes havia ~5 cópias divergentes de
-// "é setor financeiro?" espalhadas (algumas com Holding, outras com Financials/Insurance).
-// FIN_CORE é o núcleo idêntico a TODOS os sites; cada chamada declara seus extras de forma
-// explícita, então a divergência legada fica visível e editável num só lugar — SEM mudar
-// pontuação (cada site reproduz exatamente o conjunto de keywords que já usava).
-const FIN_CORE = ['Banco', 'Segur', 'Financeiro'];
-const isFinancialSector = (sector, extra = []) => {
-    if (!sector) return false;
-    return [...FIN_CORE, ...extra].some(k => sector.includes(k));
-};
-
-// (H) Setores considerados "seguros" para o gate Defensivo (BR). Mantido como lista única
-// de substrings (NÃO migrado para getMacroSector: Telecom→TECNOLOGIA / Alimentos→CONSUMO
-// arrastariam setores não-defensivos inteiros para "seguro", mudando a semântica).
-const DEFENSIVE_SAFE_SECTORS_BR = ['Banco', 'Segur', 'Elétric', 'Eletric', 'Saneamento', 'Água', 'Telecom', 'Energia', 'Transmissão', 'Financeiro', 'Alimentos', 'Saúde', 'Gás', 'Holding', 'Bebidas'];
-// Setores defensivos do Exterior (GICS, em inglês) para o gate Defensivo de STOCK_US.
-const DEFENSIVE_SAFE_SECTORS_US = ['Consumer Staples', 'Utilities', 'Healthcare', 'Financials'];
 
 // Sub-tipo efetivo de um ativo do Exterior (STOCK_US). Fora do Exterior → null.
 // Ausente cai em STOCK (mesmo balde padrão da classificação).
@@ -146,73 +118,6 @@ const isDividendAristocrat = (m, type) => {
     if (type !== 'STOCK') return false;
     // Critérios Proxy: Crescimento de Receita + ROE Alto + Yield Decente + Payout Saudável
     return (m.revenueGrowth > 5 && m.roe > 12 && m.dy > 4.0 && m.netMargin > 8 && m.payout > 20 && m.payout < 90);
-};
-
-const isEligibleForDefensive = (asset, _context) => {
-    const m = asset.metrics;
-    if (m.avgLiquidity < 200000) return false;
-    if (asset.type === 'STOCK') {
-        if (m.marketCap < 1000000000) return false;
-        // Beta muito alto (≥1.5) indica ativo pró-cíclico incompatível com perfil defensivo.
-        // O scoring já penaliza -15 pts para beta ≥1.5, mas o gate evita que ativos com
-        // muitos bônus de DY/ROE compensem essa fraqueza estrutural e entrem no DEFENSIVE.
-        // Beta AUSENTE reprova (fail-closed). O marketDataService grava `beta: 0` quando não
-        // há série para calcular e marca `_missing.beta` — mas o gate só olhava `beta >= 1.5`,
-        // então 0 passava como se fosse um beta baixíssimo e o ativo sem medição de risco
-        // entrava no perfil Defensivo. Beta negativo REAL continua aceito.
-        if (m._missing?.beta || !Number.isFinite(m.beta)) return false;
-        if (m.beta >= 1.5) return false;
-        const sector = asset.sector || '';
-        // Setor cíclico (INDUSTRIAL/COMMODITIES) NUNCA é elegível ao perfil Defensivo:
-        // DY/P/L baratos numa cíclica em queda são lucro de PICO de ciclo (value-trap),
-        // não segurança. Barra na origem — antes de qualquer bônus de DY/ROE (caso SHUL4).
-        // Continua elegível a MODERATE/BOLD via scoreStockProfiles.
-        if (isCyclicalSector(sector)) return false;
-        const isSafeSector = DEFENSIVE_SAFE_SECTORS_BR.some(keyword => sector.includes(keyword));
-        if (!isSafeSector) {
-            // P/L precisa ser POSITIVO: `m.pl > 10` sozinho aceitava P/L 0 (ausente) e P/L
-            // negativo (prejuízo) como "barato", abrindo a rota DY≥6% para empresa sem lucro.
-            if (m.dy < 6.0 || !(m.pl > 0 && m.pl <= 10)) return false;
-        }
-        // ROE ausente reprova no Defensivo (fail-closed): antes a regra era pulada quando
-        // `_missing.roe`, e a falta de coleta virava passe livre para o perfil mais
-        // conservador. Margem/payout ausentes seguem tolerados (não são o eixo do gate).
-        if (m._missing?.roe || !Number.isFinite(m.roe) || m.roe < 5) return false;
-        if (!m._missing?.netMargin && m.netMargin < 3) return false;
-        // Payout insustentável (>200%) é incompatível com perfil defensivo — dividendo vem do capital.
-        if (!m._missing?.payout && m.payout > 200) return false;
-        const isFinancial = isFinancialSector(sector);
-        if (m.debtToEquity > 4.0 && !isFinancial) return false;
-    } else if (asset.type === 'FII') {
-        if (m.marketCap < 500000000) return false; 
-        if (m.dy > 18.0) return false; 
-        if (m.vacancy > 12) return false; // Reduzido de 15 para 12 para ser mais defensivo
-        // FII de Papel não tem imóveis (qtdImoveis=0): a guarda de mono-ativo só vale para tijolo.
-        // Usa resolvePapel (fiiSubType explícito OU hints 'papel'/'recebív') em vez de substring crua
-        // 'Papel' — senão um FII de papel rotulado "Recebíveis"/"CRI" seria vetado indevidamente.
-        const isPapelFII = resolvePapel(asset.fiiSubType, asset.sector);
-        if (!isPapelFII && m.qtdImoveis < 2) return false; // Mono-ativos de tijolo são vetados do perfil Defensivo
-        if (m.avgLiquidity < 1000000) return false; 
-    } else if (asset.type === 'STOCK_US') {
-        // US stocks: exige market cap mínimo de $10B USD e setor defensivo (Consumer Staples, Utilities, Healthcare, Financials)
-        if (m.marketCap < 10_000_000_000) return false;
-        // Mesma regra fail-closed do STOCK BR: beta ausente (gravado como 0) não é beta baixo.
-        if (m._missing?.beta || !Number.isFinite(m.beta)) return false;
-        if (m.beta >= 1.8) return false;
-        // ROE ausente reprova o Defensivo (fail-closed), como no STOCK BR.
-        if (m._missing?.roe || !Number.isFinite(m.roe) || m.roe < 5) return false;
-        const sector = asset.sector || '';
-        const isSafeUSSector = DEFENSIVE_SAFE_SECTORS_US.some(s => sector.includes(s));
-        if (!isSafeUSSector) {
-            // Fora dos setores defensivos: exige DY razoável ou P/E moderado
-            if (m.dy < 1.5 && (m.pl === 0 || m.pl > 30)) return false;
-        }
-    } else if (asset.type === 'CRYPTO') {
-        // Para ser defensivo em crypto, tem que ser gigante e muito líquido (Buy & Hold)
-        if (!['BTC', 'ETH'].includes(asset.ticker) && m.marketCap < 50000000000) return false;
-        if (m.avgLiquidity < 500000000) return false;
-    }
-    return true;
 };
 
 const calculateIntrinsicValue = (m, type, price, context, usSubType = null) => {

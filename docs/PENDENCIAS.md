@@ -5,12 +5,13 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-22) Maior complexidade agora é 52.** Já quebrados: perfil
+- **(dono, 2026-11-22) Maior complexidade agora é 51.** Já quebrados: perfil
   FII do scoring e `auditDividendPaymentSources.js` (73), `dataSourceStatus.js`
-  (60), Indicators e AuditDetailModal (53). O teto passa a ser o gate
-  `isEligibleForDefensive` do `scoringEngine.js` (52) — regra de negócio do
-  CLAUDE.md, pede revisão própria —, seguido de `calculateIntrinsicValue` (42)
-  e `generateDynamicTheses` (41) no mesmo arquivo.
+  (60), Indicators e AuditDetailModal (53) e o gate `isEligibleForDefensive`
+  (52, agora em `engines/defensiveGate.js`). O teto passa a ser
+  `PerformanceOverview.tsx` e `WalletView.tsx` (51), seguidos de
+  `AssetDetailModal.tsx` (49). No scoring, o maior é `calculateIntrinsicValue`
+  (42).
 
 ## Decididas
 

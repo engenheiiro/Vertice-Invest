@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`isEligibleForDefensive — caracterização antes da decomposição > a grade de bordas produz a mesma decisão (digest + contagem por classe) 1`] = `
+{
+  "CRYPTO|false": 913,
+  "CRYPTO|true": 587,
+  "FII|false": 1390,
+  "FII|true": 110,
+  "STOCK_US|false": 1287,
+  "STOCK_US|true": 213,
+  "STOCK|descartado: Liquidez Insuficiente": 509,
+  "STOCK|false": 969,
+  "STOCK|true": 22,
+}
+`;
+
+exports[`isEligibleForDefensive — caracterização antes da decomposição > a grade de bordas produz a mesma decisão (digest + contagem por classe) 2`] = `"cf0043bec601ab3e6b2574f36392c73927ad48a3a5988bb6f687a4e714746f56"`;
