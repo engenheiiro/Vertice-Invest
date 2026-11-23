@@ -268,7 +268,7 @@ describe('caracterização — persistUserSnapshotForDay', () => {
     expect(tally).toMatchSnapshot();
     expect(hashes).toMatchSnapshot();
     expect(full).toMatchSnapshot();
-  });
+  }, 60_000); // 1000 cenários: ~3,5 s sozinho, mais de 15 s com cobertura e máquina carregada
 
   it('carteira vazia devolve empty sem escrever', async () => {
     wire({ positions: [], last: null, exists: null, txs: [], dividends: [] });
