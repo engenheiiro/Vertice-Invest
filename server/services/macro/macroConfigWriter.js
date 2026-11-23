@@ -41,9 +41,11 @@ const applyOfficialRates = (config, official) => {
 
 // Escrita por moeda, não em bloco: uma fonte que cobre só o dólar não pode
 // arrastar o BTC junto, nem o inverso. `currenciesUpdatedAt` só é carimbado
-// quando AS DUAS vieram frescas.
+// quando AS DUAS vieram frescas. Dólar que não é número finito (undefined, NaN,
+// texto) conta como ausente: viraria `dollar` e multiplicador de patrimônio.
 const applyCurrencies = (config, currencies) => {
-    if (currencies.usd !== null) {
+    const usdOk = Number.isFinite(currencies.usd);
+    if (usdOk) {
         config.dollar = currencies.usd;
         config.dollarChange = currencies.usdChange;
     }
@@ -52,7 +54,7 @@ const applyCurrencies = (config, currencies) => {
         config.btcChange = currencies.btcChange;
     }
     config.currenciesSources = { usd: currencies.usdSource, btc: currencies.btcSource };
-    config.currenciesStale = currencies.usd === null || currencies.btc === null;
+    config.currenciesStale = !usdOk || currencies.btc === null;
     if (!config.currenciesStale) {
         config.currenciesUpdatedAt = new Date();
     }

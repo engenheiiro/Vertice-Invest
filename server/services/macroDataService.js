@@ -12,7 +12,7 @@ import logger from '../config/logger.js';
 import { externalMarketService } from './externalMarketService.js';
 import { fetchTesouroCsv, fetchTesouroDiretoQuotes, expectedTreasuryDataBase } from './treasuryPriceService.js';
 import TreasuryPriceHistory from '../models/TreasuryPriceHistory.js';
-import { brazilDateKey } from '../utils/dateUtils.js';
+import { brazilDateKey, toDateKey, dateKeyToUtcDate } from '../utils/dateUtils.js';
 import { trackSource, recordSourceSkip } from '../utils/sourceHealth.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { brNow } from '../utils/sourceSchedule.js';
@@ -364,8 +364,8 @@ export const macroDataService = {
         try {
             const lastEntry = await EconomicIndex.findOne({ series: 'SELIC' }).sort({ date: -1 });
             if (lastEntry) {
-                const d = new Date(lastEntry.date);
-                d.setDate(d.getDate() + 1);
+                // Dia seguinte em UTC (a chave da série é meia-noite UTC); no fuso local, Brasília recomeçava no próprio dia.
+                const d = new Date(dateKeyToUtcDate(lastEntry.date).getTime() + 24 * 60 * 60 * 1000);
                 // Linha sintética legada (ver `generateSyntheticData`) não é ponto
                 // de retomada: retomar DEPOIS dela deixava o número inventado no
                 // banco para sempre, porque o BCB nunca mais era perguntado por
@@ -374,7 +374,7 @@ export const macroDataService = {
                 const legacy = await this._oldestLegacySyntheticSelicDate();
                 if (legacy && legacy < d) legacyStart = legacy;
                 startDateObj = legacyStart || d;
-                startDateStr = startDateObj.toLocaleDateString('pt-BR');
+                startDateStr = toDateKey(startDateObj).split('-').reverse().join('/');
             }
         } catch (e) {
             logger.debug(`[Macro] Falha ao ler última entrada SELIC, usando default ${startDateStr}: ${e.message}`);

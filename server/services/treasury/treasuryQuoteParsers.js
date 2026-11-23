@@ -21,9 +21,13 @@ export const MAX_BUY_SPREAD = 0.08;
 /** Bid-ask não se inverte e não é gigante: fora disso a coluna está corrompida. */
 const plausibleBuyPu = (rawBuy, pu) => ((rawBuy > 0 && rawBuy >= pu && (rawBuy / pu - 1) <= MAX_BUY_SPREAD) ? rawBuy : null);
 
+// Dia/mês inexistente (32/13, 30/02) não vira data: a linha é descartada.
 const toIso = (s) => {
     const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
-    return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+    if (!m) return null;
+    const iso = `${m[3]}-${m[2]}-${m[1]}`;
+    const d = new Date(`${iso}T00:00:00Z`);
+    return Number.isFinite(d.getTime()) && d.toISOString().startsWith(iso) ? iso : null;
 };
 
 // Formato brasileiro: milhar com ponto, decimal com vírgula.

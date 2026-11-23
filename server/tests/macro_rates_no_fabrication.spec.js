@@ -141,7 +141,8 @@ describe('syncDailyEconomicIndexes — BCB fora não grava série sintética', (
 
         await macroDataService.syncDailyEconomicIndexes();
 
-        expect(get.mock.calls[0][0]).toContain(`dataInicial=${legacy.toLocaleDateString('pt-BR')}`);
+        // Data UTC do registro, não a do fuso do processo (em Brasília saía 30/09).
+        expect(get.mock.calls[0][0]).toContain('dataInicial=01/10/2026');
         expect(EconomicIndex.deleteMany).toHaveBeenCalledOnce();
         const filtro = EconomicIndex.deleteMany.mock.calls[0][0];
         expect(filtro.date.$gte).toEqual(legacy);

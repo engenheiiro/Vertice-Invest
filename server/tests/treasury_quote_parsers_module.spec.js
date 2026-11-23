@@ -21,8 +21,6 @@ describe('treasuryQuoteParsers', () => {
         expect(entry.history).toEqual([
             { date: '2026-10-01', pu: 4000, puBuy: null, rate: 6.1 },
             { date: '2026-10-02', pu: 4101, puBuy: null, rate: null },
-            // Estranheza congelada: o regex de data não valida dia/mês.
-            { date: '2026-99-31', pu: 1, puBuy: null, rate: null },
         ]);
     });
 

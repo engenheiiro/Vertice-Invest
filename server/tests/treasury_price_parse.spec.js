@@ -70,6 +70,17 @@ describe('parseTreasuryPriceCsv', () => {
         expect(out.size).toBe(0);
     });
 
+    it('descarta linha com dia/mês inválido (32/13/2026 virava 2026-13-32)', () => {
+        const out = parseTreasuryPriceCsv(csv(
+            'Tesouro IPCA+;15/05/2035;32/13/2026;7,98;8,10;2434,82;2410,97;2410,97',
+            'Tesouro IPCA+;15/05/2035;30/02/2026;7,98;8,10;2434,82;2410,97;2410,97',
+            'Tesouro IPCA+;31/04/2035;14/08/2026;7,98;8,10;2434,82;2410,97;2410,97',
+            'Tesouro IPCA+;15/05/2035;14/08/2026;7,98;8,10;2434,82;2410,97;2410,97',
+        ));
+        expect([...out.keys()]).toEqual(['IPCA|2035-05-15']);
+        expect(out.get('IPCA|2035-05-15').history.map((p) => p.date)).toEqual(['2026-08-14']);
+    });
+
     it('respeita o corte de histórico', () => {
         const out = parseTreasuryPriceCsv(csv(
             'Tesouro Selic;01/03/2029;10/01/2019;0,03;0,04;9000,00;8999,00;8999,00',
