@@ -195,7 +195,7 @@
       "server/utils/weeklyRetention.js": 2
     },
     "complexidadeMax": 45,
-    "duplicacaoPct": 0.49,
+    "duplicacaoPct": 0.5,
     "codigoMorto": [],
     "vulnAltas": 0,
     "depsMajorAtras": 0,
