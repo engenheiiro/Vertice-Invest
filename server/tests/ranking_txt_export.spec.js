@@ -271,7 +271,7 @@ describe('outras classes', () => {
         expect(txt).toContain('🔴 VENDER');
         expect(txt).toContain('Indicadores Cripto');
         expect(txt).toContain('Liquidez Média:    $ 500/dia');
-        expect(txt).toContain('Liquidez:          R$ 500/dia');
+        expect(txt).toContain('Liquidez:          $ 500/dia');
         expect(txt).toContain('Market Cap:        R$ 500');
         expect(txt).toContain('Perfil: OUTRO');
         expect(txt).toContain('(sem registros)');

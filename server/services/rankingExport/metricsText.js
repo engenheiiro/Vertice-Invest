@@ -76,14 +76,13 @@ const fiiText = (m) => {
     return out;
 };
 
-// Bloco próprio da cripto: market cap e liquidez saem em R$ aqui, ao contrário
-// da linha "Liquidez Média" acima (em $). Comportamento herdado, mantido.
+// Bloco próprio da cripto: em dólar, como a "Liquidez Média" acima.
 const cryptoText = (m) => {
     let out = '';
     out += `\n  ── Indicadores Cripto ────────────────────────────────\n`;
-    out += `  Market Cap:        ${fmtMarketCap(m.marketCap)}\n`;
+    out += `  Market Cap:        ${fmtMarketCapUSD(m.marketCap)}\n`;
     out += `  Volatilidade:      ${fmtPct(m.volatility)}   Beta: ${fmt(m.beta, 2)}\n`;
-    out += `  Liquidez:          ${fmtLiquidity(m.avgLiquidity)}\n`;
+    out += `  Liquidez:          ${fmtLiquidityUSD(m.avgLiquidity)}\n`;
     return out;
 };
 

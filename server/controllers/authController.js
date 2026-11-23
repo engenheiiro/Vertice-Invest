@@ -30,7 +30,7 @@ import { decrypt } from '../utils/encryption.js'; // (S) cripto em repouso: mfaS
 import { issueCsrfToken, clearCsrfToken } from '../middleware/csrf.js'; // (1.4) CSRF double-submit
 import { buildProfileUpdate } from '../services/auth/profileUpdate.js';
 import {
-  hashToken, rememberRotation, consumeGraceRotation, revokeUserSessions,
+  hashToken, rememberRotation, consumeGraceRotation, revokeUserSessions, revokeSessionsAfterReuse,
 } from '../services/auth/refreshRotation.js'; // (F5) rotação com janela de graça
 import { sanitizeAcquisition } from '../utils/acquisition.js'; // origem da conta (funil)
 import { anonymizeUserTickets } from '../services/supportService.js'; // LGPD: atendimento sem titular
@@ -373,15 +373,14 @@ const sendAccessToken = (req, res, user, refreshTokenString) => {
 
 const refreshExpired = (res) => res.status(401).json({ message: "Sessão expirada." });
 
-// Reuso fora da graça: se o JWT ainda é estruturalmente válido, revoga a família.
+// Reuso fora da graça: se o JWT ainda é estruturalmente válido, registra o reuso
+// e só DEPOIS tenta revogar a família (falha ao revogar é logada no serviço).
 const revokeFamilyOnReuse = async (req, requestToken) => {
-  try {
-    const decoded = jwt.verify(requestToken, JWT_REFRESH_SECRET);
-    if (decoded?.id) {
-      await revokeUserSessions(decoded.id);
-      logAudit(req, 'TOKEN_REUSE_DETECTED', 'Refresh token reusado — todas as sessões revogadas', decoded.id);
-    }
-  } catch { /* JWT inválido/expirado: nada a revogar */ }
+  let userId = null;
+  try { userId = jwt.verify(requestToken, JWT_REFRESH_SECRET)?.id; } catch { /* JWT inválido/expirado */ }
+  if (!userId) return;
+  logAudit(req, 'TOKEN_REUSE_DETECTED', 'Refresh token reusado — todas as sessões revogadas', userId);
+  await revokeSessionsAfterReuse(userId);
 };
 
 // Hash não está no banco: pode ser (a) uma corrida multi-aba dentro da janela

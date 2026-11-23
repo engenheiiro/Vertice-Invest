@@ -77,7 +77,10 @@ const applyBanner = (ops, bannerColor) => {
   return null;
 };
 
-const applyCpf = async (ops, userId, cpf, cleanCpf) => {
+const applyCpf = async (ops, userId, cpf) => {
+  // CPF que não é texto (ex.: número) é erro de validação, não TypeError no replace.
+  if (cpf !== undefined && cpf !== null && typeof cpf !== 'string') return invalid('CPF inválido.');
+  const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
   if (!cleanCpf) {
     // Campo enviado vazio → titular quer remover o CPF. $unset evita deixar
     // cpfHash=null (que colidiria no índice único sparse entre vários usuários).
@@ -96,8 +99,7 @@ const applyCpf = async (ops, userId, cpf, cleanCpf) => {
 
 /** Devolve `{ error }` (status + mensagem) ou `{ updateOps }` para o findByIdAndUpdate. */
 export const buildProfileUpdate = async (userId, body) => {
-  const { name, cpf, phone, occupation } = body;
-  const cleanCpf = cpf ? cpf.replace(/\D/g, '') : null;
+  const { name, phone, occupation } = body;
 
   // $set ignora chaves undefined (deixa o campo inalterado quando vazio).
   const ops = { set: { name, phone: phone || undefined, occupation: occupation || undefined }, unset: {} };
@@ -106,7 +108,7 @@ export const buildProfileUpdate = async (userId, body) => {
     || applyBirthDate(ops, body.birthDate)
     || applySalary(ops, body.salary)
     || applyBanner(ops, body.bannerColor)
-    || await applyCpf(ops, userId, cpf, cleanCpf);
+    || await applyCpf(ops, userId, body.cpf);
   if (error) return { error };
 
   const updateOps = { $set: ops.set };

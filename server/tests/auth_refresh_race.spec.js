@@ -24,8 +24,11 @@ vi.mock('../services/emailService.js', () => ({ sendResetPasswordEmail: vi.fn() 
 vi.mock('../config/logger.js', () => ({ default: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } }));
 vi.mock('../utils/userCache.js', () => ({ invalidateUser: vi.fn() }));
 
+const jwt = (await import('jsonwebtoken')).default;
 const User = (await import('../models/User.js')).default;
 const RefreshToken = (await import('../models/RefreshToken.js')).default;
+const AuditLog = (await import('../models/AuditLog.js')).default;
+const logger = (await import('../config/logger.js')).default;
 const { refreshToken } = await import('../controllers/authController.js');
 
 const mockRes = () => {
@@ -70,5 +73,38 @@ describe('refreshToken — rotação atômica', () => {
         await refreshToken(req('cookie-unico-2'), res, vi.fn());
         expect(res.statusCode).toBe(401);
         expect(RefreshToken.create).not.toHaveBeenCalled();
+    });
+});
+
+describe('refreshToken — reuso fora da graça', () => {
+    it('falha ao revogar no reuso ainda registra TOKEN_REUSE_DETECTED e loga o erro (era engolida como JWT inválido)', async () => {
+        RefreshToken.findOne.mockResolvedValue(null);
+        jwt.verify.mockReturnValue({ id: 'user-9' });
+        RefreshToken.deleteMany.mockRejectedValue(new Error('mongo fora'));
+        const res = mockRes();
+        const next = vi.fn();
+        await refreshToken(req('cookie-reusado-1'), res, next);
+
+        expect(res.statusCode).toBe(401);
+        expect(next).not.toHaveBeenCalled();
+        const actions = AuditLog.create.mock.calls.map(([doc]) => doc.action);
+        expect(actions).toEqual(['TOKEN_REUSE_DETECTED', 'TOKEN_REFRESH_FAILED']);
+        expect(AuditLog.create.mock.calls[0][0].user).toBe('user-9');
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        const logged = logger.error.mock.calls[0].join(' ');
+        expect(logged).toContain('user-9');
+        expect(logged).not.toContain('cookie-reusado-1');
+    });
+
+    it('JWT inválido no reuso: nada a revogar nem a registrar como reuso', async () => {
+        RefreshToken.findOne.mockResolvedValue(null);
+        jwt.verify.mockImplementation(() => { throw new Error('jwt malformed'); });
+        const res = mockRes();
+        await refreshToken(req('cookie-lixo-1'), res, vi.fn());
+
+        expect(res.statusCode).toBe(401);
+        expect(RefreshToken.deleteMany).not.toHaveBeenCalled();
+        expect(AuditLog.create.mock.calls.map(([doc]) => doc.action)).toEqual(['TOKEN_REFRESH_FAILED']);
+        expect(logger.error).not.toHaveBeenCalled();
     });
 });

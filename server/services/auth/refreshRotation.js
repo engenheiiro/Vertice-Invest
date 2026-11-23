@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import RefreshToken from '../../models/RefreshToken.js';
+import logger from '../../config/logger.js';
 
 // O banco guarda só o sha256 do refresh token (e do token de reset de senha).
 export const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
@@ -37,5 +38,16 @@ export const revokeUserSessions = async (userId) => {
   await RefreshToken.deleteMany({ user: userId });
   for (const [oldHash, entry] of recentlyRotated) {
     if (String(entry.userId) === normalizedUserId) recentlyRotated.delete(oldHash);
+  }
+};
+
+// Revogação disparada por reuso de refresh token: a resposta é 401 de qualquer
+// jeito, então falha aqui vira erro logado (só o id do usuário, nunca o token)
+// em vez de exceção — antes ela caía no catch do JWT inválido e sumia.
+export const revokeSessionsAfterReuse = async (userId) => {
+  try {
+    await revokeUserSessions(userId);
+  } catch (error) {
+    logger.error(`[Auth] Falha ao revogar sessões após reuso de refresh token (user ${userId}): ${error.message}`);
   }
 };

@@ -53,6 +53,14 @@ describe('buildProfileUpdate', () => {
     expect(updateOps.$unset).toEqual({ cpf: 1, cpfHash: 1 });
     expect(User.findOne).not.toHaveBeenCalled();
   });
+
+  it('CPF que não é texto responde 400 de validação (era TypeError e 500)', async () => {
+    const result = await buildProfileUpdate('u1', { cpf: 52998224725 });
+    expect(result.error).toEqual({ status: 400, message: 'CPF inválido.' });
+    expect(User.findOne).not.toHaveBeenCalled();
+    // As validações anteriores continuam aparecendo primeiro.
+    expect((await buildProfileUpdate('u1', { cpf: 123, bannerColor: 'neon' })).error.message).toBe('Banner inválido.');
+  });
 });
 
 describe('refreshRotation', () => {

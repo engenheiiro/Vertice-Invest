@@ -32,8 +32,16 @@ describe('formatMetrics', () => {
         expect(formatMetrics({}, 'FII')).toContain('Indicadores de FII');
         const cripto = formatMetrics({ avgLiquidity: 2e6 }, 'CRYPTO');
         expect(cripto).toContain('Liquidez Média:    $ 2.00 mi/dia');
-        expect(cripto).toContain('Liquidez:          R$ 2.00 mi/dia');
+        expect(cripto).toContain('Liquidez:          $ 2.00 mi/dia');
         expect(cripto).not.toContain('Múltiplos Fundamentais');
+    });
+
+    it('bloco Indicadores Cripto sai em $ (Market Cap e Liquidez saíam em R$)', () => {
+        const cripto = formatMetrics({ marketCap: 3.3e9, avgLiquidity: 2e6 }, 'CRYPTO');
+        const bloco = cripto.slice(cripto.indexOf('Indicadores Cripto'));
+        expect(bloco).toContain('Market Cap:        $ 3.30 bi\n');
+        expect(bloco).toContain('Liquidez:          $ 2.00 mi/dia\n');
+        expect(bloco).not.toContain('R$');
     });
 
     it('defasagem 0 aparece; campo marcado false não entra em ausentes', () => {
