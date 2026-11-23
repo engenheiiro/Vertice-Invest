@@ -358,6 +358,14 @@ describe('memória ao longo do tempo — platô ou vazamento', () => {
         expect(screen.getByText(/entre 388 e 402 MB na janela/)).toBeInTheDocument();
     });
 
+    it('janela sem mín./máx. de RSS não mostra "null" no card (mostrava)', async () => {
+        getSnapshot.mockResolvedValue(comJanela({ rssMinMb: null, rssMaxMb: null }));
+        const { container } = render(<PerformanceOverview />);
+
+        expect(await screen.findByText('Memória estável há 24h — 396 MB agora')).toBeInTheDocument();
+        expect(container.innerHTML).not.toMatch(/null/);
+    });
+
     /**
      * O vão que só o nível deixava sem alarme: 300 MB de 512 é folgado, e o card
      * pintava "normal" enquanto o processo caminhava para o SIGKILL em 6h.

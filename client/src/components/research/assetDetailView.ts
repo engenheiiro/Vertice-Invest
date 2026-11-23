@@ -134,9 +134,9 @@ const usRows = (m: Metrics): DetailRowData[] => [
 const cryptoRows = (asset: RankingItem): DetailRowData[] => {
     const m = asset.metrics;
     return [
-        row('Market Cap', formatMoneyShort(m.marketCap || m.mktCap), 'info'),
+        row('Market Cap', formatMoneyShort(m.marketCap || m.mktCap, 'USD'), 'info'),
         row('Preço Atual', formatCurrency(asset.currentPrice, 'USD'), 'neutral'),
-        row('Liquidez Est.', formatMoneyShort(m.avgLiquidity), 'neutral'),
+        row('Liquidez Est.', formatMoneyShort(m.avgLiquidity, 'USD'), 'neutral'),
         row('SMA 200', naOr(m.sma200, (v) => formatCurrency(v, 'USD')), m.sma200 && asset.currentPrice > m.sma200 ? 'good' : 'bad'),
         row('Volatilidade (a.a.)', naOr(m.volatility, formatPercent), isAbove(m.volatility, 100) ? 'bad' : 'neutral'),
         row('Score Estrutural', asset.score.toString(), asset.score >= BUY_THRESHOLD ? 'good' : 'warning'),

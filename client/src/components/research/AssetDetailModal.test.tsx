@@ -61,6 +61,13 @@ describe('AssetDetailModal', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('fundo do modal é bg-black/95 do design system (era bg-black/90)', () => {
+    render(<AssetDetailModal isOpen onClose={vi.fn()} asset={mk({})} />);
+    const backdrop = screen.getByRole('dialog').querySelector('[role="presentation"]');
+    expect(backdrop).toHaveClass('bg-black/95');
+    expect(backdrop).not.toHaveClass('bg-black/90');
+  });
+
   it('STOCK defensivo com score 70 (corte) é COMPRAR, nota B, em R$ e acessível', async () => {
     render(<AssetDetailModal isOpen onClose={vi.fn()} asset={mk({ usSubType: 'REIT' })} />);
     const dialog = screen.getByRole('dialog', { name: 'WEGE3' });
@@ -162,7 +169,7 @@ describe('AssetDetailModal', () => {
       metrics: { dy: 0, mktCap: 1.8e12, sma200: 80_000, volatility: 120, avgLiquidity: 3e10 } as RankingItem['metrics'],
     });
     render(<AssetDetailModal isOpen onClose={vi.fn()} asset={asset} />);
-    expect(norm(rowValue('Market Cap').textContent)).toBe('R$ 1800.0B');
+    expect(norm(rowValue('Market Cap').textContent)).toBe('$ 1800.0B');
     expect(norm(screen.getAllByText('Preço Atual')[0].parentElement?.lastElementChild?.textContent)).toMatch(/^US\$ 90 mil$/);
     expect(norm(screen.getByText('Preço Teto').nextElementSibling?.textContent)).toMatch(/^US\$ 81 mil$/);
     expect(rowValue('SMA 200')).toHaveClass('text-emerald-400');

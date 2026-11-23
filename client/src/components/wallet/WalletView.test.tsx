@@ -360,11 +360,13 @@ describe('WalletView — ações', () => {
 });
 
 describe('WalletView — tutorial (demo)', () => {
-    it('sobe as áreas do tour e força a aba do passo', async () => {
+    it('sobe as áreas do tour e força a aba do passo; fora do demo, sem a classe "false" (era emitida)', async () => {
         const { container, rerender } = setup({ demo: { isDemoMode: false, currentStep: 0 } });
         fireEvent.click(tab(/Rentabilidade/));
         await screen.findByTestId('PerformanceChart');
-        expect(container.querySelector('#tour-wallet-kpis')?.className).toContain('false');
+        for (const id of ['tour-wallet-actions', 'tour-wallet-kpis', 'tour-wallet-tabs', 'tour-wallet-content']) {
+            expect(container.querySelector(`#${id}`)?.classList).not.toContain('false');
+        }
 
         (useDemo as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ isDemoMode: true, currentStep: 99 });
         rerender(<WalletView />);

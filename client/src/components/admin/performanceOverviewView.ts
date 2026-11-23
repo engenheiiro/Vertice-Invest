@@ -147,10 +147,19 @@ const buildMemoryDetail = (memory: Memory | null) => {
         + ` · Buffers ${memory.external.toFixed(0)} MB`;
 };
 
-const trendWindowLine = (trend: Trend | null) => (trend?.direction
-    ? `Janela medida: ${trend.points} amostras em ${trend.spanHours.toFixed(1)}h`
-        + ` (mín. ${trend.rssMinMb} / máx. ${trend.rssMaxMb} MB)`
-    : 'Janela medida: ainda acumulando amostras');
+/** Mín./máx. de RSS da janela só com o que veio (antes faltava e saía "null"). */
+const rssRange = (trend: Trend, both: (min: number, max: number) => string) => {
+    const { rssMinMb: min, rssMaxMb: max } = trend;
+    if (min !== null && max !== null) return both(min, max);
+    if (min !== null) return `mín. ${min} MB`;
+    return max === null ? null : `máx. ${max} MB`;
+};
+
+const trendWindowLine = (trend: Trend | null) => {
+    if (!trend?.direction) return 'Janela medida: ainda acumulando amostras';
+    const range = rssRange(trend, (min, max) => `mín. ${min} / máx. ${max} MB`);
+    return range === null ? null : `Janela medida: ${trend.points} amostras em ${trend.spanHours.toFixed(1)}h (${range})`;
+};
 
 interface MemoryInputs {
     memory: Memory | null;
@@ -189,8 +198,9 @@ const noteTitle = (memory: Memory, trend: Trend, memoryLimitMb: number, subindo:
     if (trend.decelerating) {
         return `Memória estabilizada — plana nas últimas ${trend.recentSpanHours}h, em ${memory.rss.toFixed(0)} MB`;
     }
+    const range = rssRange(trend, (min, max) => `entre ${min} e ${max} MB`);
     return `Memória ${trend.direction === 'FALLING' ? 'em queda' : 'estável'} há ${trend.spanHours.toFixed(0)}h`
-        + ` — ${memory.rss.toFixed(0)} MB agora, entre ${trend.rssMinMb} e ${trend.rssMaxMb} MB na janela`;
+        + ` — ${memory.rss.toFixed(0)} MB agora` + (range === null ? '' : `, ${range} na janela`);
 };
 
 /**

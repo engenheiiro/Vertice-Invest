@@ -26,7 +26,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ isOpen, onCl
 
     return createPortal(
         <div className="relative z-[100]" role="dialog" aria-modal="true" aria-labelledby="asset-detail-title">
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md animate-fade-in" role="presentation" onClick={onClose}></div>
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md animate-fade-in" role="presentation" onClick={onClose}></div>
 
             <div className="fixed inset-0 z-10 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-2 sm:p-4">

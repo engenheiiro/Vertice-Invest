@@ -26,14 +26,14 @@ interface CourseSetters {
     setLastAttempt: Setter<QuizAttempt | null>;
 }
 
-/** Curso e aulas; falha do servidor vira exceção (a tela mostra acesso restrito). */
+/** Recusa do servidor ao curso (plano/acesso): a tela mostra acesso restrito. */
+class CourseRefusedError extends Error {}
+
+/** Curso e aulas; recusa do servidor vira `CourseRefusedError`, falha de rede propaga como está. */
 async function loadCourse(courseId: string | undefined, lessonId: string | null, s: CourseSetters) {
     // authService.api renova o token num 401 (o fetch cru de antes virava "Erro ao carregar curso").
     const courseRes = await authService.api(`/api/academy/courses/${courseId}`);
-    if (!courseRes.ok) {
-        const errData = await courseRes.json();
-        throw new Error(errData.message || 'Erro ao carregar curso');
-    }
+    if (!courseRes.ok) throw new CourseRefusedError('Erro ao carregar curso');
     const data = await courseRes.json();
     s.setCourse(data.course);
     s.setLessons(data.lessons);
@@ -57,26 +57,33 @@ function useCourseData(courseId: string | undefined, searchParams: URLSearchPara
     const [error, setError] = useState('');
     const [completedLessons, setCompletedLessons] = useState<string[]>([]);
     const [lastAttempt, setLastAttempt] = useState<QuizAttempt | null>(null);
+    // Falha de rede (não recusa): a tela oferece "Tentar de novo", que refaz a busca.
+    const [loadFailed, setLoadFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
         const setters = { setCourse, setLessons, setCurrentLesson, setCompletedLessons, setLastAttempt };
         const fetchCourseData = async () => {
             try {
                 setLoading(true);
+                setLoadFailed(false);
+                setError('');
                 await loadCourse(courseId, searchParams.get('lesson'), setters);
                 if (courseId) await loadProgress(courseId, setters);
             } catch (error) {
                 console.error('Error fetching course data:', error);
-                setError('Erro ao carregar curso. Tente recarregar a página.');
+                if (error instanceof CourseRefusedError) setError('Erro ao carregar curso. Tente recarregar a página.');
+                else setLoadFailed(true);
             } finally {
                 setLoading(false);
             }
         };
         fetchCourseData();
-    }, [courseId, searchParams]);
+    }, [courseId, searchParams, attempt]);
 
     return {
-        course, lessons, currentLesson, setCurrentLesson, loading, error,
+        course, lessons, currentLesson, setCurrentLesson, loading, error, loadFailed,
+        retryLoad: () => setAttempt((n) => n + 1),
         completedLessons, setCompletedLessons, lastAttempt, setLastAttempt,
     };
 }

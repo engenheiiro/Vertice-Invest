@@ -90,6 +90,21 @@ describe('buildPerformanceSummary', () => {
         expect(parou.memoryNote?.tone).toBe('NEUTRAL');
     });
 
+    it('janela sem mín./máx. de RSS não imprime "null" (imprimia)', () => {
+        const sem = buildPerformanceSummary(snap({ memoryTrend: trend({ rssMinMb: null, rssMaxMb: null }) }));
+        expect(sem.memoryDetailTitle).not.toMatch(/null|Janela medida/);
+        expect(sem.memoryNote?.title).toBe('Memória estável há 24h — 300 MB agora');
+        const soMin = buildPerformanceSummary(snap({ memoryTrend: trend({ rssMaxMb: null }) }));
+        expect(soMin.memoryDetailTitle).toMatch(/Janela medida: 288 amostras em 24\.0h \(mín\. 300 MB\)$/);
+        expect(soMin.memoryNote?.title).toBe('Memória estável há 24h — 300 MB agora, mín. 300 MB na janela');
+        const soMax = buildPerformanceSummary(snap({ memoryTrend: trend({ rssMinMb: null }) }));
+        expect(soMax.memoryDetailTitle).toMatch(/\(máx\. 320 MB\)$/);
+        expect(soMax.memoryNote?.title).toBe('Memória estável há 24h — 300 MB agora, máx. 320 MB na janela');
+        const ambos = buildPerformanceSummary(snap({ memoryTrend: trend() }));
+        expect(ambos.memoryDetailTitle).toMatch(/\(mín\. 300 \/ máx\. 320 MB\)$/);
+        expect(ambos.memoryNote?.title).toBe('Memória estável há 24h — 300 MB agora, entre 300 e 320 MB na janela');
+    });
+
     it('excedente fora do heap na fronteira de 150 MB acusa o allocator', () => {
         const s = buildPerformanceSummary(snap({
             memoryMb: { rss: 300, heapUsed: 100, heapTotal: 120, external: 30, offHeap: 180 }, memoryTrend: trend(), mallocArenaMax: null,

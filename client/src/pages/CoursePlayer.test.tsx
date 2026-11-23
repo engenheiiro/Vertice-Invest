@@ -121,6 +121,31 @@ describe('CoursePlayer — carregamento', () => {
     expect(screen.getByText('Catálogo')).toBeInTheDocument();
   });
 
+  it('falha de rede no progresso mostra erro com "Tentar de novo", não "Acesso Restrito" (derrubava a tela)', async () => {
+    let falhas = 1;
+    mocks.api.mockImplementation((url: string) => {
+      if (url === '/api/academy/progress/c1' && falhas > 0) {
+        falhas -= 1;
+        return Promise.reject(new Error('Erro de conexão. Verifique se o servidor está rodando.'));
+      }
+      return rotear(url);
+    });
+    const { container } = renderAt();
+    expect(await screen.findByRole('heading', { name: 'Não foi possível carregar o curso' })).toBeInTheDocument();
+    expect(screen.queryByText('Acesso Restrito')).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Aula Um' })).toBeInTheDocument();
+  });
+
+  it('aula sem duração não mostra "NaN min" (mostrava)', async () => {
+    state.course = ok({ course: { title: 'Curso Base' }, lessons: [{ _id: 'l1', title: 'Aula Um', youtubeId: 'yt1' }, LESSONS[1]] });
+    renderAt();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Aula Um' })).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(screen.getByText('5 min')).toBeInTheDocument();
+  });
+
   it('abre a aula pedida na query e trava a seguinte enquanto ela não for concluída', async () => {
     renderAt('/courses/c1?lesson=l2');
     expect(await screen.findByRole('heading', { level: 2, name: 'Aula Dois' })).toBeInTheDocument();

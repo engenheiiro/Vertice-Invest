@@ -122,9 +122,15 @@ describe('quadro de indicadores', () => {
 
     it('cripto: market cap cai no mktCap; preço abaixo da SMA 200 é ruim', () => {
         const rows = byLabel(buildMetricRows(asset({ type: 'CRYPTO', currentPrice: 10, score: BUY_THRESHOLD }, { mktCap: 2e9, sma200: 12 })));
-        expect(rows['Market Cap']).toEqual(['R$ 2.0B', 'info']);
+        expect(rows['Market Cap']).toEqual(['$ 2.0B', 'info']);
         expect(rows['SMA 200'][1]).toBe('bad');
         expect(rows['Score Estrutural']).toEqual(['70', 'good']);
+    });
+
+    it('cripto: Market Cap e Liquidez Est. saem em $ (saíam em R$)', () => {
+        const rows = byLabel(buildMetricRows(asset({ type: 'CRYPTO', currentPrice: 10 }, { marketCap: 5e9, avgLiquidity: 3e6 })));
+        expect(rows['Market Cap'][0]).toBe('$ 5.0B');
+        expect(rows['Liquidez Est.'][0]).toBe('$ 3.0M');
     });
 
     it('cor do valor: traço apagado independe do status', () => {

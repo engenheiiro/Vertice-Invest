@@ -41,9 +41,12 @@ const LessonItem = ({ lesson, idx, isActive, isCompleted, isLocked, onSelect }: 
             <p className={`font-medium ${isActive ? 'text-blue-400' : 'text-slate-300 group-hover:text-white'}`}>
                 {idx + 1}. {lesson.title}
             </p>
-            <p className="text-xs text-slate-500 mt-1">
-                {Math.floor((lesson.duration as number) / 60)} min
-            </p>
+            {/* Sem duração, o tempo não aparece (antes saía "NaN min"). */}
+            {Number.isFinite(lesson.duration) && (
+                <p className="text-xs text-slate-500 mt-1">
+                    {Math.floor((lesson.duration as number) / 60)} min
+                </p>
+            )}
         </div>
     </button>
 );

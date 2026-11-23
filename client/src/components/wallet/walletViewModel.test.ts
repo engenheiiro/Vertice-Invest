@@ -58,10 +58,8 @@ describe('usdBadgeText', () => {
 });
 
 describe('tourLayerClass', () => {
-    it('sobe a camada no tutorial e mantém o literal "false" fora dele', () => {
-        expect(tourLayerClass(true)).toBe('relative z-[100]');
-        expect(tourLayerClass(false)).toBe('false');
-    });
+    it('sobe a camada no tutorial', () => expect(tourLayerClass(true)).toBe('relative z-[100]'));
+    it('fora do tutorial não emite a classe literal "false" (emitia)', () => expect(tourLayerClass(false)).toBe(''));
 });
 
 describe('tutorialTab', () => {

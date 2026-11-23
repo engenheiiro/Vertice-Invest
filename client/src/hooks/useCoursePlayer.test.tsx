@@ -41,6 +41,26 @@ describe('useCoursePlayer', () => {
         expect(result.current.allCompleted).toBe(true);
     });
 
+    it('falha de rede no progresso vira loadFailed com retryLoad, não erro de acesso (virava "Acesso Restrito")', async () => {
+        const base = mocks.api.getMockImplementation() as (url: string) => Promise<unknown>;
+        mocks.api.mockImplementationOnce(base).mockImplementationOnce(() => Promise.reject(new Error('Erro de conexão.')));
+        const { result } = renderHook(() => useCoursePlayer(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.loadFailed).toBe(true);
+        expect(result.current.error).toBe('');
+        act(() => result.current.retryLoad());
+        await waitFor(() => expect(result.current.allCompleted).toBe(true));
+        expect(result.current.loadFailed).toBe(false);
+    });
+
+    it('curso recusado pelo servidor segue como erro de acesso, sem loadFailed', async () => {
+        mocks.api.mockImplementationOnce(() => Promise.resolve({ ok: false, json: async () => ({ message: 'Plano' }) }));
+        const { result } = renderHook(() => useCoursePlayer(), { wrapper });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current.error).toBe('Erro ao carregar curso. Tente recarregar a página.');
+        expect(result.current.loadFailed).toBe(false);
+    });
+
     it('quem já passou abre o resultado aprovado sem buscar o quiz', async () => {
         progress.quizAttempts = [{ passed: true, score: 95 }];
         const { result } = renderHook(() => useCoursePlayer(), { wrapper });

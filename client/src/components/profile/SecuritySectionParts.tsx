@@ -15,21 +15,14 @@ const toneClass = (type: 'success' | 'error') => (type === 'success'
     ? 'text-emerald-400 bg-emerald-900/20'
     : 'text-red-400 bg-red-900/20');
 
-// `disabled` só vai ao Button quando informado: o Button espalha as props DEPOIS
-// do próprio `disabled` de carregamento, então até `disabled={undefined}` o anularia
-// (o "Ativar 2FA" fica travado enquanto carrega; "Continuar"/"Desativar" seguem a
-// regra do próprio campo — comportamento de hoje, mantido).
 const MfaActions = ({ mfa, label, onConfirm, disabled }: {
     mfa: MfaFlow; label: string; onConfirm: () => void; disabled?: boolean;
-}) => {
-    const confirmProps = disabled === undefined ? {} : { disabled };
-    return (
-        <div className="mt-4 flex justify-end gap-3">
-            <Button type="button" variant="ghost" onClick={mfa.resetMfaFlow} className="w-auto px-4 py-2 text-xs">Cancelar</Button>
-            <Button type="button" status={mfa.mfaBusy ? 'loading' : 'idle'} onClick={onConfirm} {...confirmProps} className="w-auto px-6 py-2 text-xs">{label}</Button>
-        </div>
-    );
-};
+}) => (
+    <div className="mt-4 flex justify-end gap-3">
+        <Button type="button" variant="ghost" onClick={mfa.resetMfaFlow} className="w-auto px-4 py-2 text-xs">Cancelar</Button>
+        <Button type="button" status={mfa.mfaBusy ? 'loading' : 'idle'} onClick={onConfirm} disabled={disabled} className="w-auto px-6 py-2 text-xs">{label}</Button>
+    </div>
+);
 
 const MfaToggle = ({ mfa }: { mfa: MfaFlow }) => {
     const { mfaEnabled } = mfa;

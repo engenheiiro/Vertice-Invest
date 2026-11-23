@@ -104,6 +104,17 @@ describe('MFA — ativação', () => {
     expect(screen.getByAltText('QR Code do MFA')).toBeInTheDocument();
   });
 
+  it('Continuar fica desabilitado enquanto a senha é conferida (era clicável durante a requisição)', async () => {
+    auth.setupMfa.mockReturnValue(new Promise<Resolved<'setupMfa'>>(() => {}));
+    render(<SecuritySection />);
+    const btn = await toggle('Ativar 2FA');
+    await waitFor(() => expect(btn).toBeEnabled());
+    fireEvent.click(btn);
+    fireEvent.change(screen.getByLabelText('Senha atual'), { target: { value: 'minhaSenha' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(await screen.findByRole('button', { name: 'Processando...' })).toBeDisabled();
+  });
+
   it('status que falha mantém o MFA como desativado', async () => {
     auth.getMfaStatus.mockRejectedValue(new Error('offline'));
     render(<SecuritySection />);
@@ -129,6 +140,15 @@ describe('MFA — desativação', () => {
 
     expect(await screen.findByRole('button', { name: 'Ativar 2FA' })).toBeInTheDocument();
     expect(auth.disableMfa).toHaveBeenCalledWith({ token: '654321' });
+  });
+
+  it('Desativar fica desabilitado durante a requisição (era clicável)', async () => {
+    auth.disableMfa.mockReturnValue(new Promise<Resolved<'disableMfa'>>(() => {}));
+    render(<SecuritySection />);
+    fireEvent.click(await toggle('Desativar 2FA'));
+    fireEvent.change(screen.getByLabelText('Código do app ou de recuperação'), { target: { value: '654321' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Desativar' }));
+    expect(await screen.findByRole('button', { name: 'Processando...' })).toBeDisabled();
   });
 
   it('recusa do servidor aparece como erro', async () => {

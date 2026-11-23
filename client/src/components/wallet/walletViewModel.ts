@@ -52,8 +52,8 @@ export const walletSubtitle = (isReadOnly: boolean, ownerFirstName?: string | nu
 export const usdBadgeText = (usdRate: number | null | undefined): string | null =>
     usdRate != null && usdRate > 0 ? `USD/BRL R$${usdRate.toFixed(2)}` : null;
 
-/** Classe que sobe a área acima do overlay do tutorial (mantém o "false" literal de antes). */
-export const tourLayerClass = (isDemoMode: boolean): string => String(isDemoMode && 'relative z-[100]');
+/** Classe que sobe a área acima do overlay do tutorial; fora dele, nada (antes saía a classe literal "false"). */
+export const tourLayerClass = (isDemoMode: boolean): string => (isDemoMode ? 'relative z-[100]' : '');
 
 /** Aba do passo atual do tutorial, pelo metadado `tab` (sem número mágico). */
 export const tutorialTab = (currentStep: number): WalletViewTab => {

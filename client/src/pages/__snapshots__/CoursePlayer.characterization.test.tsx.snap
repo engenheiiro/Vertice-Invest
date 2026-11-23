@@ -991,7 +991,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
     ],
   },
   {
-    "final": "7bd45ec34d2e4fda",
+    "final": "20547cd724714081",
     "steps": [
       {
         "action": "init",
@@ -999,7 +999,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
         "calls": [
           "/api/academy/courses/c1",
         ],
-        "html": "7bd45ec34d2e4fda",
+        "html": "20547cd724714081",
         "loc": "/courses/c1",
         "result": "",
         "toasts": [],
@@ -1007,7 +1007,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
     ],
   },
   {
-    "final": "7bd45ec34d2e4fda",
+    "final": "20547cd724714081",
     "steps": [
       {
         "action": "init",
@@ -1016,7 +1016,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
           "/api/academy/courses/c1",
           "/api/academy/progress/c1",
         ],
-        "html": "7bd45ec34d2e4fda",
+        "html": "20547cd724714081",
         "loc": "/courses/c1",
         "result": "",
         "toasts": [],
@@ -1033,7 +1033,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
           "/api/academy/courses/c1",
           "/api/academy/progress/c1",
         ],
-        "html": "6ce5aeee4ea36328",
+        "html": "39529aed17036e3b",
         "loc": "/courses/c1?lesson=m3",
         "result": "",
         "toasts": [],
@@ -1045,7 +1045,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
           "/api/academy/courses/c1",
           "/api/academy/progress/c1",
         ],
-        "html": "4de61d07c4973508",
+        "html": "b2da3232b45153b6",
         "loc": "/courses/c1?lesson=m1",
         "result": "lesson0",
         "toasts": [],
@@ -1054,7 +1054,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
         "action": "lesson:3",
         "anchors": 0,
         "calls": [],
-        "html": "4de61d07c4973508",
+        "html": "b2da3232b45153b6",
         "loc": "/courses/c1?lesson=m1",
         "result": "lesson3",
         "toasts": [],
@@ -1071,7 +1071,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
     ],
   },
   {
-    "final": "cb7f74ecdefb83fe",
+    "final": "c85d9550c3c20178",
     "steps": [
       {
         "action": "init",
@@ -1080,7 +1080,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
           "/api/academy/courses/c1",
           "/api/academy/progress/c1",
         ],
-        "html": "85fd4d601919a2a4",
+        "html": "0c621f80ebedd125",
         "loc": "/courses/c1?lesson=m1",
         "result": "",
         "toasts": [],
@@ -1092,7 +1092,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
           "/api/academy/courses/c1",
           "/api/academy/progress/c1",
         ],
-        "html": "70873a00b26c9525",
+        "html": "15bc2165153f537b",
         "loc": "/courses/c1?lesson=m2",
         "result": "lesson1",
         "toasts": [],
@@ -1101,7 +1101,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
         "action": "lesson:2",
         "anchors": 0,
         "calls": [],
-        "html": "70873a00b26c9525",
+        "html": "15bc2165153f537b",
         "loc": "/courses/c1?lesson=m2",
         "result": "lesson2",
         "toasts": [],
@@ -1113,7 +1113,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
           "/api/academy/courses/c1",
           "/api/academy/progress/c1",
         ],
-        "html": "cb7f74ecdefb83fe",
+        "html": "c85d9550c3c20178",
         "loc": "/courses/c1?lesson=m4",
         "result": "lesson3",
         "toasts": [],
@@ -1122,7 +1122,7 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
         "action": "test:0",
         "anchors": 0,
         "calls": [],
-        "html": "cb7f74ecdefb83fe",
+        "html": "c85d9550c3c20178",
         "loc": "/courses/c1?lesson=m4",
         "result": "ok",
         "toasts": [],
@@ -1134,16 +1134,16 @@ exports[`caracterização do CoursePlayer > cenários dirigidos: passos completo
 
 exports[`caracterização do CoursePlayer > cenários semeados com tudo concluído (foco no teste final) 1`] = `
 [
-  "101: 48f0278d4bc0ea96 init=-,test=ok,cert=ok,cert=ok,test=ok,lesson=lesson2,test=ok,test=ok,lesson=lesson1",
+  "101: e86a00858d35425d init=-,test=ok,cert=ok,cert=ok,test=ok,lesson=lesson2,test=ok,test=ok,lesson=lesson1",
   "102: 6f3d3b4e9ffb1f87 init=-,test=ok,lesson=lesson0,toggle=ok,toggle=ok,test=ok,answerAll=all,answer=a0,submit=ok,lesson=lesson0,test=ok,answerAll=all,answerAll=all",
   "103: c02e941254fa99c0 init=-,test=ok,answerAll=all,test=ok,lesson=lesson1,toggle=ok,progress=p0.5",
-  "104: c69f23169d64ef46 init=-,test=ok,start=ok,lesson=lesson3,lesson=lesson2,lesson=lesson2,test=ok",
+  "104: 67c2d66cbaa66b3e init=-,test=ok,start=ok,lesson=lesson3,lesson=lesson2,lesson=lesson2,test=ok",
   "105: 5716838efbaa88e6 init=-,test=ok,lesson=lesson0,toggle=ok,perror=ok,test=ok,start=ok,test=ok",
   "106: b42741fe1ca3ee77 init=-,test=ok,answer=a1,lesson=lesson0,lesson=lesson2,test=ok,answerAll=all",
-  "107: e76731bed2b0bdab init=-,test=ok,test=ok,cert=ok,lesson=lesson0,lesson=lesson1,test=ok,cert=ok,lesson=lesson0,lesson=lesson3,test=ok,lesson=lesson2,toggle=ok",
+  "107: 42505615228f0643 init=-,test=ok,test=ok,cert=ok,lesson=lesson0,lesson=lesson1,test=ok,cert=ok,lesson=lesson0,lesson=lesson3,test=ok,lesson=lesson2,toggle=ok",
   "108: 0a691420c252551e init=-,test=ok,test=ok,cert=ok,test=ok,cert=ok,cert=ok,lesson=lesson0,lesson=lesson0,lesson=lesson0",
   "109: 3fbc4c9c195fe9d9 init=-,test=ok,cert=ok,test=ok,cert=ok,test=ok,lesson=lesson0,lesson=lesson1",
-  "110: 1889d2e56b4f80f5 init=-,test=ok,start=ok,start=ok,start=ok,start=ok,test=ok",
+  "110: a8f4bc98b5c5b7e1 init=-,test=ok,start=ok,start=ok,start=ok,start=ok,test=ok",
 ]
 `;
 
@@ -1152,9 +1152,9 @@ exports[`caracterização do CoursePlayer > cenários semeados: resumo por cená
   "1: 40bdf4c2de1f9d72 init=-,mark=ok,lesson=lesson1,lesson=lesson0,lesson=lesson1,mark=ok,lesson=lesson2,lesson=lesson2,lesson=lesson2,lesson=lesson2,lesson=lesson1,toggle=ok",
   "2: 648f326ebbbe24ce init=-,mark=ok,lesson=lesson0,lesson=lesson1,lesson=lesson1,mark=ok,lesson=lesson0,toggle=ok,lesson=lesson2,progress=p0.5",
   "3: 55cfb087d8d22a97 init=-,toggle=ok,progress=p1,perror=ok,toggle=ok,perror=ok,toggle=ok,ended=ok,toggle=ok,lesson=lesson2,lesson=lesson0",
-  "4: 80816a54d88d28eb init=-,back=ok",
+  "4: d0a1b59f4d8944f6 init=-,back=ok",
   "5: 5d53ef3922883d7d init=-,lesson=lesson1,lesson=lesson0,lesson=lesson1,lesson=lesson0",
-  "6: ae4aac94da4f4622 init=-,back=ok",
+  "6: 2498460269a53a1b init=-,back=ok",
   "7: 93605309ec4ad1f1 init=-,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok",
   "8: 89ec5491677db894 init=-,back=ok",
   "9: b4c2c6cb71dc818e init=-,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok,mark=ok",

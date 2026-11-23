@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Lock } from 'lucide-react';
+import { ArrowLeft, Lock, WifiOff } from 'lucide-react';
 import { useCoursePlayer } from '../hooks/useCoursePlayer';
 import { CourseLessonView } from '../components/Academy/CourseLessonView';
 import { CourseQuizPanel } from '../components/Academy/CourseQuizPanel';
@@ -27,10 +27,30 @@ const CourseError = ({ error, onBack }: { error: string; onBack: () => void }) =
     </div>
 );
 
+const CourseLoadFailed = ({ onRetry, onBack }: { onRetry: () => void; onBack: () => void }) => (
+    <div className="min-h-screen bg-deep flex flex-col items-center justify-center text-white p-6">
+        <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 max-w-md text-center">
+            <WifiOff className="w-16 h-16 text-slate-500 mx-auto mb-4" aria-hidden="true" />
+            <h2 className="text-2xl font-bold mb-2">Não foi possível carregar o curso</h2>
+            <p className="text-slate-400 mb-6">Verifique sua conexão e tente de novo.</p>
+            <button
+                onClick={onRetry}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors w-full"
+            >
+                Tentar de novo
+            </button>
+            <button onClick={onBack} className="mt-3 px-6 py-3 text-slate-400 hover:text-white rounded-xl font-medium transition-colors w-full">
+                Voltar para a Academia
+            </button>
+        </div>
+    </div>
+);
+
 export const CoursePlayer = () => {
     const p = useCoursePlayer();
 
     if (p.loading) return <CourseLoading />;
+    if (p.loadFailed) return <CourseLoadFailed onRetry={p.retryLoad} onBack={p.goToCourses} />;
     if (p.error) return <CourseError error={p.error} onBack={p.goToCourses} />;
 
     return (

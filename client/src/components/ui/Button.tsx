@@ -16,6 +16,7 @@ export const Button: React.FC<ButtonProps> = ({
   status = 'idle',
   isLoading = false,
   children,
+  disabled,
   ...props 
 }) => {
   const currentStatus = isLoading && status === 'idle' ? 'loading' : status;
@@ -69,7 +70,8 @@ export const Button: React.FC<ButtonProps> = ({
   return (
     <button 
       className={`${baseStyle} ${activeClass} ${className}`} 
-      disabled={currentStatus === 'loading' || currentStatus === 'success' || props.disabled}
+      // `disabled` sai do spread: carregando/concluído sempre desabilita, mesmo com `disabled={false}`.
+      disabled={currentStatus === 'loading' || currentStatus === 'success' || disabled}
       {...props} 
     >
       {renderContent()}
