@@ -24,11 +24,10 @@ import { loadClosesForDay } from '../utils/dayCloses.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
-import { calculateDailyDietz, safeAdd, safeCurrency, safeMult, safeValue, addQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { calculateDailyDietz, addQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { toDateKey } from '../utils/dateUtils.js';
-import { valueFixedIncomeAsset } from '../utils/fixedIncome.js';
 import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
-import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
+import { loadTreasuryPricing } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
 import { runAnchorPublication } from './anchorPublicationService.js';
 import {
@@ -37,8 +36,8 @@ import {
 } from './researchPublicationService.js';
 
 import { isDollarized } from '../utils/assetCurrency.js';
-import { positionCostBRL } from '../utils/fxRate.js';
-import { historyStorageKey } from '../utils/assetHistory.js';
+import { missingMacroRates } from '../utils/rebuildHistoryRules.js';
+import { computeEquityAt } from '../utils/snapshotEquity.js';
 import {
     brazilDayKey,
     businessDaysBetween,
@@ -171,7 +170,7 @@ const brDayBounds = (dayStr) => ({
 // preços) e não deve pagar dezenas de buscas externas a cada reinício.
 export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensureDayCandles = false } = {}) => {
     const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-    const usdRate = sysConfig?.dollar || 5.75;
+    const macroUsdRate = sysConfig?.dollar > 0 ? sysConfig.dollar : null;
     const currentCdi = (sysConfig?.cdi > 0 ? sysConfig.cdi : null) || (sysConfig?.selic > 0 ? sysConfig.selic : null) || DEFAULT_SELIC_FALLBACK;
     // A curva viaja DENTRO de macroRates porque `computeEquityAt` já repassa o
     // objeto inteiro a `valueFixedIncomeAsset` — assim snapshot, KPI ao vivo e
@@ -191,7 +190,11 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensur
         const resolved = await ensureWalletDayCandles(liveAssets, dayStr, closeMap);
         for (const [key, close] of resolved) closeMap.set(key, close);
     }
-    const getUsdRateForDate = await financialService._loadUsdRateResolver(usdRate);
+    const getUsdRateForDate = await financialService._loadUsdRateResolver(macroUsdRate);
+    // Regra 13: sem cotação na macro, o câmbio do dia vem da série USD/BRL real;
+    // sem série, fica AUSENTE (antes era 5,75 fixo, gravado no snapshot) e a
+    // carteira com dólar não é fotografada (ver persistUserSnapshotForDay).
+    const usdRate = macroUsdRate ?? (getUsdRateForDate.hasSeries === true ? getUsdRateForDate(dayStr) : null);
     // Séries de PU do Tesouro, uma vez por run: o snapshot precisa marcar a renda
     // fixa pela MESMA régua do KPI ao vivo, senão o histórico e o card divergem.
     const treasuryAssets = await UserAsset.find({ type: 'FIXED_INCOME' })
@@ -201,48 +204,8 @@ export const loadSnapshotContext = async (dayStr = brDayStr(new Date()), { ensur
     return { usdRate, macroRates, priceMap, closeMap, getUsdRateForDate, treasuryPricing };
 };
 
-// Patrimônio (equity/invested) de um conjunto de ativos numa data de cálculo.
-// Renda fixa/caixa: accrual exato via fonte única (utils/fixedIncome). Renda
-// variável: FECHAMENTO do dia (mesma marcação do rebuild), caindo na cotação
-// corrente só quando o candle ainda não chegou. Esse fallback é o último recurso:
-// `ensureWalletDayCandles` busca o candle do dia dos ativos em carteira antes do
-// snapshot, então ele só entra quando a fonte externa falhou ou o ativo não
-// negociou no dia.
-export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing = EMPTY_TREASURY_PRICING }) => {
-    let totalEquity = 0;
-    let totalInvested = 0;
-    for (const asset of assets) {
-        const multiplier = isDollarized(asset) ? usdRate : 1;
-        if (asset.type === 'CASH' || asset.type === 'FIXED_INCOME') {
-            // O accrual mantém precisão integral até a persistência do snapshot;
-            // arredondar aqui antecipa centavos em títulos com PU fracionário.
-            totalEquity += valueFixedIncomeAsset(asset, {
-                ...macroRates, calcDate, history: treasuryPricing.historyFor(asset),
-            }).value;
-            totalInvested += asset.totalCost;
-        } else {
-            const close = closeMap?.get(historyStorageKey(asset.ticker, asset.type)) || 0;
-            const price = close > 0 ? close : (priceMap.get(asset.ticker)?.price || 0);
-            if (price > 0) {
-                const nativeValue = safeValue(asset.quantity, price);
-                totalEquity = safeAdd(totalEquity, safeCurrency(safeMult(nativeValue, multiplier)));
-            } else if (asset.quantity > 0) {
-                // Sem fechamento e sem cotação: marca no CUSTO, como o rebuild faz
-                // (último preço conhecido → custo médio). Antes a posição sumia do
-                // patrimônio E do custo, enquanto o card seguia contando o custo —
-                // o snapshot gravava uma carteira menor que a da tela e o rebuild
-                // seguinte reescrevia o dia com a posição de volta.
-                totalEquity = safeAdd(totalEquity, safeCurrency(safeMult(Number(asset.totalCost) || 0, multiplier)));
-            }
-            // Custo SEMPRE conta (posição existe com ou sem cotação), com o câmbio
-            // das compras (mesma base do fluxo de aportes em sumTransactionFlowBRL).
-            if (asset.quantity > 0) {
-                totalInvested = safeAdd(totalInvested, positionCostBRL(asset, usdRate));
-            }
-        }
-    }
-    return { totalEquity, totalInvested };
-};
+// computeEquityAt mora em utils/snapshotEquity.js; re-exportada para scripts e testes.
+export { computeEquityAt };
 
 // Persiste UM snapshot de UMA CARTEIRA para um dia BR específico (Fase 2: o
 // snapshot diário/TWRR passou a ser por carteira, não mais por usuário — cada
@@ -251,7 +214,9 @@ export const computeEquityAt = (assets, { priceMap, closeMap, macroRates, usdRat
 //   'exists' (a menos de force, que substitui). Evita duplicata entre catch-up,
 //   cron in-app e Render Cron Job.
 // - Mantém a cadeia de cotas (TWRR) buscando o snapshot imediatamente ANTERIOR ao dia.
-// Retorna: 'created' | 'exists' | 'empty' | 'anomaly' | 'reset-guard'.
+// - 'missing-rate': a carteira precisa de câmbio ou IPCA que a macro não tem; o
+//   dia não é gravado com taxa inventada (regra 13) e fica para re-tentar.
+// Retorna: 'created' | 'exists' | 'empty' | 'anomaly' | 'reset-guard' | 'missing-rate'.
 export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = null, force = false } = {}) => {
     const { priceMap, closeMap, macroRates, usdRate, getUsdRateForDate } = ctx;
     const bounds = brDayBounds(dayStr);
@@ -261,6 +226,12 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
     const calculatedAt = new Date();
 
     const positions = assets || await UserAsset.find({ user: userId, wallet: walletId });
+    const ipcaRate = macroRates?.ipca > 0 ? macroRates.ipca : null;
+    const missing = missingMacroRates({ currentIpcaRate: ipcaRate, currentUsdRate: usdRate }, { userAssets: positions });
+    if (missing.length > 0) {
+        logger.warn(`⚠️ Snapshot ${dayStr} da carteira ${walletId} não gravado: macro sem ${missing.join(' e ')}.`);
+        return 'missing-rate';
+    }
     const { totalEquity, totalInvested } = computeEquityAt(positions, { priceMap, closeMap, macroRates, usdRate, calcDate, treasuryPricing: ctx.treasuryPricing });
     if (!(totalEquity > 0)) return 'empty';
 
@@ -477,7 +448,7 @@ export const runDailySnapshotCore = async (force = false) => {
 
                 // 2) Snapshot de HOJE (idempotente; respeita force).
                 const r = await persistUserSnapshotForDay(wallet, todayStr, ctx, { assets, force });
-                const retryable = r === 'anomaly' || r === 'reset-guard';
+                const retryable = r === 'anomaly' || r === 'reset-guard' || r === 'missing-rate';
                 await saveCheckpoint(SNAPSHOT_JOB_ID, todayStr, wallet._id, {
                     status: retryable ? 'FAILED' : 'SUCCESS',
                     result: r,

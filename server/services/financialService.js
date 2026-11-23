@@ -28,7 +28,7 @@ import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixe
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
 import {
-    buildRebuildSnapshot, cdiFactorForDay, dayDividendCash, describeCoverageGaps, missingRebuildRates, nextQuota,
+    buildRebuildSnapshot, cdiFactorForDay, dayDividendCash, describeCoverageGaps, missingMacroRates, nextQuota,
     rebuildWindow, requiredFromByTicker, resolveRebuildRates,
 } from '../utils/rebuildHistoryRules.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
@@ -748,7 +748,7 @@ export const financialService = {
         const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
         const getUsdRateForDate = await this._loadUsdRateResolver(rates.currentUsdRate);
         // Regra 13: sem a taxa de que a carteira precisa, aborta (o histórico atual fica preservado).
-        const missing = missingRebuildRates(rates, { txs, userAssets, usdSeries: getUsdRateForDate.hasSeries === true });
+        const missing = missingMacroRates(rates, { txs, userAssets, usdSeries: getUsdRateForDate.hasSeries === true });
         if (missing.length > 0) throw new Error(`Macro sem ${missing.join(' e ')}: o rebuild não grava taxa inventada no histórico.`);
         const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFrom);
         const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);

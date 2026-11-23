@@ -22,7 +22,7 @@ const CALCULATION_VERSION = 5;
  * IPCA e câmbio ausentes ficam NULOS (regra 13). Até 22/11/2026 viravam 4,5 e
  * 5,75 fixos, e esses números iam parar nos snapshots gravados como se fossem
  * medição — uma carteira com Tesouro IPCA+ rendia por um IPCA inventado. Quem
- * precisa da taxa e não a tem aborta o rebuild (ver `missingRebuildRates`).
+ * precisa da taxa e não a tem aborta o rebuild (ver `missingMacroRates`).
  */
 export const resolveRebuildRates = (sysConfig) => ({
     currentCdiRate: resolveCurrentCdiRate(sysConfig, DEFAULT_SELIC_FALLBACK),
@@ -40,7 +40,7 @@ export const resolveRebuildRates = (sysConfig) => ({
  *    inclusive de ativo já vendido) o usa, e só falta de verdade quando também
  *    não há série USD/BRL — com série, o resolvedor usa candle real.
  */
-export const missingRebuildRates = (rates, { txs = [], userAssets = [], usdSeries = false }) => {
+export const missingMacroRates = (rates, { txs = [], userAssets = [], usdSeries = false }) => {
     const missing = [];
     const needsIpca = userAssets.some((a) => String(a?.fixedIncomeIndex || '').toUpperCase() === 'IPCA');
     if (needsIpca && rates.currentIpcaRate == null) missing.push('IPCA');

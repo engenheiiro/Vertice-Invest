@@ -3,7 +3,7 @@ import {
     cdiFactorForDay,
     dayDividendCash,
     describeCoverageGaps,
-    missingRebuildRates,
+    missingMacroRates,
     nextQuota,
     rebuildWindow,
     requiredFromByTicker,
@@ -26,15 +26,15 @@ describe('rebuildHistoryRules — regras puras do rebuild', () => {
         const ipcaAsset = { ticker: 'NTNB', type: 'FIXED_INCOME', fixedIncomeIndex: 'ipca' };
         const usdAsset = { ticker: 'AAPL', type: 'STOCK_US', currency: 'USD' };
         const semTaxa = { currentIpcaRate: null, currentUsdRate: null };
-        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [{ ticker: 'PETR4', type: 'STOCK' }], usdSeries: false })).toEqual([]);
-        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [ipcaAsset], usdSeries: true })).toEqual(['IPCA']);
-        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [usdAsset], usdSeries: false })).toEqual(['câmbio USD/BRL']);
+        expect(missingMacroRates(semTaxa, { txs: [], userAssets: [{ ticker: 'PETR4', type: 'STOCK' }], usdSeries: false })).toEqual([]);
+        expect(missingMacroRates(semTaxa, { txs: [], userAssets: [ipcaAsset], usdSeries: true })).toEqual(['IPCA']);
+        expect(missingMacroRates(semTaxa, { txs: [], userAssets: [usdAsset], usdSeries: false })).toEqual(['câmbio USD/BRL']);
         // Com série de câmbio, o resolvedor usa candle real: a falta do spot não barra.
-        expect(missingRebuildRates(semTaxa, { txs: [], userAssets: [usdAsset], usdSeries: true })).toEqual([]);
+        expect(missingMacroRates(semTaxa, { txs: [], userAssets: [usdAsset], usdSeries: true })).toEqual([]);
         // Ativo já vendido em dólar só aparece nas transações.
-        expect(missingRebuildRates(semTaxa, { txs: [{ ticker: 'X', currency: 'USD' }], userAssets: [], usdSeries: false })).toEqual(['câmbio USD/BRL']);
+        expect(missingMacroRates(semTaxa, { txs: [{ ticker: 'X', currency: 'USD' }], userAssets: [], usdSeries: false })).toEqual(['câmbio USD/BRL']);
         const comTaxa = { currentIpcaRate: 4.4, currentUsdRate: 5.1 };
-        expect(missingRebuildRates(comTaxa, { txs: [], userAssets: [ipcaAsset, usdAsset], usdSeries: false })).toEqual([]);
+        expect(missingMacroRates(comTaxa, { txs: [], userAssets: [ipcaAsset, usdAsset], usdSeries: false })).toEqual([]);
     });
 
     it('profundidade exigida: primeira compra por ticker, sem renda fixa, caixa nem RESERVA', () => {

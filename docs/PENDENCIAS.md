@@ -13,15 +13,13 @@ mesmo commit que o resolve.
   `rebuildUserHistory` (46). O teto passa a ser `WalletSummary.tsx` (45),
   seguido de `TopPicksCard.tsx` e `Research.tsx` (44) e de `ProfileIdentity.tsx`
   e `_applyDayTransactions` do `financialService.js` (43).
-- **(dono, 2026-11-22) Snapshot diário grava câmbio inventado sem macro.** O
-  rebuild já não grava (aborta quando a carteira precisa de IPCA ou câmbio que
-  a macro não tem — `missingRebuildRates`). Mas o `runDailySnapshot`
-  (`schedulerService.js:174`) ainda passa `sysConfig?.dollar || 5.75` ao
-  resolvedor de câmbio, e o dia de HOJE (depois do último candle) sai a 5,75
-  para posições em dólar; IPCA ausente vira 0 no acúmulo da renda fixa IPCA.
-  Mesma regra 13, outro caminho de gravação. Telas e KPIs ao vivo
+- **(dono, 2026-11-23) Telas ainda exibem câmbio 5,75 quando a macro não
+  tem cotação.** Os dois caminhos que GRAVAM já seguem a regra 13: rebuild e
+  snapshot diário não persistem IPCA nem câmbio inventados (`missingMacroRates`;
+  sem cotação, o snapshot usa a série USD/BRL real). Mas KPIs e telas ao vivo
   (`walletKpis`, `walletPayload`, `rebalanceService`, `goalsController`,
-  `walletPerformanceController`) usam o mesmo `|| 5.75` para exibir.
+  `walletPerformanceController`) seguem com `config?.dollar || 5.75` para
+  exibir — não grava, mas mostra número inventado como cotação.
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):
