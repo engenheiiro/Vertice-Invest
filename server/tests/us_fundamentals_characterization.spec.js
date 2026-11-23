@@ -379,21 +379,21 @@ describe('caracterização: syncBrEtfFundamentals', () => {
         expect(out).toMatchSnapshot();
     });
 
-    it('histórico de proventos undefined (não null) derruba o sync (congelado)', async () => {
+    it('histórico de proventos undefined (não null): ETF pulado e contado como falha', async () => {
         h.etfList = [{ ticker: 'UNH11', name: 'U', sector: 'Ações' }];
         h.find = () => ({ select: () => ({ lean: async () => [] }) });
         h.quoteSummary = async () => ({ summaryDetail: {} });
         h.bulkWrite = async () => ({});
         h.fetchFromBrapi = async () => ({ price: 10, volume: 1 });
         h.getDividendsHistory = async () => undefined;
-        await expect(usStocksFundamentalsService.syncBrEtfFundamentals()).rejects.toThrow(TypeError);
+        await expect(usStocksFundamentalsService.syncBrEtfFundamentals()).resolves.toEqual({ processed: 0, failed: 1, total: 1 });
     });
 
-    it('quoteSummary devolvendo undefined derruba o sync (congelado)', async () => {
+    it('quoteSummary devolvendo undefined: ETF pulado e contado como falha', async () => {
         h.etfList = [{ ticker: 'UND11', name: 'U', sector: 'Ações' }];
         h.find = () => ({ select: () => ({ lean: async () => [] }) });
         h.quoteSummary = async () => undefined;
         h.bulkWrite = async () => ({});
-        await expect(usStocksFundamentalsService.syncBrEtfFundamentals()).rejects.toThrow();
+        await expect(usStocksFundamentalsService.syncBrEtfFundamentals()).resolves.toEqual({ processed: 0, failed: 1, total: 1 });
     });
 });

@@ -4,19 +4,34 @@ import { safeFloat } from '../../utils/mathUtils.js';
 // Regra de ouro (regra 13): campo que a fonte não trouxe sai `null`, nunca 0 nem
 // número de outro campo. Cada leitura abaixo explica o atalho que já foi defeito.
 
-// Primeiro valor truthy, ou null — equivale a `a || b || null`.
+// Primeiro valor truthy, ou null — equivale a `a || b || null`. Só para texto.
 const firstTruthy = (...values) => values.find(Boolean) ?? null;
 
-// Fração → percentual; 0/ausente/NaN → null. safeFloat corta o ruído binário do
-// *100 (0.0845*100 = 8.450000000000001), que vazava até o ranking salvo.
-const pctOrNull = (value) => (value ? safeFloat(value * 100) : null);
+// Leitor ÚNICO de número do Yahoo: número finito ou `{ raw: finito }`; texto,
+// objeto sem raw, NaN e ±Infinity → null. Antes cada campo lia do seu jeito, e
+// o teste truthy gravava `'47.49'`, `{ raw }` cru e Infinity como dado.
+function num(value) {
+    const n = value !== null && typeof value === 'object' ? value.raw : value;
+    return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+// Primeiro número lido diferente de 0 — para campos em que o 0 do Yahoo é
+// marcador de ausência (beta/P/VP/VPA/volume/preço), com fallback de módulo.
+const firstNonZero = (...values) => values.map(num).find(v => v !== null && v !== 0) ?? null;
+
+// Fração → percentual; ausente → null, mas 0 é dado (ROE real de 0 é 0).
+// safeFloat corta o ruído binário do *100 (0.0845*100 = 8.450000000000001).
+function pctOrNull(value) {
+    const n = num(value);
+    return n === null ? null : safeFloat(n * 100);
+}
 
 // P/L é o TRAILING, e só ele. O fallback para `forwardPE` misturava estimativa
 // de analista com lucro realizado na mesma coluna: empresa com prejuízo nos
 // últimos 12 meses (sem trailingPE) aparecia com o P/L projetado como se fosse
 // o histórico, e o Graham/PEG a tratavam como lucrativa. Sem trailing → null.
 function trailingPe(sd) {
-    return Number.isFinite(sd.trailingPE) && sd.trailingPE !== 0 ? sd.trailingPE : null;
+    return firstNonZero(sd.trailingPE);
 }
 
 // DY ciente de fundo: ETFs/REITs frequentemente NÃO expõem `summaryDetail.dividendYield`
@@ -28,30 +43,36 @@ function trailingPe(sd) {
 // `summaryDetail` ausente) não é "não paga dividendo". O `0` antigo gravava
 // dy=0 por cima de um yield real toda vez que o módulo faltava. Não-pagador de
 // verdade vem com `trailingAnnualDividendYield: 0`, que é finito e passa.
+// DY negativo não existe: é resposta corrompida, e sai null em vez de dado.
 function dividendYield(sd) {
-    const dyRaw = [sd.dividendYield, sd.yield, sd.trailingAnnualDividendYield].find(Number.isFinite);
-    return Number.isFinite(dyRaw) ? safeFloat(dyRaw * 100) : null;
+    const dyRaw = [sd.dividendYield, sd.yield, sd.trailingAnnualDividendYield].map(num).find(v => v !== null);
+    return dyRaw != null && dyRaw >= 0 ? safeFloat(dyRaw * 100) : null;
 }
 
 // Valor de mercado é o do equity. `enterpriseValue` (equity + dívida − caixa)
 // NÃO é substituto: em empresa alavancada a diferença é de vezes, e o número
 // caía no gate de porte e no ranking como se fosse market cap. Sem dado → null.
 function equityMarketCap(sd) {
-    return Number.isFinite(sd.marketCap) && sd.marketCap > 0 ? sd.marketCap : null;
+    const marketCap = num(sd.marketCap);
+    return marketCap > 0 ? marketCap : null;
 }
 
 // Liquidez em VALOR financeiro (US$/dia), não em nº de ações — alinha com a
 // liquidez dos ativos BR (Liq.2meses, em R$) que o scoringEngine compara contra
 // o piso de 1M. Sem isso, ações caras de baixo giro de papéis (AZO ~$3000,
 // <1M ações/dia mas >$2bi/dia em valor) levavam -30 de confiança indevidamente.
+// Volume ou preço negativo não existe; liquidez só sai positiva e finita.
 function tradedValue(sd, ks, lastPrice) {
-    const avgVolumeShares = firstTruthy(sd.averageVolume, ks.averageDailyVolume10Day);
-    return (avgVolumeShares && lastPrice) ? avgVolumeShares * lastPrice : null;
+    const avgVolumeShares = firstNonZero(sd.averageVolume, ks.averageDailyVolume10Day);
+    if (!(avgVolumeShares > 0 && lastPrice > 0)) return null;
+    const value = avgVolumeShares * lastPrice;
+    return Number.isFinite(value) ? value : null;
 }
 
 // Yahoo Finance retorna debtToEquity em formato percentual (ex: 47.49 = 47.49% = ratio 0.4749)
 function debtToEquityRatio(fd) {
-    return fd.debtToEquity != null ? fd.debtToEquity / 100 : null;
+    const percent = num(fd.debtToEquity);
+    return percent !== null ? percent / 100 : null;
 }
 
 // PEG ratio: P/E ÷ earnings growth (só com crescimento positivo).
@@ -68,13 +89,13 @@ export function extractFundamentals(ticker, data) {
 
     const pl = trailingPe(sd);
     const earningsGrowth = pctOrNull(fd.earningsGrowth);
-    const lastPrice = firstTruthy(fd.currentPrice, sd.regularMarketPrice);
+    const lastPrice = firstNonZero(fd.currentPrice, sd.regularMarketPrice);
 
     return {
         pl,
-        pvp: firstTruthy(ks.priceToBook),
+        pvp: firstNonZero(ks.priceToBook),
         dy: dividendYield(sd),
-        beta: firstTruthy(ks.beta, sd.beta),
+        beta: firstNonZero(ks.beta, sd.beta),
         marketCap: equityMarketCap(sd),
         roe: pctOrNull(fd.returnOnEquity),
         netMargin: pctOrNull(fd.profitMargins),
@@ -84,10 +105,10 @@ export function extractFundamentals(ticker, data) {
         avgLiquidity: tradedValue(sd, ks, lastPrice),
         lastPrice,
         payoutRatio: pctOrNull(sd.payoutRatio),
-        vpa: firstTruthy(ks.bookValue),
+        vpa: firstNonZero(ks.bookValue),
         // Só o lucro REALIZADO (trailing). O forwardEps é projeção de analista: no
         // Graham (√22,5 × LPA × VPA) ele virava preço justo de um lucro que não houve.
-        lpa: Number.isFinite(ks.trailingEps) ? ks.trailingEps : null,
+        lpa: num(ks.trailingEps),
         sector: firstTruthy(ap.sector),
         industry: firstTruthy(ap.industry),
         // Nome da empresa vem do módulo `price` (longName/shortName). NUNCA usar

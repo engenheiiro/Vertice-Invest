@@ -216,14 +216,21 @@ async function buildBrEtfOp(etf, data) {
 
 // Processa os resultados de um lote: sucesso vira op em `bulkOps`, falha conta.
 // Sequencial de propósito — cada ETF pode chamar Brapi e proventos.
+// Resposta quebrada de UM ETF (quoteSummary sem corpo, histórico de proventos
+// `undefined`) é falha dele: antes o TypeError subia e o lote inteiro não era gravado.
 async function collectBrEtfBatch(results, bulkOps) {
     let processed = 0, failed = 0;
     for (const r of results) {
         if (r.status !== 'fulfilled') continue;
         const { etf, ok, data, error } = r.value;
         if (!ok) { failed++; logger.debug(`[BR ETF Fundamentals] Falhou ${etf.ticker}: ${error}`); continue; }
-        bulkOps.push(await buildBrEtfOp(etf, data));
-        processed++;
+        try {
+            bulkOps.push(await buildBrEtfOp(etf, data));
+            processed++;
+        } catch (err) {
+            failed++;
+            logger.warn(`[BR ETF Fundamentals] ${etf.ticker} pulado, resposta sem dado utilizável: ${err.message}`);
+        }
     }
     return { processed, failed };
 }
