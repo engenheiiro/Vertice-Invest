@@ -19,13 +19,10 @@ import Wallet from '../models/Wallet.js';
 import UserAsset from '../models/UserAsset.js';
 import WalletSnapshot from '../models/WalletSnapshot.js';
 import AssetTransaction from '../models/AssetTransaction.js';
-import DividendEvent from '../models/DividendEvent.js';
 import { loadClosesForDay } from '../utils/dayCloses.js';
 import SystemConfig from '../models/SystemConfig.js'; // IMPORTADO
 import RefreshToken from '../models/RefreshToken.js';
 import { createBroadcast } from './notificationService.js';
-import { calculateDailyDietz, addQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
-import { toDateKey } from '../utils/dateUtils.js';
 import { loadCdiCurveForAssets } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing } from './treasuryPriceService.js';
 import { validateFundamentalsPublicationHealth } from '../utils/ingestionHealth.js';
@@ -35,15 +32,15 @@ import {
     hasSectionContent,
 } from './researchPublicationService.js';
 
-import { isDollarized } from '../utils/assetCurrency.js';
 import { missingMacroRates } from '../utils/rebuildHistoryRules.js';
 import { computeEquityAt } from '../utils/snapshotEquity.js';
+import {
+    buildDailySnapshotPayload, dayDividendIncomeBRL, dietzQuotaForDay, isUndueQuotaReset, reportTwrrAnomaly,
+} from './snapshot/dailySnapshotSteps.js';
 import {
     brazilDayKey,
     businessDaysBetween,
     isBrBusinessDay,
-    isTwrrReturnAnomalous,
-    snapshotInstantForDay,
     sumTransactionFlowBRL,
     transactionsAfterSnapshotFilter,
     upsertWalletSnapshotForDay,
@@ -151,9 +148,6 @@ const brCalcDate = (dayStr) => new Date(`${dayStr}T00:00:00.000Z`);
 // sentinela de saúde também precisa dela e importá-la daqui criaria ciclo. Segue
 // re-exportada para preservar o ponto de importação histórico (testes inclusive).
 export { isBrBusinessDay };
-// Instante gravado no snapshot: 23:59 BRT do dia — garante que o gráfico (que
-// bucketiza por dia LOCAL no browser BRT) coloque o ponto no dia correto.
-const brSnapshotInstant = (dayStr) => snapshotInstantForDay(dayStr);
 // Limites do dia BR como instantes, para janelas de busca (snapshots/transações).
 const brDayBounds = (dayStr) => ({
     start: new Date(`${dayStr}T00:00:00.000-03:00`),
@@ -248,77 +242,15 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
     const assetsByTicker = new Map(positions.map((p) => [p.ticker, p]));
     const dayFlow = sumTransactionFlowBRL(transactions, assetsByTicker, getUsdRateForDate || usdRate);
 
-    // Proventos com EX-DATE neste dia BR (crédito de RENDA no TWRR). O preço cai
-    // no dia-ex; sem somar o provento recebido à cota, essa queda vira prejuízo-
-    // fantasma e a cota vaza ~1%/mês em FIIs distribuidores. DividendEvent.date é
-    // a ex-date normalizada à meia-noite UTC do dia-calendário — casa 1:1 com dayStr.
-    //
-    // Direito ao provento = posição de ANTES das movimentações do próprio dia-ex:
-    // quem compra no dia-ex não recebe, quem vende no dia-ex recebe. A posição
-    // gravada é a do FIM do dia, então os lançamentos do dia são desfeitos aqui —
-    // mesma regra do accrual (`accrueDividendsByTicker`) e do rebuild.
-    let dayDividendIncome = 0;
-    const qtyByTicker = new Map();
-    // Provento em dólar entra em reais pelo câmbio do dia-ex (o amount é da fonte).
-    const divFxByTicker = new Map();
-    const dayUsdRate = getUsdRateForDate ? getUsdRateForDate(dayStr) : usdRate;
-    positions.forEach(p => {
-        const t = String(p.ticker).toUpperCase();
-        qtyByTicker.set(t, Number(p.quantity) > 0 ? Number(p.quantity) : 0);
-        divFxByTicker.set(t, isDollarized(p) ? dayUsdRate : 1);
-    });
-    // Dia do lançamento pela chave UTC — a mesma do accrual e do rebuild.
-    for (const tx of transactions) {
-        if (toDateKey(tx.date) !== dayStr) continue;
-        const t = String(tx.ticker).toUpperCase();
-        const delta = tx.type === 'SELL' ? Number(tx.quantity) : -Number(tx.quantity);
-        qtyByTicker.set(t, addQty(qtyByTicker.get(t) || 0, delta));
-        if (!divFxByTicker.has(t)) divFxByTicker.set(t, tx.currency === 'USD' ? dayUsdRate : 1);
+    // Renda do dia-ex (provento) e cota: etapas em services/snapshot/dailySnapshotSteps.js.
+    const dayDividendIncome = await dayDividendIncomeBRL(positions, transactions, dayStr, { getUsdRateForDate, usdRate });
+    const quota = dietzQuotaForDay(lastSnapshot, totalEquity, dayFlow, dayDividendIncome);
+    if (quota.anomalous) {
+        reportTwrrAnomaly(walletId, dayStr, quota.dailyReturn);
+        return 'anomaly';
     }
-    for (const [t, qty] of qtyByTicker) {
-        if (!(qty > QUANTITY_EPSILON)) qtyByTicker.delete(t);
-    }
-    if (qtyByTicker.size > 0) {
-        const [dy, dm, dd] = dayStr.split('-').map(Number);
-        const exDateUtc = new Date(Date.UTC(dy, dm - 1, dd));
-        const divEvents = await DividendEvent.find({ ticker: { $in: [...qtyByTicker.keys()] }, date: exDateUtc }).lean();
-        const seenDiv = new Set();
-        for (const ev of divEvents) {
-            const t = String(ev.ticker).toUpperCase();
-            const key = `${t}|${ev.type || 'DIVIDEND'}`; // dedup multi-fonte (mesmo provento)
-            if (seenDiv.has(key)) continue;
-            seenDiv.add(key);
-            const qty = qtyByTicker.get(t);
-            if (qty > 0) dayDividendIncome += qty * ev.amount * (divFxByTicker.get(t) ?? 1);
-        }
-    }
-
-    let quotaPrice = 100;
-    const v0 = lastSnapshot ? lastSnapshot.totalEquity : 0;
-    if (v0 > 0 || dayFlow > 0 || dayDividendIncome > 0) {
-        const dailyReturn = calculateDailyDietz(v0, totalEquity, dayFlow, dayDividendIncome);
-        // Circuit breaker: rejeita variação diária absurda (dado corrompido).
-        if (isTwrrReturnAnomalous(dailyReturn)) {
-            logger.warn(`⚠️ Anomalia TWRR wallet ${walletId} @ ${dayStr}: ${(dailyReturn * 100).toFixed(2)}%. Snapshot ignorado.`);
-            if (process.env.SENTRY_DSN) {
-                Sentry.captureMessage(`TWRR Anomaly: Wallet ${walletId} @ ${dayStr} = ${dailyReturn.toFixed(2)}%. Skipped.`);
-            }
-            return 'anomaly';
-        }
-        const prevQuota = lastSnapshot ? (lastSnapshot.quotaPrice || 100) : 100;
-        quotaPrice = prevQuota * (1 + dailyReturn);
-    }
-
-    // Proteção contra Reset Indevido da cota (histórico existente + quota ~100).
-    if (Math.abs(quotaPrice - 100) < 0.1) {
-        const hasHistory = lastSnapshot
-            ? Math.abs(lastSnapshot.quotaPrice - 100) > 5
-            : await WalletSnapshot.exists({ wallet: walletId });
-        if (hasHistory) {
-            logger.error(`❌ Cota resetou p/ 100 indevidamente wallet ${walletId} @ ${dayStr}. Snapshot abortado.`);
-            return 'reset-guard';
-        }
-    }
+    const { quotaPrice } = quota;
+    if (await isUndueQuotaReset(lastSnapshot, quotaPrice, walletId, dayStr)) return 'reset-guard';
 
     // Mesma regra do rebuild: acumulado por EX-DATE com a quantidade da época.
     // `calculateUserDividends` (por data de PAGAMENTO, quantidade de HOJE) segue
@@ -326,22 +258,9 @@ export const persistUserSnapshotForDay = async (wallet, dayStr, ctx, { assets = 
     // definições no mesmo campo faziam `profit`/`profitPercent` pular sozinhos no
     // primeiro rebuild.
     const totalDividends = await financialService.accruedDividendsThroughDay(userId, walletId, dayStr);
-
-    const payload = {
-        user: userId,
-        wallet: walletId,
-        date: brSnapshotInstant(dayStr),
-        dayKey: dayStr,
-        source: force ? 'BACKFILL' : 'DAILY',
-        calculationVersion: 5,
-        calculatedAt,
-        totalEquity,
-        totalInvested,
-        totalDividends,
-        profit: totalEquity - totalInvested + totalDividends,
-        profitPercent: totalInvested > 0 ? ((totalEquity - totalInvested + totalDividends) / totalInvested) * 100 : 0,
-        quotaPrice,
-    };
+    const payload = buildDailySnapshotPayload({
+        userId, walletId, dayStr, force, calculatedAt, totalEquity, totalInvested, totalDividends, quotaPrice,
+    });
 
     // Upsert por dia civil: uma segunda execução recalcula o dia em vez de
     // aceitar silenciosamente um snapshot prematuro. Remove o documento legado

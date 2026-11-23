@@ -6,22 +6,21 @@ import WalletSnapshot from '../models/WalletSnapshot.js';
 import UserAsset from '../models/UserAsset.js';
 import DividendEvent from '../models/DividendEvent.js';
 import MarketAsset from '../models/MarketAsset.js';
-import AssetHistory from '../models/AssetHistory.js';
 import SystemConfig from '../models/SystemConfig.js';
 import EconomicIndex from '../models/EconomicIndex.js'; 
 import AuditLog from '../models/AuditLog.js'; // Novo
-import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { DERIVED_EXPIRY_MS, DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
-import { safeCurrency, safeAdd, safeMult, safeDiv, safeValue, addQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
+import { safeCurrency, safeAdd, safeMult, safeDiv, safeValue } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
 import { fillPaymentDatesForTicker } from './dividendPaymentDateService.js';
+import { hasNoPriceSeries, loadTickerHistory } from './priceCacheLoader.js';
+import { accrueDividendLedger, emptyDividendAccrual } from '../utils/dividendAccrual.js';
 import { isDollarized as isDollarizedAsset } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
-import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.js';
 import { brazilDayKey, isValidDayKey } from '../utils/walletSnapshot.js';
 import { loadUsdRateResolver, positionCostBRL } from '../utils/fxRate.js';
 import { markLotsToMarket, accrueLotsValue } from '../utils/fixedIncome.js';
@@ -156,65 +155,22 @@ export const financialService = {
 
     /**
      * Monta o cache de preços (Map ticker → Map data→{close,adjClose}) para os
-     * tickers de renda variável. Faz fallback para externalMarketService quando
-     * o histórico local é curto, persistindo o resultado em AssetHistory.
-     *
-     * `requiredFromByTicker` (Map ticker → dayKey do 1º dia em que a carteira
-     * segurou o papel) é o que torna a profundidade da série uma exigência, não
-     * um acaso: o timeSeriesWorker grava `history.slice(-ASSET_HISTORY_MAX_POINTS)`
-     * (~1,6 ano) para todo ticker fora de HISTORY_CAP_EXEMPT_TICKERS. Uma série
-     * truncada tem 400 candles — passa folgada no antigo teste `length < 5` — e
-     * fazia o rebuild marcar TODO o período anterior ao cap pelo preço de compra.
+     * tickers de renda variável. A série de cada ticker vem de
+     * services/priceCacheLoader.js: a local, aprofundada pela fonte externa quando
+     * não alcança `requiredFromByTicker` (Map ticker → dayKey do 1º dia em que a
+     * carteira segurou o papel).
      */
     async _loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFromByTicker = new Map()) {
         const priceCacheMap = new Map();
 
         await Promise.all(uniqueTickers.map(async (ticker) => {
             const assetMeta = assetMetadataMap.get(ticker);
-            if (assetMeta?.type === 'FIXED_INCOME' || assetMeta?.type === 'CASH' || ticker === 'RESERVA') return;
+            if (hasNoPriceSeries(ticker, assetMeta)) return;
 
             try {
                 const searchTicker = this.normalizeTickerForHistory(ticker);
-                let history = await marketDataService.getBenchmarkHistory(ticker, assetMeta?.type || 'INDEX');
-
                 const requiredFrom = requiredFromByTicker.get(ticker) || null;
-                const firstCandle = history?.length ? history[0]?.date : null;
-                // Rasa = sem série, ou série que não alcança o 1º dia da posição.
-                const isShallow = !history
-                    || history.length < 5
-                    || (requiredFrom && (!firstCandle || firstCandle > requiredFrom));
-
-                if (isShallow) {
-                    const info = await MarketAsset.findOne({ ticker });
-                    const type = assetMeta?.type || info?.type || 'STOCK';
-                    try {
-                        // Recusa candle em dia sem pregão antes de qualquer uso: este
-                        // caminho grava por SUBSTITUIÇÃO (não passa por mergeCandleSeries),
-                        // então é a única barreira aqui.
-                        const extHistory = dropUntradableCandles(
-                            await externalMarketService.getFullHistory(searchTicker, type), type);
-                        if (extHistory && extHistory.length > 0) {
-                            // Só persiste quando não havia série utilizável. Regravar a
-                            // série cheia num ticker que o worker capa todo dia às 18:30
-                            // seria escrever para ser truncado de novo — o rebuild usa a
-                            // série profunda em memória e deixa o cache como está.
-                            if (!history || history.length < 5) {
-                                await AssetHistory.updateOne(
-                                    { ticker: historyStorageKey(ticker, type) },
-                                    { history: extHistory, lastUpdated: new Date() },
-                                    { upsert: true }
-                                );
-                            }
-                            if (!history || extHistory.length > history.length) history = extHistory;
-                        }
-                    } catch (err) {
-                        // Fallback externo é best-effort: sem histórico, o ativo é
-                        // marcado pelo último preço conhecido/custo no loop. Logamos
-                        // em debug para a falha não ficar invisível.
-                        logger.debug(`[History] Fallback externo falhou para ${ticker}: ${err.message}`);
-                    }
-                }
-
+                const history = await loadTickerHistory(ticker, { assetMeta, requiredFrom, searchTicker });
                 if (history && history.length > 0) {
                     priceCacheMap.set(ticker, this.indexHistoryByDate(history));
                 }
@@ -307,9 +263,7 @@ export const financialService = {
         const sinceDayKey = options.sinceDayKey || null;
         const txs = options.transactions
             || await AssetTransaction.find({ user: userId, wallet: walletId }).sort({ date: 1 });
-        if (!txs || txs.length === 0) {
-            return { total: 0, paid: 0, pending: 0, byTicker: {}, sinceTotal: 0, sinceByTicker: {} };
-        }
+        if (!txs || txs.length === 0) return emptyDividendAccrual();
 
         const dividendDateMap = options.dividendDateMap
             || await this._loadDividendDateMap([...new Set(txs.map(t => t.ticker))]);
@@ -324,60 +278,9 @@ export const financialService = {
             ...positions,
         ], options.getUsdRateForDate || null);
 
-        const days = [...dividendDateMap.keys()].filter(d => d <= throughDayKey).sort();
-        const qty = {};
-        const byTicker = {};
-        const sinceByTicker = {};
-        let txIndex = 0;
-        let total = 0;
-        let paid = 0;
-        let sinceTotal = 0;
-
-        for (const day of days) {
-            // Direito ao provento do dia-ex D = posição ao FIM do pregão anterior:
-            // só entram as transações com data ESTRITAMENTE anterior a D. Quem
-            // compra NO dia-ex já compra "ex" (não recebe) e quem vende NO dia-ex
-            // vendeu "com" (recebe). Aplicar as transações do dia antes (`<=`) dava
-            // o provento a quem não tinha direito e o tirava de quem tinha. Mesma
-            // regra do rebuild, do snapshot diário e de `calculateUserDividends`
-            // — divergir aqui reabre o vão KPI × snapshot.
-            while (txIndex < txs.length && this.toDateKey(txs[txIndex].date) < day) {
-                const tx = txs[txIndex];
-                const delta = tx.type === 'SELL' ? -tx.quantity : tx.quantity;
-                qty[tx.ticker] = addQty(qty[tx.ticker] || 0, delta);
-                if (qty[tx.ticker] < QUANTITY_EPSILON) qty[tx.ticker] = 0;
-                txIndex++;
-            }
-            for (const div of dividendDateMap.get(day)) {
-                if (qty[div.ticker] > 0) {
-                    const value = qty[div.ticker] * div.amount * dividendFx(div.ticker, day);
-                    total = safeAdd(total, value);
-                    byTicker[div.ticker] = safeAdd(byTicker[div.ticker] || 0, value);
-                    if (sinceDayKey && day > sinceDayKey) {
-                        sinceTotal = safeAdd(sinceTotal, value);
-                        sinceByTicker[div.ticker] = safeAdd(sinceByTicker[div.ticker] || 0, value);
-                    }
-                    // Oficial quando existe; senão a estimativa única do serviço.
-                    const payKey = this.toDateKey(this.resolvePaymentDate({ date: day, paymentDate: div.paymentDate }).date);
-                    if (payKey <= throughDayKey) paid = safeAdd(paid, value);
-                }
-            }
-        }
-
-        for (const ticker of Object.keys(byTicker)) byTicker[ticker] = safeCurrency(byTicker[ticker]);
-        for (const ticker of Object.keys(sinceByTicker)) sinceByTicker[ticker] = safeCurrency(sinceByTicker[ticker]);
-        const safeTotal = safeCurrency(total);
-        const safePaid = safeCurrency(paid);
-        // `pending` é derivado da subtração, nunca somado em paralelo: garante que as
-        // duas parcelas fechem o total exibido mesmo com arredondamento de centavo.
-        return {
-            total: safeTotal,
-            paid: safePaid,
-            pending: safeCurrency(safeTotal - safePaid),
-            byTicker,
-            sinceTotal: safeCurrency(sinceTotal),
-            sinceByTicker,
-        };
+        // Direito ao provento do dia-ex = posição de ANTES das movimentações do dia
+        // (regra e laço em utils/dividendAccrual.js).
+        return accrueDividendLedger(txs, dividendDateMap, dividendFx, { throughDayKey, sinceDayKey });
     },
 
     /** Indexa todos os proventos dos tickers por data (chave toDateKey). */
