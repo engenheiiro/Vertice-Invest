@@ -1,6 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sparkles, Wallet, TrendingUp, Link2, History } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -10,10 +9,14 @@ import { useWallet } from '../../contexts/WalletContext';
 import { useDemoGuard } from '../../hooks/useDemoGuard';
 import { goalsService, type Goal } from '../../services/goals';
 import { STALE_TIME } from '../../config/queryConfig';
-import { parseCurrencyToFloat } from '../../utils/assetTransaction';
-import { formatCurrency } from '../../utils/format';
-import { monthsRemaining, requiredMonthly, addMonths, calendarMonthsBetween } from '../../utils/goalMath';
-import { ICON_OPTIONS, COLOR_OPTIONS, getGoalIcon, getGoalTheme, formatMonths } from './goalTheme';
+import {
+  buildGoalPayload, computeGoalPreview, eligiblePreviousGoals, initialGoalForm, validateGoalForm,
+  type GoalFormPayload, type GoalFormState,
+} from './createGoalForm';
+import {
+  GoalAppearanceFields, GoalBaselineField, GoalDeadlineField, GoalMirrorToggle, GoalPreviousField, GoalRateField,
+} from './CreateGoalModalFields';
+import { CreateGoalPreview } from './CreateGoalPreview';
 
 interface CreateGoalModalProps {
   isOpen: boolean;
@@ -22,34 +25,33 @@ interface CreateGoalModalProps {
   goal?: Goal | null;
 }
 
-const num = (v: string): number => {
-  const n = parseCurrencyToFloat(v);
-  return Number.isFinite(n) ? n : 0;
+/** Grava a meta (cria ou atualiza), invalida o cache, avisa e fecha. */
+const useSaveGoal = (goal: Goal | null | undefined, activeWalletId: string | undefined, onClose: () => void) => {
+  const { addToast } = useToast();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: GoalFormPayload) => (goal
+      ? goalsService.updateGoal(goal._id, payload, activeWalletId)
+      : goalsService.createGoal(payload, activeWalletId)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      if (goal) queryClient.invalidateQueries({ queryKey: ['goal', goal._id] });
+      addToast(goal ? 'Meta atualizada.' : 'Meta criada com sucesso!', 'success');
+      onClose();
+    },
+    onError: (err: { message?: string } | null | undefined) => addToast(err?.message || 'Erro ao salvar meta.', 'error'),
+  });
 };
-
-const pct = (v: number): string => `${v.toFixed(1).replace('.', ',')}%`;
 
 export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClose, goal }) => {
   const isEdit = !!goal;
   const { addToast } = useToast();
   const { kpis, activeWalletId, isWalletScopeReady } = useWallet();
   const blockInDemo = useDemoGuard();
-  const queryClient = useQueryClient();
 
-  const [name, setName] = useState(goal?.name || '');
-  const [icon, setIcon] = useState(goal?.icon || 'target');
-  const [color, setColor] = useState(goal?.color || 'emerald');
-  const [targetAmount, setTargetAmount] = useState(goal ? String(goal.targetAmount.toFixed(2)).replace('.', ',') : '');
-  const [monthlyTarget, setMonthlyTarget] = useState(goal ? String(goal.monthlyTarget.toFixed(2)).replace('.', ',') : '');
-  const [rate, setRate] = useState(goal ? String(goal.expectedAnnualRate) : '10');
-  const [mirrorWallet, setMirrorWallet] = useState(goal ? goal.mirrorWallet : true);
-  const [targetDate, setTargetDate] = useState(goal?.targetDate ? new Date(goal.targetDate).toISOString().slice(0, 10) : '');
-  const [manualBalance, setManualBalance] = useState('');
-  const [previousGoalId, setPreviousGoalId] = useState<string>(goal?.previousGoalId || '');
+  const [form, setForm] = useState<GoalFormState>(() => initialGoalForm(goal));
+  const set = <K extends keyof GoalFormState>(key: K) => (value: GoalFormState[K]) => setForm((f) => ({ ...f, [key]: value }));
   const fieldId = useId();
-  // Baseline da curva "Plano" — só editável, nunca na criação (lá ele é
-  // capturado do patrimônio ao vivo).
-  const [startValue, setStartValue] = useState(goal ? String((goal.startValue || 0).toFixed(2)).replace('.', ',') : '');
 
   // Sugestões de taxa vindas do servidor (goalRate.js): a esperada, ponderada
   // pela composição REAL da carteira, o CDI e o histórico da carteira JÁ
@@ -72,9 +74,7 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
     staleTime: STALE_TIME.REALTIME,
     enabled: isOpen && isWalletScopeReady,
   });
-  const cdiRate = rateCtx?.cdi ?? null;
   const suggestedRate = rateCtx?.suggested ?? null;
-  const walletReturn = rateCtx?.walletReturn;
 
   // Meta NOVA começa na taxa da carteira, não num "10" redondo — mas só até o
   // usuário encostar no campo: sobrescrever o que ele digitou porque a sugestão
@@ -82,270 +82,51 @@ export const CreateGoalModal: React.FC<CreateGoalModalProps> = ({ isOpen, onClos
   const rateTouched = useRef(false);
   useEffect(() => {
     if (isEdit || rateTouched.current || suggestedRate === null) return;
-    setRate(String(suggestedRate));
+    setForm((f) => ({ ...f, rate: String(suggestedRate) }));
   }, [isEdit, suggestedRate]);
 
-  const pickRate = (value: number) => {
+  const typeRate = (value: string) => {
     rateTouched.current = true;
-    setRate(String(value));
+    setForm((f) => ({ ...f, rate: value }));
   };
 
-  // Metas que já têm outra meta apontando para elas (não podem ser "previous" de mais ninguém).
-  const allGoals = goalsData?.goals || [];
-  const alreadyFollowed = new Set(allGoals.filter((g) => g.previousGoalId).map((g) => g.previousGoalId!));
-  const eligiblePrevious = allGoals.filter(
-    (g) => g._id !== goal?._id && !alreadyFollowed.has(g._id),
+  const eligiblePrevious = eligiblePreviousGoals(goalsData?.goals || [], goal?._id);
+  const mutation = useSaveGoal(goal, activeWalletId, onClose);
+
+  const { targetAmount, monthlyTarget, rate, mirrorWallet, manualBalance, targetDate } = form;
+  const preview = useMemo(
+    () => computeGoalPreview({ targetAmount, monthlyTarget, rate, mirrorWallet, manualBalance, targetDate }, kpis.totalEquity),
+    [targetAmount, monthlyTarget, rate, mirrorWallet, manualBalance, targetDate, kpis.totalEquity],
   );
-
-  const mutation = useMutation({
-    mutationFn: (payload: any) => (isEdit ? goalsService.updateGoal(goal!._id, payload, activeWalletId) : goalsService.createGoal(payload, activeWalletId)),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goals'] });
-      if (isEdit) queryClient.invalidateQueries({ queryKey: ['goal', goal!._id] });
-      addToast(isEdit ? 'Meta atualizada.' : 'Meta criada com sucesso!', 'success');
-      onClose();
-    },
-    onError: (err: any) => addToast(err?.message || 'Erro ao salvar meta.', 'error'),
-  });
-
-  // Preview "what-if" ao vivo (espelho do goalMath do backend).
-  const preview = useMemo(() => {
-    const target = num(targetAmount);
-    if (target <= 0) return null;
-    const baseline = (mirrorWallet ? kpis.totalEquity : 0) + num(manualBalance);
-    const rateN = parseFloat(rate) || 0;
-    const now = new Date();
-    const n = monthsRemaining(baseline, num(monthlyTarget), rateN, target);
-    const projDate = Number.isFinite(n) ? addMonths(now, n) : null;
-    // Meses derivados da data (não de Math.ceil(n)): "tempo estimado" e "data
-    // prevista" ficam lado a lado no preview e não podem se contradizer.
-    const months = projDate ? calendarMonthsBetween(now, projDate) : null;
-    let required: number | null = null;
-    if (targetDate) {
-      const months = (new Date(targetDate).getTime() - Date.now()) / (30.4375 * 24 * 3600 * 1000);
-      const req = requiredMonthly(baseline, rateN, target, months);
-      required = Number.isFinite(req) ? req : null;
-    }
-    return { baseline, n, months, projDate, required };
-  }, [targetAmount, monthlyTarget, rate, mirrorWallet, manualBalance, targetDate, kpis.totalEquity]);
 
   const handleSubmit = () => {
     if (blockInDemo()) return;
-    const target = num(targetAmount);
-    if (!name.trim()) return addToast('Dê um nome para a meta.', 'error');
-    if (target <= 0) return addToast('Defina um valor-alvo maior que zero.', 'error');
-
-    const payload: any = {
-      name: name.trim(),
-      icon,
-      color,
-      targetAmount: target,
-      monthlyTarget: num(monthlyTarget),
-      expectedAnnualRate: parseFloat(rate) || 0,
-      mirrorWallet,
-      targetDate: targetDate || null,
-      previousGoalId: previousGoalId || null,
-    };
-    if (!isEdit && num(manualBalance) > 0) payload.manualBalance = num(manualBalance);
-    if (isEdit) payload.startValue = num(startValue);
-    mutation.mutate(payload);
+    const error = validateGoalForm(form);
+    if (error) return addToast(error, 'error');
+    mutation.mutate(buildGoalPayload(form, isEdit));
   };
-
-  const theme = getGoalTheme(color);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Editar meta' : 'Nova meta'} maxWidth="max-w-xl" accent="border-t-emerald-500">
       <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-        <Input label="Nome da meta" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: O Milhão" maxLength={60} />
-
-        {/* Ícone */}
-        <div>
-          <p id={`${fieldId}-icon`} className="block text-xs font-semibold text-slate-400 mb-2">Ícone</p>
-          <div className="flex flex-wrap gap-2" role="group" aria-labelledby={`${fieldId}-icon`}>
-            {ICON_OPTIONS.map((key) => {
-              const Ic = getGoalIcon(key);
-              const active = key === icon;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setIcon(key)}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-colors ${active ? `${theme.bgSoft} ${theme.border} ${theme.text}` : 'bg-base border-slate-800 text-slate-500 hover:text-slate-300'}`}
-                >
-                  <Ic size={18} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Cor */}
-        <div>
-          <p id={`${fieldId}-color`} className="block text-xs font-semibold text-slate-400 mb-2">Cor</p>
-          <div className="flex gap-2" role="group" aria-labelledby={`${fieldId}-color`}>
-            {COLOR_OPTIONS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setColor(c)}
-                aria-label={c}
-                className={`w-7 h-7 rounded-full border-2 transition-transform ${color === c ? 'scale-110 border-white' : 'border-transparent'}`}
-                style={{ backgroundColor: getGoalTheme(c).stroke }}
-              />
-            ))}
-          </div>
-        </div>
-
+        <Input label="Nome da meta" value={form.name} onChange={(e) => set('name')(e.target.value)} placeholder="Ex: O Milhão" maxLength={60} />
+        <GoalAppearanceFields fieldId={fieldId} icon={form.icon} color={form.color} onIcon={set('icon')} onColor={set('color')} />
         <div className="grid grid-cols-2 gap-3">
-          <CurrencyInput label="Valor-alvo (R$)" value={targetAmount} onChange={setTargetAmount} />
-          <CurrencyInput label="Aporte mensal (R$)" value={monthlyTarget} onChange={setMonthlyTarget} />
+          <CurrencyInput label="Valor-alvo (R$)" value={form.targetAmount} onChange={set('targetAmount')} />
+          <CurrencyInput label="Aporte mensal (R$)" value={form.monthlyTarget} onChange={set('monthlyTarget')} />
         </div>
-
-        {/* Taxa esperada + sugestões */}
-        <div>
-          <Input
-            label="Rentabilidade esperada (% ao ano)"
-            type="number"
-            step="0.1"
-            value={rate}
-            onChange={(e) => { rateTouched.current = true; setRate(e.target.value); }}
-          />
-          <div className="flex flex-wrap gap-2 mt-2">
-            {suggestedRate !== null && (
-              <button type="button" onClick={() => pickRate(suggestedRate)} className="text-[11px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors inline-flex items-center gap-1">
-                <Sparkles size={11} /> Minha carteira ({pct(suggestedRate)})
-              </button>
-            )}
-            {cdiRate !== null && (
-              <button type="button" onClick={() => pickRate(cdiRate)} className="text-[11px] px-2 py-1 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20 hover:bg-blue-500/20 transition-colors inline-flex items-center gap-1">
-                <TrendingUp size={11} /> CDI ({pct(cdiRate)})
-              </button>
-            )}
-            {walletReturn?.enough && walletReturn.value !== null && (
-              <button type="button" onClick={() => pickRate(walletReturn.value!)} className="text-[11px] px-2 py-1 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 hover:bg-purple-500/20 transition-colors inline-flex items-center gap-1">
-                <History size={11} /> Meu histórico ({pct(walletReturn.value)})
-              </button>
-            )}
-          </div>
-          {/* A taxa é METADE da projeção: com patrimônio grande e aporte pequeno,
-              a maior parte do avanço previsto vem daqui. Dizer de onde ela sai
-              evita que a data prevista pareça mágica. */}
-          <p className="text-[11px] text-slate-500 mt-2 leading-snug">
-            {suggestedRate !== null
-              ? <>"Minha carteira" é a média do que cada classe da sua carteira deve render (caixa e renda fixa no CDI, renda variável com prêmio de risco). É premissa, não promessa.</>
-              : <>Quanto você espera que o dinheiro renda por ano. É premissa, não promessa.</>}
-            {walletReturn && !walletReturn.enough && walletReturn.days > 0 && (
-              <> Seu histórico ainda tem {Math.round(walletReturn.days)} dias — curto demais para virar taxa anual.</>
-            )}
-          </p>
-        </div>
-
-        {/* Encadeamento sequencial */}
-        {eligiblePrevious.length > 0 && (
-          <div>
-            <label htmlFor={`${fieldId}-prev`} className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5">
-              <Link2 size={12} /> Continuação de (opcional)
-            </label>
-            <select
-              id={`${fieldId}-prev`}
-              value={previousGoalId}
-              onChange={(e) => setPreviousGoalId(e.target.value)}
-              className="w-full bg-base border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">Nenhuma — meta independente</option>
-              {eligiblePrevious.map((g) => (
-                <option key={g._id} value={g._id}>
-                  {g.name} — {formatCurrency(g.targetAmount)}
-                </option>
-              ))}
-            </select>
-            {previousGoalId && (
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                Esta meta será exibida como próximo passo da jornada selecionada.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Prazo opcional */}
-        <div>
-          <label htmlFor={`${fieldId}-date`} className="block text-xs font-semibold text-slate-400 mb-1.5">Prazo (opcional)</label>
-          <input
-            id={`${fieldId}-date`}
-            type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            className="w-full bg-base border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none [color-scheme:dark]"
-          />
-        </div>
-
-        {/* Espelho da carteira */}
-        <button
-          type="button"
-          onClick={() => setMirrorWallet((v) => !v)}
-          className="w-full flex items-center gap-3 bg-base border border-slate-800 rounded-xl p-3 text-left hover:border-slate-700 transition-colors"
-        >
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${mirrorWallet ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
-            <Wallet size={18} />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs font-bold text-slate-200">Espelhar minha carteira</p>
-            <p className="text-[11px] text-slate-500">O patrimônio real da carteira conta como progresso da meta.</p>
-          </div>
-          <div className={`w-10 h-6 rounded-full p-0.5 transition-colors ${mirrorWallet ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-            <div className={`w-5 h-5 rounded-full bg-white transition-transform ${mirrorWallet ? 'translate-x-4' : ''}`} />
-          </div>
-        </button>
-
-        {!isEdit ? (
-          <CurrencyInput
-            label="Já tenho guardado fora da carteira (opcional)"
-            value={manualBalance}
-            onChange={setManualBalance}
-          />
-        ) : (
-          <div>
-            <CurrencyInput
-              label="Patrimônio no início da meta"
-              value={startValue}
-              onChange={setStartValue}
-            />
-            <p className="text-[11px] text-slate-500 mt-1.5">
-              Ponto de partida da linha <span className="text-slate-400 font-semibold">Plano</span> no gráfico e base do
-              “adiantado/atrasado”. Foi capturado na criação da meta — corrija se a carteira ainda não estava lançada.
-            </p>
-          </div>
-        )}
-
-        {/* Preview ao vivo */}
-        {preview && (
-          <div className="bg-base border border-slate-800 rounded-xl p-4 space-y-2">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Projeção</p>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">Você já tem</span>
-              <span className="font-bold text-slate-100">{formatCurrency(preview.baseline)}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">Tempo estimado</span>
-              <span className={`font-bold ${Number.isFinite(preview.n) ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                {preview.months !== null ? `~${formatMonths(preview.months)}` : 'Sem caminho de chegada'}
-              </span>
-            </div>
-            {preview.projDate && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Data prevista</span>
-                <span className="font-bold text-slate-200">{preview.projDate.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>
-              </div>
-            )}
-            {preview.required !== null && (
-              <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-800">
-                <span className="text-slate-400">Aporte p/ bater o prazo</span>
-                <span className="font-bold text-blue-300">{formatCurrency(preview.required)}/mês</span>
-              </div>
-            )}
-          </div>
-        )}
-
+        <GoalRateField rate={form.rate} rateCtx={rateCtx} onType={typeRate} onPick={(v) => typeRate(String(v))} />
+        <GoalPreviousField fieldId={fieldId} options={eligiblePrevious} value={form.previousGoalId} onChange={set('previousGoalId')} />
+        <GoalDeadlineField fieldId={fieldId} value={form.targetDate} onChange={set('targetDate')} />
+        <GoalMirrorToggle on={form.mirrorWallet} onToggle={() => setForm((f) => ({ ...f, mirrorWallet: !f.mirrorWallet }))} />
+        <GoalBaselineField
+          isEdit={isEdit}
+          manualBalance={form.manualBalance}
+          startValue={form.startValue}
+          onManualBalance={set('manualBalance')}
+          onStartValue={set('startValue')}
+        />
+        <CreateGoalPreview preview={preview} />
         <Button onClick={handleSubmit} isLoading={mutation.isPending}>
           {isEdit ? 'Salvar alterações' : 'Criar meta'}
         </Button>
