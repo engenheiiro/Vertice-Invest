@@ -8,10 +8,9 @@ import {
     B3_TIP_OUTCOME,
     MAX_B3_FALLBACK_DAYS,
     collectB3CandlesDetailed,
-    isB3Coverable,
     missingBusinessDays,
 } from './b3HistoryFallback.js';
-import { recordEscalation } from '../utils/sourceHealth.js';
+import { logDayCandleOutcome, logGapHealOutcome, recordDayCandleChain } from './candles/walletCandleReport.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS } from '../config/financialConstants.js';
@@ -233,6 +232,87 @@ const recoverWithB3 = async (unresolved, storedByKey, dayStr, resolved) => {
 };
 
 /**
+ * Posição viva em carteira. Quantidade zerada não entra: não pesa no patrimônio
+ * e buscar histórico dela só encareceria o run. Sem `quantity` informada, entra.
+ */
+const isLivePosition = (asset) => Boolean(asset?.ticker)
+    && !(asset.quantity !== undefined && !(asset.quantity > 0));
+
+/** Universo do candle do dia: posições vivas cujo fechamento ainda não se conhece. */
+const collectPendingDayAssets = (assetRefs, closeMap) => {
+    const pending = new Map();
+    for (const asset of assetRefs) {
+        if (!isLivePosition(asset)) continue;
+        const storageKey = historyStorageKey(asset.ticker, asset.type);
+        if (!storageKey || closeMap.has(storageKey) || pending.has(storageKey)) continue;
+        pending.set(storageKey, { ticker: asset.ticker, type: asset.type });
+    }
+    return pending;
+};
+
+/** Séries guardadas por chave; leitura que falha devolve mapa vazio (fail-open). */
+const loadStoredSeries = async (keys) => {
+    try {
+        const docs = await AssetHistory.find({ ticker: { $in: keys } }).lean();
+        return new Map(docs.map((doc) => [doc.ticker, doc.history || []]));
+    } catch (e) {
+        // Sem a série armazenada seguimos assim mesmo: o pior caso é regravar a
+        // série vinda da fonte, nunca derrubar o snapshot.
+        logger.warn(`[DayCandle] Falha ao ler séries armazenadas: ${e.message}`);
+        return new Map();
+    }
+};
+
+/**
+ * Um ativo pelo Yahoo: grava a série mesclada quando o dia veio com preço, ou
+ * entra em `ctx.unresolved` com o motivo. Muta `ctx` (resolved, unresolved,
+ * fetched) — os ativos do lote correm em paralelo sobre o mesmo contexto.
+ */
+const fetchOneDayCandle = async (storageKey, { ticker, type }, ctx) => {
+    const { dayStr } = ctx;
+    try {
+        // A variante `Detailed` existe para este diagnóstico: ela conserva as
+        // datas que a fonte publicou VAZIAS, que `getFullHistory` descarta.
+        // `dayStr` é inclusivo; o serviço converte para o `period2`
+        // exclusivo do Yahoo. Passá-lo explicitamente evita depender do
+        // acaso do fuso UTC às 23:59 BRT.
+        const payload = await externalMarketService.getFullHistoryDetailed(ticker, type, dayStr);
+        const series = payload?.candles;
+        const dayCandle = Array.isArray(series)
+            ? series.find((c) => c?.date === dayStr && c.close > 0)
+            : undefined;
+        if (!dayCandle) { // sem série, sem negócio no dia ou fonte atrasada → fallback
+            ctx.unresolved.push({ ticker, storageKey, type, reason: describeMiss(dayStr, payload) });
+            return;
+        }
+
+        const merged = mergeDayCandles(ctx.storedByKey.get(storageKey) || [], series, type);
+        await AssetHistory.updateOne(
+            { ticker: storageKey },
+            // lastCheckedAt fica intocado: ele mede a VISITA do timeSeriesWorker,
+            // e renová-lo aqui mascararia a cobertura incompleta daquele run.
+            { $set: { history: merged, lastUpdated: new Date() } },
+            { upsert: true },
+        );
+        ctx.resolved.set(storageKey, dayCandle.close);
+        ctx.fetched += 1;
+    } catch (e) {
+        ctx.unresolved.push({ ticker, storageKey, type, reason: `erro na busca (${e.message})` });
+        logger.warn(`[DayCandle] Falha ao garantir candle de ${ticker} @ ${dayStr}: ${e.message}`);
+    }
+};
+
+/** Yahoo em lotes pequenos com pausa entre eles. */
+const fetchDayCandlesInBatches = async (pending, ctx) => {
+    const entries = [...pending.entries()];
+    for (let i = 0; i < entries.length; i += DAY_CANDLE_BATCH_SIZE) {
+        const batch = entries.slice(i, i + DAY_CANDLE_BATCH_SIZE);
+        await Promise.all(batch.map(([storageKey, ref]) => fetchOneDayCandle(storageKey, ref, ctx)));
+        if (i + DAY_CANDLE_BATCH_SIZE < entries.length) await sleep(DAY_CANDLE_BATCH_PAUSE_MS);
+    }
+};
+
+/**
  * Busca e persiste o candle de `dayStr` dos ativos de renda variável em carteira
  * que ainda não o têm.
  *
@@ -245,139 +325,109 @@ export const ensureWalletDayCandles = async (assetRefs = [], dayStr, closeMap = 
     const resolved = new Map();
     if (!dayStr) return resolved;
 
-    // Universo = posições vivas em carteira. Quantidade zerada não entra: não
-    // pesa no patrimônio e buscar histórico dela só encareceria o run.
-    const pending = new Map();
-    for (const asset of assetRefs) {
-        if (!asset?.ticker) continue;
-        if (asset.quantity !== undefined && !(asset.quantity > 0)) continue;
-        const storageKey = historyStorageKey(asset.ticker, asset.type);
-        if (!storageKey || closeMap.has(storageKey) || pending.has(storageKey)) continue;
-        pending.set(storageKey, { ticker: asset.ticker, type: asset.type });
-    }
+    const pending = collectPendingDayAssets(assetRefs, closeMap);
     if (pending.size === 0) return resolved;
 
-    let storedByKey = new Map();
-    try {
-        const docs = await AssetHistory.find({ ticker: { $in: [...pending.keys()] } }).lean();
-        storedByKey = new Map(docs.map((doc) => [doc.ticker, doc.history || []]));
-    } catch (e) {
-        // Sem a série armazenada seguimos assim mesmo: o pior caso é regravar a
-        // série vinda da fonte, nunca derrubar o snapshot.
-        logger.warn(`[DayCandle] Falha ao ler séries armazenadas: ${e.message}`);
-    }
-
-    const entries = [...pending.entries()];
-    let fetched = 0;
-    const unresolved = [];
-    for (let i = 0; i < entries.length; i += DAY_CANDLE_BATCH_SIZE) {
-        const batch = entries.slice(i, i + DAY_CANDLE_BATCH_SIZE);
-        await Promise.all(batch.map(async ([storageKey, { ticker, type }]) => {
-            try {
-                // A variante `Detailed` existe para este diagnóstico: ela conserva as
-                // datas que a fonte publicou VAZIAS, que `getFullHistory` descarta.
-                // `dayStr` é inclusivo; o serviço converte para o `period2`
-                // exclusivo do Yahoo. Passá-lo explicitamente evita depender do
-                // acaso do fuso UTC às 23:59 BRT.
-                const payload = await externalMarketService.getFullHistoryDetailed(ticker, type, dayStr);
-                const series = payload?.candles;
-                if (!Array.isArray(series) || series.length === 0) {
-                    unresolved.push({ ticker, storageKey, type, reason: describeMiss(dayStr, payload) });
-                    return;
-                }
-                const dayCandle = series.find((c) => c?.date === dayStr && c.close > 0);
-                if (!dayCandle) { // ativo sem negócio no dia / fonte atrasada → fallback
-                    unresolved.push({ ticker, storageKey, type, reason: describeMiss(dayStr, payload) });
-                    return;
-                }
-
-                const merged = mergeDayCandles(storedByKey.get(storageKey) || [], series, type);
-                await AssetHistory.updateOne(
-                    { ticker: storageKey },
-                    // lastCheckedAt fica intocado: ele mede a VISITA do timeSeriesWorker,
-                    // e renová-lo aqui mascararia a cobertura incompleta daquele run.
-                    { $set: { history: merged, lastUpdated: new Date() } },
-                    { upsert: true },
-                );
-                resolved.set(storageKey, dayCandle.close);
-                fetched += 1;
-            } catch (e) {
-                unresolved.push({ ticker, storageKey, type, reason: `erro na busca (${e.message})` });
-                logger.warn(`[DayCandle] Falha ao garantir candle de ${ticker} @ ${dayStr}: ${e.message}`);
-            }
-        }));
-        if (i + DAY_CANDLE_BATCH_SIZE < entries.length) await sleep(DAY_CANDLE_BATCH_PAUSE_MS);
-    }
+    const storedByKey = await loadStoredSeries([...pending.keys()]);
+    const ctx = { dayStr, storedByKey, resolved, unresolved: [], fetched: 0 };
+    await fetchDayCandlesInBatches(pending, ctx);
 
     // O Yahoo desistiu destes; a B3 tem o fechamento oficial do mesmo pregão.
-    const { recuperados, semNegocio } = await recoverWithB3(unresolved, storedByKey, dayStr, resolved);
-    const semCandle = unresolved.filter((u) => !recuperados.has(u.ticker));
+    const b3 = await recoverWithB3(ctx.unresolved, storedByKey, dayStr, resolved);
+    const semCandle = ctx.unresolved.filter((u) => !b3.recuperados.has(u.ticker));
 
-    // O CAMINHO DE CADA ATIVO, para o painel de fontes.
-    //
-    // A lista de `unresolved` já era escrita no log, e log ninguém relê. No painel
-    // ela responde a pergunta que a linha do bloco "Histórico e índices" não
-    // tinha: a B3 aparecia verde, chamada há horas, sem que nada dissesse QUAIS
-    // ativos ela socorreu — nem quais ficaram sem fechamento nenhum, que é o
-    // conjunto com consequência (o patrimônio deles é marcado pelo preço das
-    // 23:59 em vez do fechamento).
-    //
-    // Quem a B3 não cobre (cripto, ativo americano) entra com a trilha de um elo
-    // só: aqui, ao contrário do worker do universo, isso é notícia — a carteira é
-    // pequena e o ativo sem fechamento do dia degrada o snapshot daquele dia.
-    for (const alvo of unresolved) {
-        recordEscalation({
-            chain: 'candle',
-            subject: alvo.ticker,
-            // A mesma régua de cobertura que `recoverWithB3` usa para escolher os
-            // alvos — importada, não recopiada: trilha que discorda de quem foi
-            // chamado de verdade é pior que trilha nenhuma.
-            tried: isB3Coverable(alvo.ticker, alvo.type) ? ['yahoo.history', 'b3'] : ['yahoo.history'],
-            resolvedBy: recuperados.has(alvo.ticker) ? 'b3' : null,
-            // Quando a B3 confirma que não houve negócio, o motivo do Yahoo ("não
-            // trouxe o candle") descreve o sintoma; o fato é o papel não ter
-            // negociado, e é ele que decide se isto merece atenção.
-            reason: semNegocio.has(alvo.ticker)
-                ? `O papel não negociou em ${dayStr} — ausente também no arquivo oficial da B3`
-                : alvo.reason,
-            expected: semNegocio.has(alvo.ticker),
-            // O PREGÃO DE QUE ESTA LINHA FALA, e aqui ele é defesa.
-            //
-            // A varredura do universo (`recoverUniverseTipWithB3`) sobrescreve a
-            // linha deste mesmo ticker para curar o vermelho, e ela não consulta o
-            // Yahoo — então declara o elo como "não consultado". Aqui o Yahoo FOI
-            // chamado, ativo por ativo, e não trouxe o candle: é medição, não
-            // suposição. Sem datar a linha, a herança lá não reconhece o pregão e
-            // a medição se perde na primeira varredura que passar.
-            session: dayStr,
-        });
-    }
-
-    logger.info('[DayCandle] Candles do dia garantidos para ativos em carteira', {
-        day: dayStr,
-        pending: pending.size,
-        fetched,
-        recoveredFromB3: recuperados.size,
-        missing: semCandle.length,
-    });
-    if (recuperados.size > 0) {
-        logger.info('[DayCandle] Fechamento oficial da B3 cobriu a lacuna do Yahoo', {
-            day: dayStr, assets: [...recuperados],
-        });
-    }
-    // Cada ativo aqui teve o patrimônio marcado pelo preço das 23:59 em vez do
-    // fechamento, e é este o conjunto que a sentinela vai acusar amanhã. Sem os
-    // NOMES e o MOTIVO, o alarme obriga a refazer à mão a ida ao Mongo e à fonte
-    // que já foi feita uma vez — foi o custo de diagnosticar BOVA11/IVVB11 em
-    // 28/08/2026. Warn, e não info: o snapshot do dia saiu degradado.
-    if (semCandle.length > 0) {
-        logger.warn('[DayCandle] Ativos em carteira sem candle do dia — snapshot cai no preço corrente', {
-            day: dayStr,
-            missing: semCandle.length,
-            assets: semCandle.map((u) => `${u.ticker}: ${u.reason}`),
-        });
-    }
+    recordDayCandleChain(ctx.unresolved, b3, dayStr);
+    logDayCandleOutcome({ dayStr, pending: pending.size, fetched: ctx.fetched, recuperados: b3.recuperados, semCandle });
     return resolved;
+};
+
+/** Alvos da varredura: posições vivas que o arquivo da B3 cobre, uma por série. */
+const collectGapTargets = (assetRefs) => {
+    const alvos = new Map();
+    for (const asset of assetRefs) {
+        if (!isLivePosition(asset)) continue;
+        const ticker = String(asset.ticker).trim().toUpperCase();
+        if (!B3_FALLBACK_TYPES.has(String(asset.type || '').trim().toUpperCase())) continue;
+        if (!B3_TICKER_RE.test(ticker)) continue;
+        const storageKey = historyStorageKey(asset.ticker, asset.type);
+        if (storageKey && !alvos.has(storageKey)) alvos.set(storageKey, { ticker, type: asset.type });
+    }
+    return alvos;
+};
+
+/** Agregação que lê só as DATAS da janela de cada série, não os candles. */
+const windowDatesPipeline = (keys, firstDay, throughDay) => [
+    { $match: { ticker: { $in: keys } } },
+    {
+        $project: {
+            ticker: 1,
+            dates: {
+                $map: {
+                    input: {
+                        $filter: {
+                            input: { $ifNull: ['$history', []] },
+                            as: 'h',
+                            cond: { $and: [{ $gte: ['$$h.date', firstDay] }, { $lte: ['$$h.date', throughDay] }] },
+                        },
+                    },
+                    as: 'h',
+                    in: '$$h.date',
+                },
+            },
+        },
+    },
+];
+
+/**
+ * Dias faltantes por chave. `null` quando a leitura falhou — fail-open: sem a
+ * leitura não há varredura, e o caminho de quem chamou segue com o que já tinha.
+ */
+const readWindowGaps = async (keys, janela, throughDay, maxDays) => {
+    try {
+        const rows = await AssetHistory.aggregate(windowDatesPipeline(keys, janela[0], throughDay));
+        const faltantesPorChave = new Map();
+        for (const row of rows) {
+            const dias = missingDaysInWindow(row.dates, throughDay, maxDays);
+            if (dias.length > 0) faltantesPorChave.set(row.ticker, dias);
+        }
+        return faltantesPorChave;
+    } catch (e) {
+        logger.warn(`[DayCandle] Varredura de lacuna não pôde ler as séries: ${e.message}`);
+        return null;
+    }
+};
+
+/** Um download por dia faltante (união de todas as séries), em ordem. */
+const fetchB3ClosesForGaps = async (faltantesPorChave) => {
+    const todosOsDias = new Set();
+    for (const dias of faltantesPorChave.values()) for (const dia of dias) todosOsDias.add(dia);
+    const porDia = new Map();
+    for (const dia of [...todosOsDias].sort()) porDia.set(dia, await fetchB3DailyCloses(dia));
+    return porDia;
+};
+
+/** Candles oficiais dos dias que faltam; ticker ausente do arquivo não vira candle. */
+const officialCandlesFor = (ticker, dias, porDia) => {
+    const novos = [];
+    for (const dia of dias) {
+        const linha = porDia.get(dia)?.get(ticker);
+        if (linha) novos.push({ date: dia, close: linha.close, volume: linha.volume });
+    }
+    return novos;
+};
+
+/** Grava a série mesclada (sem upsert: a varredura só fecha série que já existe). */
+const writeHealedSeries = async (storageKey, alvo, guardada, novos, recuperados) => {
+    try {
+        const merged = mergeDayCandles(guardada, novos, alvo.type);
+        await AssetHistory.updateOne(
+            { ticker: storageKey },
+            { $set: { history: merged, lastUpdated: new Date() } },
+        );
+        recuperados.set(storageKey, novos.map((c) => c.date));
+    } catch (e) {
+        logger.warn(`[DayCandle] Varredura de lacuna falhou ao gravar ${alvo.ticker}: ${e.message}`);
+    }
 };
 
 /**
@@ -409,93 +459,23 @@ export const healWalletCandleGaps = async (assetRefs = [], throughDay, { maxDays
     const janela = businessWindowDays(throughDay, maxDays);
     if (janela.length === 0) return recuperados;
 
-    const alvos = new Map();
-    for (const asset of assetRefs) {
-        if (!asset?.ticker) continue;
-        if (asset.quantity !== undefined && !(asset.quantity > 0)) continue;
-        const ticker = String(asset.ticker).trim().toUpperCase();
-        if (!B3_FALLBACK_TYPES.has(String(asset.type || '').trim().toUpperCase())) continue;
-        if (!B3_TICKER_RE.test(ticker)) continue;
-        const storageKey = historyStorageKey(asset.ticker, asset.type);
-        if (storageKey && !alvos.has(storageKey)) alvos.set(storageKey, { ticker, type: asset.type });
-    }
+    const alvos = collectGapTargets(assetRefs);
     if (alvos.size === 0) return recuperados;
 
-    let faltantesPorChave = new Map();
-    try {
-        const rows = await AssetHistory.aggregate([
-            { $match: { ticker: { $in: [...alvos.keys()] } } },
-            {
-                $project: {
-                    ticker: 1,
-                    dates: {
-                        $map: {
-                            input: {
-                                $filter: {
-                                    input: { $ifNull: ['$history', []] },
-                                    as: 'h',
-                                    cond: { $and: [{ $gte: ['$$h.date', janela[0]] }, { $lte: ['$$h.date', throughDay] }] },
-                                },
-                            },
-                            as: 'h',
-                            in: '$$h.date',
-                        },
-                    },
-                },
-            },
-        ]);
-        for (const row of rows) {
-            const dias = missingDaysInWindow(row.dates, throughDay, maxDays);
-            if (dias.length > 0) faltantesPorChave.set(row.ticker, dias);
-        }
-    } catch (e) {
-        // Fail-open: sem a leitura não há varredura, e o caminho de quem chamou
-        // segue com o que já tinha.
-        logger.warn(`[DayCandle] Varredura de lacuna não pôde ler as séries: ${e.message}`);
-        return recuperados;
-    }
-    if (faltantesPorChave.size === 0) return recuperados;
+    const faltantesPorChave = await readWindowGaps([...alvos.keys()], janela, throughDay, maxDays);
+    if (!faltantesPorChave?.size) return recuperados;
 
-    const todosOsDias = new Set();
-    for (const dias of faltantesPorChave.values()) for (const dia of dias) todosOsDias.add(dia);
-    const porDia = new Map();
-    for (const dia of [...todosOsDias].sort()) porDia.set(dia, await fetchB3DailyCloses(dia));
-
+    const porDia = await fetchB3ClosesForGaps(faltantesPorChave);
     const docs = await AssetHistory.find({ ticker: { $in: [...faltantesPorChave.keys()] } }).lean();
     const guardadaPorChave = new Map(docs.map((doc) => [doc.ticker, doc.history || []]));
 
     for (const [storageKey, dias] of faltantesPorChave) {
         const alvo = alvos.get(storageKey);
-        const novos = [];
-        for (const dia of dias) {
-            const linha = porDia.get(dia)?.get(alvo.ticker);
-            if (linha) novos.push({ date: dia, close: linha.close, volume: linha.volume });
-        }
+        const novos = officialCandlesFor(alvo.ticker, dias, porDia);
         if (novos.length === 0) continue;
-        try {
-            const merged = mergeDayCandles(guardadaPorChave.get(storageKey) || [], novos, alvo.type);
-            await AssetHistory.updateOne(
-                { ticker: storageKey },
-                { $set: { history: merged, lastUpdated: new Date() } },
-            );
-            recuperados.set(storageKey, novos.map((c) => c.date));
-        } catch (e) {
-            logger.warn(`[DayCandle] Varredura de lacuna falhou ao gravar ${alvo.ticker}: ${e.message}`);
-        }
+        await writeHealedSeries(storageKey, alvo, guardadaPorChave.get(storageKey) || [], novos, recuperados);
     }
 
-    if (recuperados.size > 0) {
-        logger.info('[DayCandle] Lacuna da janela fechada pelo fechamento oficial da B3', {
-            throughDay,
-            assets: [...recuperados].map(([chave, dias]) => `${chave}: ${dias.join(', ')}`),
-        });
-    } else {
-        // Sem isto, "a lacuna existe e nada foi feito" fica indistinguível de
-        // "não havia lacuna" — que foi o buraco de diagnóstico de 03/09/2026.
-        logger.info('[DayCandle] Lacuna na janela sem cobertura no arquivo da B3', {
-            throughDay,
-            assets: [...faltantesPorChave].map(([chave, dias]) => `${chave}: ${dias.join(', ')}`),
-        });
-    }
+    logGapHealOutcome(throughDay, recuperados, faltantesPorChave);
     return recuperados;
 };

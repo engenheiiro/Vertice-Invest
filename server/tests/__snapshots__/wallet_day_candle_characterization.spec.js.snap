@@ -1,0 +1,3113 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`caracterização — walletDayCandleService > cenários fixos nomeados > fixos 1`] = `
+{
+  "ensure close zero -> b3": {
+    "args": [
+      [
+        {
+          "ticker": "BOVA11",
+          "type": "ETF",
+        },
+      ],
+      "2026-09-08",
+    ],
+    "calls": [
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "BOVA11",
+            ],
+          },
+        },
+      ],
+      [
+        "yahoo",
+        "BOVA11",
+        "ETF",
+        "2026-09-08",
+      ],
+      [
+        "b3",
+        "2026-09-08",
+      ],
+      [
+        "updateOne",
+        {
+          "ticker": "BOVA11",
+        },
+        {
+          "$set": {
+            "history": [
+              {
+                "adjClose": 100,
+                "close": 100,
+                "date": "2026-09-04",
+                "volume": 0,
+              },
+              {
+                "adjClose": 101,
+                "close": 101,
+                "date": "2026-09-08",
+                "volume": 0,
+              },
+            ],
+            "lastUpdated": "2026-09-09T02:59:00.000Z",
+          },
+        },
+        {
+          "upsert": true,
+        },
+      ],
+      [
+        "escalation",
+        {
+          "chain": "candle",
+          "expected": false,
+          "reason": "dia ausente na série da fonte",
+          "resolvedBy": "b3",
+          "session": "2026-09-08",
+          "subject": "BOVA11",
+          "tried": [
+            "yahoo.history",
+            "b3",
+          ],
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Candles do dia garantidos para ativos em carteira",
+        {
+          "day": "2026-09-08",
+          "fetched": 0,
+          "missing": 0,
+          "pending": 1,
+          "recoveredFromB3": 1,
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Fechamento oficial da B3 cobriu a lacuna do Yahoo",
+        {
+          "assets": [
+            "BOVA11",
+          ],
+          "day": "2026-09-08",
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [
+        [
+          "BOVA11",
+          101,
+        ],
+      ],
+    },
+  },
+  "ensure closeMap cheio": {
+    "args": [
+      [
+        {
+          "ticker": "BTC",
+          "type": "CRYPTO",
+        },
+      ],
+      "2026-09-08",
+      {
+        "__map": [
+          [
+            "BTC-USD",
+            1,
+          ],
+        ],
+      },
+    ],
+    "calls": [],
+    "error": null,
+    "result": {
+      "__map": [],
+    },
+  },
+  "ensure cripto sabado": {
+    "args": [
+      [
+        {
+          "quantity": 1,
+          "ticker": "BTC",
+          "type": "CRYPTO",
+        },
+      ],
+      "2026-09-05",
+    ],
+    "calls": [
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "BTC-USD",
+            ],
+          },
+        },
+      ],
+      [
+        "yahoo",
+        "BTC",
+        "CRYPTO",
+        "2026-09-05",
+      ],
+      [
+        "updateOne",
+        {
+          "ticker": "BTC-USD",
+        },
+        {
+          "$set": {
+            "history": [
+              {
+                "adjClose": 60000,
+                "close": 60000,
+                "date": "2026-09-05",
+                "volume": 0,
+              },
+            ],
+            "lastUpdated": "2026-09-09T02:59:00.000Z",
+          },
+        },
+        {
+          "upsert": true,
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Candles do dia garantidos para ativos em carteira",
+        {
+          "day": "2026-09-05",
+          "fetched": 1,
+          "missing": 0,
+          "pending": 1,
+          "recoveredFromB3": 0,
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [
+        [
+          "BTC-USD",
+          60000,
+        ],
+      ],
+    },
+  },
+  "ensure sem negocio": {
+    "args": [
+      [
+        {
+          "quantity": 2,
+          "ticker": "KNRI11",
+          "type": "FII",
+        },
+      ],
+      "2026-09-08",
+    ],
+    "calls": [
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "KNRI11",
+            ],
+          },
+        },
+      ],
+      [
+        "yahoo",
+        "KNRI11",
+        "FII",
+        "2026-09-08",
+      ],
+      [
+        "b3",
+        "2026-09-08",
+      ],
+      [
+        "escalation",
+        {
+          "chain": "candle",
+          "expected": true,
+          "reason": "O papel não negociou em 2026-09-08 — ausente também no arquivo oficial da B3",
+          "resolvedBy": null,
+          "session": "2026-09-08",
+          "subject": "KNRI11",
+          "tried": [
+            "yahoo.history",
+            "b3",
+          ],
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Candles do dia garantidos para ativos em carteira",
+        {
+          "day": "2026-09-08",
+          "fetched": 0,
+          "missing": 1,
+          "pending": 1,
+          "recoveredFromB3": 0,
+        },
+      ],
+      [
+        "log.warn",
+        "[DayCandle] Ativos em carteira sem candle do dia — snapshot cai no preço corrente",
+        {
+          "assets": [
+            "KNRI11: dia publicado VAZIO pela fonte (close nulo)",
+          ],
+          "day": "2026-09-08",
+          "missing": 1,
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [],
+    },
+  },
+  "ensure stock_us feriado BR": {
+    "args": [
+      [
+        {
+          "quantity": 1,
+          "ticker": "AAPL",
+          "type": "STOCK_US",
+        },
+      ],
+      "2026-09-07",
+    ],
+    "calls": [
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "AAPL",
+            ],
+          },
+        },
+      ],
+      [
+        "yahoo",
+        "AAPL",
+        "STOCK_US",
+        "2026-09-07",
+      ],
+      [
+        "updateOne",
+        {
+          "ticker": "AAPL",
+        },
+        {
+          "$set": {
+            "history": [
+              {
+                "adjClose": 200,
+                "close": 200,
+                "date": "2026-09-07",
+                "volume": 0,
+              },
+            ],
+            "lastUpdated": "2026-09-09T02:59:00.000Z",
+          },
+        },
+        {
+          "upsert": true,
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Candles do dia garantidos para ativos em carteira",
+        {
+          "day": "2026-09-07",
+          "fetched": 1,
+          "missing": 0,
+          "pending": 1,
+          "recoveredFromB3": 0,
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [
+        [
+          "AAPL",
+          200,
+        ],
+      ],
+    },
+  },
+  "ensure stock_us sabado": {
+    "args": [
+      [
+        {
+          "quantity": 1,
+          "ticker": "AAPL",
+          "type": "STOCK_US",
+        },
+      ],
+      "2026-09-05",
+    ],
+    "calls": [
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "AAPL",
+            ],
+          },
+        },
+      ],
+      [
+        "yahoo",
+        "AAPL",
+        "STOCK_US",
+        "2026-09-05",
+      ],
+      [
+        "updateOne",
+        {
+          "ticker": "AAPL",
+        },
+        {
+          "$set": {
+            "history": [],
+            "lastUpdated": "2026-09-09T02:59:00.000Z",
+          },
+        },
+        {
+          "upsert": true,
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Candles do dia garantidos para ativos em carteira",
+        {
+          "day": "2026-09-05",
+          "fetched": 1,
+          "missing": 0,
+          "pending": 1,
+          "recoveredFromB3": 0,
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [
+        [
+          "AAPL",
+          200,
+        ],
+      ],
+    },
+  },
+  "ensure yahoo ok": {
+    "args": [
+      [
+        {
+          "quantity": 1,
+          "ticker": "PETR4",
+          "type": "STOCK",
+        },
+      ],
+      "2026-09-08",
+    ],
+    "calls": [
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "PETR4",
+            ],
+          },
+        },
+      ],
+      [
+        "yahoo",
+        "PETR4",
+        "STOCK",
+        "2026-09-08",
+      ],
+      [
+        "updateOne",
+        {
+          "ticker": "PETR4",
+        },
+        {
+          "$set": {
+            "history": [
+              {
+                "adjClose": 29,
+                "close": 29,
+                "date": "2026-09-04",
+                "volume": 0,
+              },
+              {
+                "adjClose": 30,
+                "close": 30,
+                "date": "2026-09-07",
+                "volume": 0,
+              },
+              {
+                "adjClose": 31,
+                "close": 31,
+                "date": "2026-09-08",
+                "volume": 9,
+              },
+            ],
+            "lastUpdated": "2026-09-09T02:59:00.000Z",
+          },
+        },
+        {
+          "upsert": true,
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Candles do dia garantidos para ativos em carteira",
+        {
+          "day": "2026-09-08",
+          "fetched": 1,
+          "missing": 0,
+          "pending": 1,
+          "recoveredFromB3": 0,
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [
+        [
+          "PETR4",
+          31,
+        ],
+      ],
+    },
+  },
+  "heal b3 fora": {
+    "args": [
+      [
+        {
+          "ticker": "BOVA11",
+          "type": "ETF",
+        },
+      ],
+      "2026-09-08",
+    ],
+    "calls": [
+      [
+        "aggregate",
+        [
+          {
+            "$match": {
+              "ticker": {
+                "$in": [
+                  "BOVA11",
+                ],
+              },
+            },
+          },
+          {
+            "$project": {
+              "dates": {
+                "$map": {
+                  "as": "h",
+                  "in": "$$h.date",
+                  "input": {
+                    "$filter": {
+                      "as": "h",
+                      "cond": {
+                        "$and": [
+                          {
+                            "$gte": [
+                              "$$h.date",
+                              "2026-09-01",
+                            ],
+                          },
+                          {
+                            "$lte": [
+                              "$$h.date",
+                              "2026-09-08",
+                            ],
+                          },
+                        ],
+                      },
+                      "input": {
+                        "$ifNull": [
+                          "$history",
+                          [],
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+              "ticker": 1,
+            },
+          },
+        ],
+      ],
+      [
+        "b3",
+        "2026-09-02",
+      ],
+      [
+        "b3",
+        "2026-09-03",
+      ],
+      [
+        "b3",
+        "2026-09-04",
+      ],
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "BOVA11",
+            ],
+          },
+        },
+      ],
+      [
+        "log.info",
+        "[DayCandle] Lacuna na janela sem cobertura no arquivo da B3",
+        {
+          "assets": [
+            "BOVA11: 2026-09-02, 2026-09-03, 2026-09-04",
+          ],
+          "throughDay": "2026-09-08",
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [],
+    },
+  },
+  "heal maxDays 2": {
+    "args": [
+      [
+        {
+          "ticker": "BOVA11",
+          "type": "ETF",
+        },
+      ],
+      "2026-09-08",
+      {
+        "maxDays": 2,
+      },
+    ],
+    "calls": [
+      [
+        "aggregate",
+        [
+          {
+            "$match": {
+              "ticker": {
+                "$in": [
+                  "BOVA11",
+                ],
+              },
+            },
+          },
+          {
+            "$project": {
+              "dates": {
+                "$map": {
+                  "as": "h",
+                  "in": "$$h.date",
+                  "input": {
+                    "$filter": {
+                      "as": "h",
+                      "cond": {
+                        "$and": [
+                          {
+                            "$gte": [
+                              "$$h.date",
+                              "2026-09-04",
+                            ],
+                          },
+                          {
+                            "$lte": [
+                              "$$h.date",
+                              "2026-09-08",
+                            ],
+                          },
+                        ],
+                      },
+                      "input": {
+                        "$ifNull": [
+                          "$history",
+                          [],
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+              "ticker": 1,
+            },
+          },
+        ],
+      ],
+      [
+        "b3",
+        "2026-09-04",
+      ],
+      [
+        "find",
+        {
+          "ticker": {
+            "$in": [
+              "BOVA11",
+            ],
+          },
+        },
+      ],
+      [
+        "updateOne",
+        {
+          "ticker": "BOVA11",
+        },
+        {
+          "$set": {
+            "history": [
+              {
+                "adjClose": 1,
+                "close": 1,
+                "date": "2026-09-01",
+                "volume": 0,
+              },
+              {
+                "adjClose": 2,
+                "close": 2,
+                "date": "2026-09-04",
+                "volume": 3,
+              },
+            ],
+            "lastUpdated": "2026-09-09T02:59:00.000Z",
+          },
+        },
+        "__semOpcoes",
+      ],
+      [
+        "log.info",
+        "[DayCandle] Lacuna da janela fechada pelo fechamento oficial da B3",
+        {
+          "assets": [
+            "BOVA11: 2026-09-04",
+          ],
+          "throughDay": "2026-09-08",
+        },
+      ],
+    ],
+    "error": null,
+    "result": {
+      "__map": [
+        [
+          "BOVA11",
+          [
+            "2026-09-04",
+          ],
+        ],
+      ],
+    },
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure cobertura 1`] = `
+{
+  "comB3": 59,
+  "comErro": 1,
+  "comEscalonamento": 133,
+  "comGravacao": 99,
+  "comPausa": 1,
+  "comRetorno": 88,
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure completo #1 1`] = `
+{
+  "args": [
+    [],
+    "2026-09-07",
+    {
+      "__map": [],
+    },
+  ],
+  "calls": [],
+  "error": null,
+  "result": {
+    "__map": [],
+  },
+  "state": {
+    "b3": {
+      "2026-08-26": {},
+      "2026-08-27": {},
+      "2026-08-28": {},
+      "2026-08-31": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-01": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-03": {},
+      "2026-09-05": {},
+      "2026-09-06": {},
+      "2026-09-07": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-09": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-10": {},
+    },
+    "closeMap": [],
+    "docs": [],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {},
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure completo #2 1`] = `
+{
+  "args": [
+    [
+      {
+        "ticker": "ETH-USD",
+        "type": "CRYPTO",
+      },
+    ],
+    "2026-09-02",
+    {
+      "__map": [],
+    },
+  ],
+  "calls": [
+    [
+      "find",
+      {
+        "ticker": {
+          "$in": [
+            "ETH-USD",
+          ],
+        },
+      },
+    ],
+    [
+      "yahoo",
+      "ETH-USD",
+      "CRYPTO",
+      "2026-09-02",
+    ],
+    [
+      "updateOne",
+      {
+        "ticker": "ETH-USD",
+      },
+      {
+        "$set": {
+          "history": [
+            {
+              "adjClose": 134.45,
+              "close": 134.45,
+              "date": "2026-08-26",
+              "volume": 366,
+            },
+            {
+              "adjClose": 38.39,
+              "close": 38.39,
+              "date": "2026-08-30",
+              "volume": 7,
+            },
+            {
+              "adjClose": 120.58,
+              "close": 126.93,
+              "date": "2026-08-31",
+              "volume": 988,
+            },
+            {
+              "adjClose": 6.78,
+              "close": 6.78,
+              "date": "2026-09-02",
+              "volume": 10,
+            },
+          ],
+          "lastUpdated": "2026-09-09T02:59:00.000Z",
+        },
+      },
+      {
+        "upsert": true,
+      },
+    ],
+    [
+      "log.info",
+      "[DayCandle] Candles do dia garantidos para ativos em carteira",
+      {
+        "day": "2026-09-02",
+        "fetched": 1,
+        "missing": 0,
+        "pending": 1,
+        "recoveredFromB3": 0,
+      },
+    ],
+  ],
+  "error": null,
+  "result": {
+    "__map": [
+      [
+        "ETH-USD",
+        6.78,
+      ],
+    ],
+  },
+  "state": {
+    "b3": {
+      "2026-08-26": {
+        "ETH-USD": {
+          "close": 98.24,
+          "volume": 263,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-28": {},
+      "2026-08-30": {},
+      "2026-08-31": {
+        "ETH-USD": {
+          "close": 85.88,
+          "volume": 419,
+        },
+      },
+      "2026-09-01": {},
+      "2026-09-04": {},
+      "2026-09-07": {},
+      "2026-09-08": "throw",
+      "2026-09-09": {
+        "ETH-USD": {
+          "close": 29.81,
+          "volume": 415,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-10": {
+        "ETH-USD": {
+          "close": 40.52,
+          "volume": 421,
+        },
+      },
+    },
+    "closeMap": [],
+    "docs": [],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {
+      "ETH-USD": {
+        "candles": [
+          {
+            "close": 134.45,
+            "date": "2026-08-26",
+            "volume": 366,
+          },
+          {
+            "adjClose": 0,
+            "close": 0,
+            "date": "2026-08-28",
+            "volume": 915,
+          },
+          {
+            "close": 38.39,
+            "date": "2026-08-30",
+            "volume": 7,
+          },
+          {
+            "adjClose": 120.58,
+            "close": 126.93,
+            "date": "2026-08-31",
+            "volume": 988,
+          },
+          {
+            "close": 6.78,
+            "date": "2026-09-02",
+            "volume": 10,
+          },
+        ],
+        "emptyDates": [],
+      },
+    },
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure completo #3 1`] = `
+{
+  "args": [
+    [],
+    "2026-09-02",
+    {
+      "__map": [],
+    },
+  ],
+  "calls": [],
+  "error": null,
+  "result": {
+    "__map": [],
+  },
+  "state": {
+    "b3": {
+      "2026-08-27": {},
+      "2026-08-28": "throw",
+      "2026-08-30": {},
+      "2026-08-31": {},
+      "2026-09-01": {},
+      "2026-09-02": {},
+      "2026-09-03": {},
+      "2026-09-05": {},
+      "2026-09-06": {},
+      "2026-09-08": {},
+      "2026-09-09": {},
+    },
+    "closeMap": [],
+    "docs": [],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {},
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure completo #4 1`] = `
+{
+  "args": [
+    [
+      {
+        "quantity": 0,
+        "ticker": "PETR4",
+        "type": "STOCK",
+      },
+    ],
+    "__undef",
+    {
+      "__map": [
+        [
+          "PETR4",
+          50,
+        ],
+      ],
+    },
+  ],
+  "calls": [],
+  "error": null,
+  "result": {
+    "__map": [],
+  },
+  "state": {
+    "b3": {
+      "2026-08-26": {
+        "PETR4": {
+          "close": 47.05,
+          "volume": 318,
+        },
+      },
+      "2026-08-27": {},
+      "2026-08-28": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-30": {},
+      "2026-09-05": {
+        "PETR4": {
+          "close": 68.01,
+          "volume": 455,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-06": {},
+      "2026-09-09": {
+        "PETR4": {
+          "close": 29.17,
+          "volume": 368,
+        },
+      },
+    },
+    "closeMap": [
+      [
+        "PETR4",
+        50,
+      ],
+    ],
+    "docs": [
+      {
+        "history": [
+          {
+            "close": 29.36,
+            "date": "2026-08-26",
+            "volume": 953,
+          },
+          {
+            "close": 70.01,
+            "date": "2026-08-27",
+            "volume": 186,
+          },
+          {
+            "close": 13.5,
+            "date": "2026-08-30",
+            "volume": 767,
+          },
+          {
+            "close": 0,
+            "date": "2026-09-01",
+            "volume": 481,
+          },
+          {
+            "adjClose": 105.46,
+            "close": 111.01,
+            "date": "2026-09-02",
+            "volume": 982,
+          },
+          {
+            "close": 72.36,
+            "date": "2026-09-04",
+            "volume": 464,
+          },
+          {
+            "close": 0,
+            "date": "2026-09-06",
+            "volume": 239,
+          },
+        ],
+        "ticker": "PETR4",
+      },
+    ],
+    "findCount": 0,
+    "findThrows": [
+      1,
+    ],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {
+      "PETR4": {
+        "candles": [
+          {
+            "close": 98.09,
+            "date": "2026-09-04",
+            "volume": 735,
+          },
+          {
+            "close": 94.27,
+            "date": "2026-09-07",
+            "volume": 347,
+          },
+          {
+            "close": 76.22,
+            "volume": 10,
+          },
+        ],
+        "emptyDates": [],
+      },
+    },
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure completo #25 1`] = `
+{
+  "args": [
+    [
+      {
+        "quantity": "__undef",
+        "ticker": "HGLG11",
+        "type": "FII",
+      },
+      {
+        "quantity": 3,
+        "ticker": "ITSA4",
+        "type": "STOCK",
+      },
+      {
+        "quantity": "__undef",
+        "ticker": "BOVA11",
+        "type": "ETF",
+      },
+      {
+        "quantity": 7,
+        "ticker": "BTC",
+        "type": "CRYPTO",
+      },
+    ],
+    "2026-09-07",
+    {
+      "__map": [],
+    },
+  ],
+  "calls": [
+    [
+      "find",
+      {
+        "ticker": {
+          "$in": [
+            "HGLG11",
+            "ITSA4",
+            "BOVA11",
+            "BTC-USD",
+          ],
+        },
+      },
+    ],
+    [
+      "yahoo",
+      "HGLG11",
+      "FII",
+      "2026-09-07",
+    ],
+    [
+      "yahoo",
+      "ITSA4",
+      "STOCK",
+      "2026-09-07",
+    ],
+    [
+      "yahoo",
+      "BOVA11",
+      "ETF",
+      "2026-09-07",
+    ],
+    [
+      "yahoo",
+      "BTC",
+      "CRYPTO",
+      "2026-09-07",
+    ],
+    [
+      "updateOne",
+      {
+        "ticker": "BTC-USD",
+      },
+      {
+        "$set": {
+          "history": [
+            {
+              "adjClose": 0,
+              "close": 0,
+              "date": "2026-08-27",
+              "volume": 27,
+            },
+            {
+              "adjClose": 136.82,
+              "close": 144.02,
+              "date": "2026-08-29",
+              "volume": 757,
+            },
+            {
+              "adjClose": 87.94,
+              "close": 87.94,
+              "date": "2026-08-30",
+              "volume": 776,
+            },
+            {
+              "adjClose": 0,
+              "close": 0,
+              "date": "2026-08-31",
+              "volume": 448,
+            },
+            {
+              "adjClose": 127.78,
+              "close": 127.78,
+              "date": "2026-09-01",
+              "volume": 197,
+            },
+            {
+              "adjClose": 178.13,
+              "close": 178.13,
+              "date": "2026-09-02",
+              "volume": 601,
+            },
+            {
+              "adjClose": 67.79,
+              "close": 71.36,
+              "date": "2026-09-03",
+              "volume": 354,
+            },
+            {
+              "adjClose": 190.94,
+              "close": 190.94,
+              "date": "2026-09-04",
+              "volume": 96,
+            },
+            {
+              "adjClose": 68.06,
+              "close": 68.06,
+              "date": "2026-09-05",
+              "volume": 473,
+            },
+            {
+              "adjClose": 8.67,
+              "close": 8.67,
+              "date": "2026-09-07",
+              "volume": 10,
+            },
+          ],
+          "lastUpdated": "2026-09-09T02:59:00.000Z",
+        },
+      },
+      {
+        "upsert": true,
+      },
+    ],
+    [
+      "escalation",
+      {
+        "chain": "candle",
+        "expected": false,
+        "reason": "dia ausente na série da fonte",
+        "resolvedBy": null,
+        "session": "2026-09-07",
+        "subject": "HGLG11",
+        "tried": [
+          "yahoo.history",
+          "b3",
+        ],
+      },
+    ],
+    [
+      "escalation",
+      {
+        "chain": "candle",
+        "expected": false,
+        "reason": "sem resposta da fonte",
+        "resolvedBy": null,
+        "session": "2026-09-07",
+        "subject": "ITSA4",
+        "tried": [
+          "yahoo.history",
+          "b3",
+        ],
+      },
+    ],
+    [
+      "escalation",
+      {
+        "chain": "candle",
+        "expected": false,
+        "reason": "sem série na fonte",
+        "resolvedBy": null,
+        "session": "2026-09-07",
+        "subject": "BOVA11",
+        "tried": [
+          "yahoo.history",
+          "b3",
+        ],
+      },
+    ],
+    [
+      "log.info",
+      "[DayCandle] Candles do dia garantidos para ativos em carteira",
+      {
+        "day": "2026-09-07",
+        "fetched": 1,
+        "missing": 3,
+        "pending": 4,
+        "recoveredFromB3": 0,
+      },
+    ],
+    [
+      "log.warn",
+      "[DayCandle] Ativos em carteira sem candle do dia — snapshot cai no preço corrente",
+      {
+        "assets": [
+          "HGLG11: dia ausente na série da fonte",
+          "ITSA4: sem resposta da fonte",
+          "BOVA11: sem série na fonte",
+        ],
+        "day": "2026-09-07",
+        "missing": 3,
+      },
+    ],
+  ],
+  "error": null,
+  "result": {
+    "__map": [
+      [
+        "BTC-USD",
+        8.67,
+      ],
+    ],
+  },
+  "state": {
+    "b3": {
+      "2026-08-26": {
+        "BOVA11": {
+          "close": 24.3,
+          "volume": 360,
+        },
+        "HGLG11": {
+          "close": 96.57,
+          "volume": 325,
+        },
+        "ITSA4": {
+          "close": 13.62,
+          "volume": 307,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-28": {
+        "BTC": {
+          "close": 3.81,
+          "volume": 316,
+        },
+        "ITSA4": {
+          "close": 77.19,
+          "volume": 297,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-30": {
+        "HGLG11": {
+          "close": 66.08,
+          "volume": 489,
+        },
+      },
+      "2026-08-31": {
+        "BOVA11": {
+          "close": 98.64,
+          "volume": 451,
+        },
+        "HGLG11": {
+          "close": 10.2,
+          "volume": 452,
+        },
+      },
+      "2026-09-01": {
+        "BTC": {
+          "close": 13.68,
+          "volume": 287,
+        },
+        "HGLG11": {
+          "close": 71.79,
+          "volume": 252,
+        },
+        "ITSA4": {
+          "close": 61.12,
+          "volume": 130,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-03": {
+        "BOVA11": {
+          "close": 55.36,
+          "volume": 136,
+        },
+        "BTC": {
+          "close": 92.39,
+          "volume": 401,
+        },
+        "HGLG11": {
+          "close": 53.83,
+          "volume": 390,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-05": {
+        "BOVA11": {
+          "close": 83.49,
+          "volume": 475,
+        },
+        "BTC": {
+          "close": 76.52,
+          "volume": 377,
+        },
+        "ITSA4": {
+          "close": 1.94,
+          "volume": 330,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-07": {
+        "BTC": {
+          "close": 23.4,
+          "volume": 133,
+        },
+        "HGLG11": {
+          "close": 78.45,
+          "volume": 40,
+        },
+        "ITSA4": {
+          "close": 15.54,
+          "volume": 257,
+        },
+      },
+      "2026-09-10": {
+        "HGLG11": {
+          "close": 78.95,
+          "volume": 216,
+        },
+      },
+    },
+    "closeMap": [],
+    "docs": [
+      {
+        "history": [
+          {
+            "close": 184.87,
+            "date": "2026-08-26",
+            "volume": 523,
+          },
+          {
+            "close": 57.18,
+            "date": "2026-08-28",
+            "volume": 81,
+          },
+          {
+            "close": 60.94,
+            "date": "2026-08-29",
+            "volume": 334,
+          },
+          {
+            "close": 130.27,
+            "date": "2026-08-30",
+            "volume": 585,
+          },
+          {
+            "adjClose": 127.57,
+            "close": 134.28,
+            "date": "2026-08-31",
+            "volume": 347,
+          },
+          {
+            "close": 149.47,
+            "date": "2026-09-02",
+            "volume": 884,
+          },
+          {
+            "close": 79,
+            "date": "2026-09-04",
+            "volume": 234,
+          },
+          {
+            "close": 190.62,
+            "date": "2026-09-05",
+            "volume": 36,
+          },
+        ],
+        "ticker": "HGLG11",
+      },
+      {
+        "history": [
+          {
+            "adjClose": 6.95,
+            "close": 7.32,
+            "date": "2026-08-26",
+            "volume": 972,
+          },
+          {
+            "adjClose": 21.43,
+            "close": 22.56,
+            "date": "2026-08-28",
+            "volume": 841,
+          },
+          {
+            "adjClose": 0,
+            "close": 0,
+            "date": "2026-08-29",
+            "volume": 421,
+          },
+          {
+            "adjClose": 0,
+            "close": 0,
+            "date": "2026-08-30",
+            "volume": 118,
+          },
+          {
+            "adjClose": 184.78,
+            "close": 194.51,
+            "date": "2026-09-01",
+            "volume": 661,
+          },
+          {
+            "close": 0,
+            "date": "2026-09-02",
+            "volume": 107,
+          },
+          {
+            "close": 85.33,
+            "date": "2026-09-04",
+            "volume": 310,
+          },
+          {
+            "close": 37.78,
+            "date": "2026-09-06",
+            "volume": 10,
+          },
+        ],
+        "ticker": "ITSA4",
+      },
+      {
+        "history": [
+          {
+            "adjClose": 82.6,
+            "close": 86.95,
+            "date": "2026-08-28",
+            "volume": 525,
+          },
+          {
+            "close": 19.11,
+            "date": "2026-08-29",
+            "volume": 924,
+          },
+          {
+            "adjClose": 137.54,
+            "close": 144.78,
+            "date": "2026-08-30",
+            "volume": 510,
+          },
+          {
+            "adjClose": 154.71,
+            "close": 162.85,
+            "date": "2026-09-01",
+            "volume": 503,
+          },
+          {
+            "close": 125.89,
+            "date": "2026-09-02",
+            "volume": 35,
+          },
+          {
+            "adjClose": 176.46,
+            "close": 185.75,
+            "date": "2026-09-03",
+            "volume": 505,
+          },
+          {
+            "adjClose": 103.67,
+            "close": 109.13,
+            "date": "2026-09-05",
+            "volume": 906,
+          },
+        ],
+        "ticker": "BOVA11",
+      },
+      {
+        "history": [
+          {
+            "close": 0,
+            "date": "2026-08-27",
+            "volume": 27,
+          },
+          {
+            "adjClose": 136.82,
+            "close": 144.02,
+            "date": "2026-08-29",
+            "volume": 757,
+          },
+          {
+            "close": 87.94,
+            "date": "2026-08-30",
+            "volume": 776,
+          },
+          {
+            "close": 0,
+            "date": "2026-08-31",
+            "volume": 448,
+          },
+          {
+            "close": 43.5,
+            "date": "2026-09-03",
+            "volume": 899,
+          },
+          {
+            "close": 190.94,
+            "date": "2026-09-04",
+            "volume": 96,
+          },
+          {
+            "close": 44.04,
+            "date": "2026-09-05",
+            "volume": 765,
+          },
+        ],
+        "ticker": "BTC-USD",
+      },
+    ],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {
+      "BOVA11": {
+        "candles": [],
+        "emptyDates": [],
+      },
+      "BTC": {
+        "candles": [
+          {
+            "close": 127.78,
+            "date": "2026-09-01",
+            "volume": 197,
+          },
+          {
+            "close": 178.13,
+            "date": "2026-09-02",
+            "volume": 601,
+          },
+          {
+            "adjClose": 67.79,
+            "close": 71.36,
+            "date": "2026-09-03",
+            "volume": 354,
+          },
+          {
+            "close": 68.06,
+            "date": "2026-09-05",
+            "volume": 473,
+          },
+          {
+            "adjClose": null,
+            "close": null,
+            "date": "2026-09-06",
+            "volume": 92,
+          },
+          {
+            "close": 8.67,
+            "date": "2026-09-07",
+            "volume": 10,
+          },
+        ],
+        "emptyDates": [],
+      },
+      "HGLG11": {
+        "candles": [
+          {
+            "adjClose": null,
+            "close": null,
+            "date": "2026-09-01",
+            "volume": 964,
+          },
+          {
+            "adjClose": 79,
+            "close": 83.16,
+            "date": "2026-09-02",
+            "volume": 249,
+          },
+          {
+            "close": 34.25,
+            "date": "2026-09-03",
+            "volume": 458,
+          },
+          {
+            "close": 177.94,
+            "date": "2026-09-04",
+            "volume": 323,
+          },
+          {
+            "close": 117.66,
+            "date": "2026-09-05",
+            "volume": 784,
+          },
+          {
+            "adjClose": 153.59,
+            "close": 161.67,
+            "date": "2026-09-06",
+            "volume": 237,
+          },
+          {
+            "close": 9,
+            "date": "2026-09-25",
+            "volume": 1,
+          },
+        ],
+      },
+    },
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > ensureWalletDayCandles: matriz semeada > ensure hashes 1`] = `
+{
+  "1": "f0035f53ab9a82d0",
+  "10": "c43aa3424a532fa5",
+  "100": "38d70367df70da9d",
+  "101": "f20733727fa9e0d9",
+  "102": "8532560678ab082d",
+  "103": "e0a587465a8c8c00",
+  "104": "9bde66d7ca44d59b",
+  "105": "04d683743f14fd3a",
+  "106": "835fe0f5daecdec4",
+  "107": "ad5d4832e78659f2",
+  "108": "2bc5c896de84c2ef",
+  "109": "a6ede7a2fe7fb060",
+  "11": "f7e8df7a48ceaccd",
+  "110": "82351e490edb4ba2",
+  "111": "c678761300668a40",
+  "112": "86a0d3fb271f349e",
+  "113": "0c4f097bd1177dfa",
+  "114": "490212228988a4f2",
+  "115": "a730098e4c7fe6b5",
+  "116": "0b3daf25f76ed943",
+  "117": "8750ea22c02f2f57",
+  "118": "8c10e7c93f7066ed",
+  "119": "5f3758f4b83c132b",
+  "12": "f4a2a55f2b1703e0",
+  "120": "23d03e0b8721333d",
+  "121": "8ec7987f7eafc95d",
+  "122": "2b69f295ef21bd2f",
+  "123": "aeb75ad45fbe3a95",
+  "124": "1fd0c8eed9330355",
+  "125": "c5123c8306df5d0c",
+  "126": "a5583fc7ec8ed379",
+  "127": "505b0ac798b07f47",
+  "128": "99c0f8c931452a03",
+  "129": "e4a760dfcd7f4684",
+  "13": "4beb1a587ea70022",
+  "130": "e2cd80af2b5908a9",
+  "131": "b74948bb2d51ddfe",
+  "132": "5980498e51f94b76",
+  "133": "01a1ed79739232f8",
+  "134": "8424e8e5e493376a",
+  "135": "3167b0a98f7d7e8b",
+  "136": "2c259004bd5fb649",
+  "137": "e0554e3a43c1f749",
+  "138": "c3b9eebaceabed88",
+  "139": "dd7009455cb5e3a0",
+  "14": "b16589d673822e7f",
+  "140": "8fe9f15b3382fb60",
+  "141": "a5fbad2e735abbfc",
+  "142": "0e91c90193a3bba8",
+  "143": "52bce9906575bd21",
+  "144": "75ec6b4645712460",
+  "145": "f6f6595ca04598ac",
+  "146": "67dd9696f57ff1b7",
+  "147": "7772a8df7a708939",
+  "148": "2497e6e7ebc55fe5",
+  "149": "7ec2d63a88e9a34b",
+  "15": "95ff1ac0e8209714",
+  "150": "41896bd20407949e",
+  "151": "ff0c4731b7064414",
+  "152": "7d533141e4bd4b62",
+  "153": "7be1155b921bc92d",
+  "154": "3c05225b6b92b8b9",
+  "155": "35dec115796a1285",
+  "156": "50b7493d507fd7a6",
+  "157": "a20e8da6ab268aa6",
+  "158": "987071c0ce8169ea",
+  "159": "9eca365142cf5528",
+  "16": "921251003485f204",
+  "160": "b6ff6751411e9507",
+  "161": "a160135168259413",
+  "162": "61bc5d3c61d04f9f",
+  "163": "fe320739daf75fc1",
+  "164": "0720049eae2a836a",
+  "165": "4d3c8ca125650fad",
+  "166": "5e1dd56bee113f61",
+  "167": "0a9fef8923c0ec38",
+  "168": "f91972745cd0101d",
+  "169": "70c810ea93a1c36f",
+  "17": "4b3b633c762016c2",
+  "170": "0d86ae10a16ed7dd",
+  "171": "5a27310ca01a7552",
+  "172": "a5747352abfe33f5",
+  "173": "c03bb17e820ab7f5",
+  "174": "b2302df073bca68f",
+  "175": "e809ea71a8a1fbd7",
+  "176": "e62077c0fb4d5a2a",
+  "177": "09f2aacbcd9340ff",
+  "178": "5efbf3bca002137f",
+  "179": "8843476b9afbb476",
+  "18": "4e4f52714e90edf0",
+  "180": "d6463ea3bda0247d",
+  "181": "b45bb5ca55bdcad6",
+  "182": "e3907600db5c57e4",
+  "183": "1d8c72e4a9d9ae00",
+  "184": "85bd773785811755",
+  "185": "2733ee8e4f2de018",
+  "186": "3656c130543fc27f",
+  "187": "faab020402ff8d7d",
+  "188": "eb85b165c2ca53ea",
+  "189": "8f3242dc4c1fd2c5",
+  "19": "0c35cdef89b7a60f",
+  "190": "b9637e7bc2fcdaeb",
+  "191": "6986aacf8516ceb0",
+  "192": "9403588ea4c0a7b4",
+  "193": "ae6ed66fb3b37cf4",
+  "194": "0ff26632567482d6",
+  "195": "8dcb891bdc1ace8a",
+  "196": "d7792bec30e7dd2a",
+  "197": "2007a8088a7c75bd",
+  "198": "2d0aedc525cdcde6",
+  "199": "2e830e6014623454",
+  "2": "070fd37f82e7b84a",
+  "20": "68b2b3059c2173a7",
+  "200": "f9261d2ce0a2d5ea",
+  "201": "302a796006a2ab69",
+  "202": "262ddc0dd9b6bf81",
+  "203": "a4d6565fd7dfda36",
+  "204": "5e2427fedfd27d93",
+  "205": "b6035917541129b9",
+  "206": "281ea429724dbd21",
+  "207": "43260fa92b9e1d5c",
+  "208": "7dfc724e4919e2fc",
+  "209": "57d1fbb17a3c7f12",
+  "21": "d4b517be985eb9ec",
+  "210": "6c94df4041d4a8a1",
+  "211": "f52a50ff5b94e43a",
+  "212": "05133f752b9281d0",
+  "213": "f305b25f08e19398",
+  "214": "e3d1201f3ed3fa37",
+  "215": "88c274fafa013075",
+  "216": "60a4e6922f23fe37",
+  "217": "4854d129d9d23a4e",
+  "218": "11ca037573f281fd",
+  "219": "4da52b83ce22d3a7",
+  "22": "f7e8e0f24849ed08",
+  "220": "1d71da6f41e96519",
+  "221": "d96b2a2f1166bd4f",
+  "222": "429c9ffc2d81627f",
+  "223": "71bd18372e55a310",
+  "224": "50430f401b0eac57",
+  "225": "a57c85f216733b53",
+  "226": "d58168e168e50be8",
+  "227": "8fa15b3920bd3af2",
+  "228": "94423872b21a144d",
+  "229": "2311e76fb01f182c",
+  "23": "2108101ddee1fd24",
+  "230": "bf26fe8c743076a5",
+  "231": "6f9225811e129583",
+  "232": "50464d74244fcb2f",
+  "233": "9b326257fabe094d",
+  "234": "979af9d76a0ad031",
+  "235": "1c3caf3775829b96",
+  "236": "ea47689e73f33ff5",
+  "237": "3035b91272942521",
+  "238": "4d22c25667aec552",
+  "239": "221e3a7c3301dbab",
+  "24": "a6a8097a2b731549",
+  "240": "da1fe6855eb0672e",
+  "241": "aa1fc3c4e13428fc",
+  "242": "31460a832e5bfc75",
+  "243": "bc1acd4bfe344d34",
+  "244": "ba4a0dcbfe497dc4",
+  "245": "451f2780b414a314",
+  "246": "e9894c1318ea1c39",
+  "247": "e2f2468b35495cdb",
+  "248": "19adbc02ab535d9b",
+  "249": "6b9b3e6075d36fd5",
+  "25": "2ed96c750a1c498e",
+  "250": "c815f5094acf08ea",
+  "251": "41d99edf023dec10",
+  "252": "fcc066a6d0c074e8",
+  "253": "b6d7145da86bbb6c",
+  "254": "767d8ad984c48ae5",
+  "255": "fff0a8fdc8dcb2f1",
+  "256": "e987d7207b963416",
+  "257": "df56ce0810dc5625",
+  "258": "5d23fc6819589d3c",
+  "259": "f3ea8b84131c1beb",
+  "26": "19802cd844277544",
+  "260": "48c34626cb92e1e8",
+  "27": "b1dc91429c8cd6f5",
+  "28": "0180d4ca4dd24f62",
+  "29": "c663a423bd873b30",
+  "3": "9817a7e812a40d59",
+  "30": "7a7f3105aec0a38f",
+  "31": "123128716a884f36",
+  "32": "39db0fee8c1d7717",
+  "33": "f4e4da1c03ed701d",
+  "34": "4ad63888b1446ee6",
+  "35": "8e4016bd57159188",
+  "36": "c5914cdaf1a63453",
+  "37": "35e65e0e151ae258",
+  "38": "326ded82110d495c",
+  "39": "e24bf3bbb56b4668",
+  "4": "2e8e084acf313e0c",
+  "40": "70f8fab8d4810e79",
+  "41": "ef6cb94dff522ba5",
+  "42": "2e71bd58a410d17f",
+  "43": "959f277fe565d12a",
+  "44": "a79abe18e0b0b11e",
+  "45": "c65af1b1c8885a58",
+  "46": "db901bde278d0891",
+  "47": "29f2575627bc489f",
+  "48": "720e8e66a4d54589",
+  "49": "c0c094a5b6953df4",
+  "5": "f7d8f3b9dc93b07c",
+  "50": "7905b282158e8de6",
+  "51": "669684d7d18c2c0e",
+  "52": "d69371f32368181d",
+  "53": "15658763d5b123db",
+  "54": "41ba44d5b2995339",
+  "55": "3ccb775ca32a5ce5",
+  "56": "806bde1de8f321ba",
+  "57": "a2c0b90f86781fb2",
+  "58": "de919497664f30af",
+  "59": "d03fea8c30dc5432",
+  "6": "df2fb943fec0673a",
+  "60": "3c0bd4e1b63ad32e",
+  "61": "1ce3c6d4b28c7488",
+  "62": "b28d57d6c001a468",
+  "63": "fbc91708a40ed4aa",
+  "64": "3979f6372910caac",
+  "65": "656230c19119a91a",
+  "66": "bdfd3e2f81e57086",
+  "67": "0ddaa73ca66322e3",
+  "68": "0c9b10a02d57a01a",
+  "69": "acdf60e08429adf0",
+  "7": "e3fe8a54d1b7f494",
+  "70": "ad0f88a14b9cd83a",
+  "71": "11022e9303756d60",
+  "72": "488b73b11ba1b718",
+  "73": "d7a411c4411ca0ba",
+  "74": "611667e67dd1bd95",
+  "75": "6115d3c6c62515a3",
+  "76": "178be8557fe8a291",
+  "77": "852e76bee846fd35",
+  "78": "a4c53ec8a010ce2f",
+  "79": "25f116961dfb93ec",
+  "8": "eaf316f83c98bddb",
+  "80": "265fef7d988fc88d",
+  "81": "aa23210bc041a1b4",
+  "82": "c0a1d6add584fde7",
+  "83": "6f9370e168476d96",
+  "84": "09a6c640c9ad8cc9",
+  "85": "b7bd9e826ebff757",
+  "86": "75b3e5086e2c3330",
+  "87": "9a781b231411e253",
+  "88": "727795e64602c7ca",
+  "89": "c9b2d127564548a2",
+  "9": "50ff2360ac9b3b2c",
+  "90": "89de513acdf6d38e",
+  "91": "41ab21634fa24119",
+  "92": "39e402db3c85d2b6",
+  "93": "15a40ddc790aabd4",
+  "94": "dfe20653d5de2118",
+  "95": "b63a8903599e4fa1",
+  "96": "fc76e9babc48c7b7",
+  "97": "82b465df028489d4",
+  "98": "8711ecc6ab503b3b",
+  "99": "edd095af6ff17951",
+}
+`;
+
+exports[`caracterização — walletDayCandleService > healWalletCandleGaps: matriz semeada > heal cobertura 1`] = `
+{
+  "aggregateFalhou": 6,
+  "comB3": 80,
+  "comErro": 7,
+  "comGravacao": 52,
+  "comRetorno": 46,
+  "semCobertura": 27,
+}
+`;
+
+exports[`caracterização — walletDayCandleService > healWalletCandleGaps: matriz semeada > heal completo #1001 1`] = `
+{
+  "args": [
+    [
+      {
+        "quantity": 0.5,
+        "ticker": "AAPL",
+        "type": "STOCK_US",
+      },
+    ],
+    "2026-09-04",
+    {
+      "maxDays": 5,
+    },
+  ],
+  "calls": [],
+  "error": null,
+  "result": {
+    "__map": [],
+  },
+  "state": {
+    "aggregateThrows": false,
+    "b3": {
+      "2026-08-27": {
+        "AAPL": {
+          "close": 26.04,
+          "volume": 153,
+        },
+      },
+      "2026-08-28": {
+        "AAPL": {
+          "close": 61.4,
+          "volume": 474,
+        },
+      },
+      "2026-08-30": {
+        "AAPL": {
+          "close": 50.78,
+          "volume": 194,
+        },
+      },
+      "2026-08-31": {
+        "AAPL": {
+          "close": 13.13,
+          "volume": 113,
+        },
+      },
+      "2026-09-04": {},
+      "2026-09-06": {
+        "AAPL": {
+          "close": 88.11,
+          "volume": 392,
+        },
+      },
+      "2026-09-07": {},
+      "2026-09-08": {},
+      "2026-09-09": {
+        "AAPL": {
+          "close": 62.96,
+          "volume": 360,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+    },
+    "docs": [
+      {
+        "history": [
+          {
+            "adjClose": 130.16,
+            "close": 137.01,
+            "date": "2026-08-26",
+            "volume": 512,
+          },
+          {
+            "close": 159.57,
+            "date": "2026-08-27",
+            "volume": 502,
+          },
+          {
+            "adjClose": 152.25,
+            "close": 160.26,
+            "date": "2026-09-02",
+            "volume": 823,
+          },
+        ],
+        "ticker": "AAPL",
+      },
+    ],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {},
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > healWalletCandleGaps: matriz semeada > heal completo #1002 1`] = `
+{
+  "args": [
+    [
+      {
+        "quantity": -1,
+        "ticker": "VOO",
+        "type": "ETF",
+      },
+      {
+        "ticker": "KNRI11",
+        "type": "FII",
+      },
+      {
+        "quantity": "__undef",
+        "ticker": "MXRF11",
+        "type": "__undef",
+      },
+    ],
+    "2026-09-08",
+    {
+      "maxDays": 8,
+    },
+  ],
+  "calls": [
+    [
+      "aggregate",
+      [
+        {
+          "$match": {
+            "ticker": {
+              "$in": [
+                "KNRI11",
+              ],
+            },
+          },
+        },
+        {
+          "$project": {
+            "dates": {
+              "$map": {
+                "as": "h",
+                "in": "$$h.date",
+                "input": {
+                  "$filter": {
+                    "as": "h",
+                    "cond": {
+                      "$and": [
+                        {
+                          "$gte": [
+                            "$$h.date",
+                            "2026-08-27",
+                          ],
+                        },
+                        {
+                          "$lte": [
+                            "$$h.date",
+                            "2026-09-08",
+                          ],
+                        },
+                      ],
+                    },
+                    "input": {
+                      "$ifNull": [
+                        "$history",
+                        [],
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            "ticker": 1,
+          },
+        },
+      ],
+    ],
+    [
+      "b3",
+      "2026-08-31",
+    ],
+    [
+      "b3",
+      "2026-09-08",
+    ],
+    [
+      "find",
+      {
+        "ticker": {
+          "$in": [
+            "KNRI11",
+          ],
+        },
+      },
+    ],
+    [
+      "updateOne",
+      {
+        "ticker": "KNRI11",
+      },
+      {
+        "$set": {
+          "history": [
+            {
+              "adjClose": 99.43,
+              "close": 99.43,
+              "date": "2026-09-08",
+              "volume": 38,
+            },
+          ],
+          "lastUpdated": "2026-09-09T02:59:00.000Z",
+        },
+      },
+      "__semOpcoes",
+    ],
+    [
+      "log.info",
+      "[DayCandle] Lacuna da janela fechada pelo fechamento oficial da B3",
+      {
+        "assets": [
+          "KNRI11: 2026-09-08",
+        ],
+        "throughDay": "2026-09-08",
+      },
+    ],
+  ],
+  "error": null,
+  "result": {
+    "__map": [
+      [
+        "KNRI11",
+        [
+          "2026-09-08",
+        ],
+      ],
+    ],
+  },
+  "state": {
+    "aggregateThrows": false,
+    "b3": {
+      "2026-08-26": {
+        "MXRF11": {
+          "close": 1.43,
+          "volume": 439,
+        },
+        "VOO": {
+          "close": 59.8,
+          "volume": 369,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-27": {
+        "VOO": {
+          "close": 62.16,
+          "volume": 20,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-28": {
+        "KNRI11": {
+          "close": 61.31,
+          "volume": 232,
+        },
+        "VOO": {
+          "close": 63.65,
+          "volume": 439,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-29": {
+        "VOO": {
+          "close": 98.06,
+          "volume": 255,
+        },
+      },
+      "2026-08-30": {
+        "KNRI11": {
+          "close": 85.27,
+          "volume": 448,
+        },
+        "VOO": {
+          "close": 83.91,
+          "volume": 227,
+        },
+      },
+      "2026-09-01": "throw",
+      "2026-09-02": {
+        "KNRI11": {
+          "close": 68.83,
+          "volume": 347,
+        },
+        "MXRF11": {
+          "close": 45.27,
+          "volume": 102,
+        },
+        "VOO": {
+          "close": 91.45,
+          "volume": 358,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-03": {
+        "MXRF11": {
+          "close": 57.46,
+          "volume": 263,
+        },
+      },
+      "2026-09-04": {
+        "KNRI11": {
+          "close": 18.84,
+          "volume": 20,
+        },
+        "MXRF11": {
+          "close": 75.7,
+          "volume": 14,
+        },
+        "VOO": {
+          "close": 99.89,
+          "volume": 26,
+        },
+      },
+      "2026-09-06": {
+        "MXRF11": {
+          "close": 32.54,
+          "volume": 284,
+        },
+        "VOO": {
+          "close": 97.86,
+          "volume": 482,
+        },
+      },
+      "2026-09-07": {
+        "KNRI11": {
+          "close": 5.37,
+          "volume": 325,
+        },
+        "MXRF11": {
+          "close": 40.66,
+          "volume": 427,
+        },
+      },
+      "2026-09-08": {
+        "KNRI11": {
+          "close": 99.43,
+          "volume": 38,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+    },
+    "docs": [
+      {
+        "history": [
+          {
+            "close": 121.16,
+            "date": "2026-08-27",
+            "volume": 187,
+          },
+          {
+            "adjClose": 65.55,
+            "close": 69,
+            "date": "2026-08-29",
+            "volume": 8,
+          },
+          {
+            "close": null,
+            "date": "2026-08-30",
+            "volume": 788,
+          },
+          {
+            "close": 100.96,
+            "date": "2026-08-31",
+            "volume": 916,
+          },
+          {
+            "close": 11.64,
+            "date": "2026-09-03",
+            "volume": 905,
+          },
+          {
+            "close": 160.05,
+            "date": "2026-09-04",
+            "volume": 985,
+          },
+          {
+            "close": 136.16,
+            "date": "2026-09-05",
+            "volume": 404,
+          },
+          {
+            "adjClose": 104.98,
+            "close": 110.5,
+            "date": "2026-09-06",
+            "volume": 948,
+          },
+        ],
+        "ticker": "MXRF11",
+      },
+    ],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [
+      {
+        "dates": [],
+        "ticker": "VOO",
+      },
+      {
+        "dates": [
+          "2026-08-28",
+          "2026-08-29",
+          "2026-09-01",
+          "2026-09-02",
+          "2026-09-03",
+          "2026-09-04",
+          "2026-09-05",
+          "2026-09-06",
+          "2026-09-07",
+        ],
+        "ticker": "KNRI11",
+      },
+      {
+        "dates": [
+          "2026-08-28",
+          "2026-08-29",
+          "2026-08-30",
+          "2026-09-01",
+          "2026-09-04",
+          "2026-09-05",
+          "2026-09-06",
+          "2026-09-07",
+          "2026-09-08",
+        ],
+        "ticker": "MXRF11",
+      },
+    ],
+    "updateThrows": [],
+    "yahoo": {},
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > healWalletCandleGaps: matriz semeada > heal completo #1003 1`] = `
+{
+  "args": [
+    [
+      {
+        "quantity": "__NaN",
+        "ticker": "O",
+        "type": "REIT",
+      },
+    ],
+    "2026-09-08",
+    {},
+  ],
+  "calls": [],
+  "error": null,
+  "result": {
+    "__map": [],
+  },
+  "state": {
+    "aggregateThrows": false,
+    "b3": {
+      "2026-08-26": {},
+      "2026-08-27": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-08-29": {},
+      "2026-08-30": {
+        "O": {
+          "close": 55.37,
+          "volume": 340,
+        },
+      },
+      "2026-09-01": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-03": {
+        "O": {
+          "close": 7.23,
+          "volume": 246,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-05": "throw",
+      "2026-09-06": {
+        "O": {
+          "close": 8.01,
+          "volume": 322,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-07": {
+        "O": {
+          "close": 48.25,
+          "volume": 222,
+        },
+      },
+      "2026-09-08": {
+        "O": {
+          "close": 85.93,
+          "volume": 189,
+        },
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+    },
+    "docs": [],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [],
+    "updateThrows": [],
+    "yahoo": {},
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > healWalletCandleGaps: matriz semeada > heal completo #1004 1`] = `
+{
+  "args": [
+    [
+      {
+        "quantity": "__undef",
+        "ticker": " ivvb11 ",
+        "type": "etf",
+      },
+    ],
+    "2026-09-04",
+    {
+      "maxDays": 3,
+    },
+  ],
+  "calls": [
+    [
+      "aggregate",
+      [
+        {
+          "$match": {
+            "ticker": {
+              "$in": [
+                "IVVB11",
+              ],
+            },
+          },
+        },
+        {
+          "$project": {
+            "dates": {
+              "$map": {
+                "as": "h",
+                "in": "$$h.date",
+                "input": {
+                  "$filter": {
+                    "as": "h",
+                    "cond": {
+                      "$and": [
+                        {
+                          "$gte": [
+                            "$$h.date",
+                            "2026-09-02",
+                          ],
+                        },
+                        {
+                          "$lte": [
+                            "$$h.date",
+                            "2026-09-04",
+                          ],
+                        },
+                      ],
+                    },
+                    "input": {
+                      "$ifNull": [
+                        "$history",
+                        [],
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            "ticker": 1,
+          },
+        },
+      ],
+    ],
+  ],
+  "error": null,
+  "result": {
+    "__map": [],
+  },
+  "state": {
+    "aggregateThrows": false,
+    "b3": {
+      "2026-08-26": "throw",
+      "2026-08-27": {
+        "IVVB11": {
+          "close": 62.55,
+          "volume": 160,
+        },
+      },
+      "2026-08-31": {
+        "IVVB11": {
+          "close": 14.77,
+          "volume": 411,
+        },
+      },
+      "2026-09-01": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-03": {
+        "IVVB11": {
+          "close": 90.47,
+          "volume": 481,
+        },
+      },
+      "2026-09-04": {
+        "ZZZZ3": {
+          "close": 1,
+          "volume": 1,
+        },
+      },
+      "2026-09-05": {
+        "IVVB11": {
+          "close": 6.61,
+          "volume": 94,
+        },
+      },
+      "2026-09-06": {},
+      "2026-09-08": {
+        "IVVB11": {
+          "close": 57.23,
+          "volume": 350,
+        },
+      },
+      "2026-09-09": {
+        "IVVB11": {
+          "close": 50.35,
+          "volume": 460,
+        },
+      },
+    },
+    "docs": [
+      {
+        "history": [
+          {
+            "adjClose": 9.28,
+            "close": 9.77,
+            "date": "2026-08-26",
+            "volume": 179,
+          },
+          {
+            "close": 63.52,
+            "date": "2026-08-28",
+            "volume": 931,
+          },
+          {
+            "adjClose": 134.51,
+            "close": 141.59,
+            "date": "2026-09-03",
+            "volume": 478,
+          },
+          {
+            "close": 182.22,
+            "date": "2026-09-05",
+            "volume": 809,
+          },
+          {
+            "close": 152.69,
+            "date": "2026-09-06",
+            "volume": 864,
+          },
+        ],
+        "ticker": "IVVB11",
+      },
+    ],
+    "findCount": 0,
+    "findThrows": [],
+    "rows": [
+      {
+        "dates": [
+          "2026-08-27",
+          "2026-08-29",
+          "2026-08-30",
+          "2026-09-01",
+          "2026-09-02",
+          "2026-09-03",
+          "2026-09-04",
+        ],
+        "ticker": "IVVB11",
+      },
+    ],
+    "updateThrows": [],
+    "yahoo": {},
+  },
+}
+`;
+
+exports[`caracterização — walletDayCandleService > healWalletCandleGaps: matriz semeada > heal hashes 1`] = `
+{
+  "1001": "21c1a8a4a78d6e3a",
+  "1002": "63a761886428a1e4",
+  "1003": "d0589dc96fe9395b",
+  "1004": "1cea6469de97f4e6",
+  "1005": "ea56ad617ef1a328",
+  "1006": "3439bd6b8ff4fc2a",
+  "1007": "282068c4e1e194ab",
+  "1008": "d60ddc0c204ff329",
+  "1009": "dad335c07f02be0d",
+  "1010": "b0c2e4ac18450a9f",
+  "1011": "0461f74bc32ef019",
+  "1012": "f6de2d4101b89cdd",
+  "1013": "8bd80e09cd3fb4e7",
+  "1014": "28e3ca5bc352d0dd",
+  "1015": "a9b200eb18c1ddd9",
+  "1016": "dc6fdc9031ed2bc5",
+  "1017": "941a3c91fde532aa",
+  "1018": "00e51f483bb7cbf1",
+  "1019": "1de8013b67094eea",
+  "1020": "87c999558766281a",
+  "1021": "71a377628704c403",
+  "1022": "d00796b1f8e05bc1",
+  "1023": "e33c22276b2a80fe",
+  "1024": "552871578f1d7334",
+  "1025": "60524cfea549a05f",
+  "1026": "3c0dfd83a2d884cc",
+  "1027": "3f6d56b9f2912506",
+  "1028": "bbd78c12b2ee1a92",
+  "1029": "54ea98ac2f58f981",
+  "1030": "9f101ba34c8d0e04",
+  "1031": "83903ee941c816c0",
+  "1032": "91697eaa62ac2ff1",
+  "1033": "3b87bc1695a34342",
+  "1034": "756f5989135020aa",
+  "1035": "bd92cccd9455ddf9",
+  "1036": "e36648228cd5bffb",
+  "1037": "fb81ad66254ca294",
+  "1038": "fbcfe312ff85e347",
+  "1039": "b4883996254261bf",
+  "1040": "f068a165d9ff5cde",
+  "1041": "ff83092e3b9b6d27",
+  "1042": "9260c0784ecbf1aa",
+  "1043": "f742f33461d5b9c8",
+  "1044": "03bd0d551c66eb19",
+  "1045": "8bcc0c3c9ac02214",
+  "1046": "c3ceccccddf48093",
+  "1047": "7ac03c8dbca2e736",
+  "1048": "15a560e9c1715238",
+  "1049": "b24c1f59342f17a9",
+  "1050": "37d386fdb8121ae4",
+  "1051": "437ef2f0724c3b8f",
+  "1052": "feb9315b44bf887a",
+  "1053": "7311743bcdcc6217",
+  "1054": "637a2b66dc1328e4",
+  "1055": "a0d83003efb5f67c",
+  "1056": "4b9d2e75c37eb4ca",
+  "1057": "62b0ed3f1a9b99c8",
+  "1058": "e55a8cfc813c318a",
+  "1059": "306f8e6b7dba8bf2",
+  "1060": "d722a208c493d2c2",
+  "1061": "900e5563a559c51f",
+  "1062": "f35a11c9f5b47d69",
+  "1063": "00e43fbc32a2e515",
+  "1064": "cd3a97a4602d905a",
+  "1065": "735e9631778b9efc",
+  "1066": "977dd4ee3d7fea64",
+  "1067": "faf5a38361acf11a",
+  "1068": "46cb550226a6f0bc",
+  "1069": "c2f20fbacc0993db",
+  "1070": "341907a389799380",
+  "1071": "6b7dfc1f5356466a",
+  "1072": "5c8bd319e9e481bd",
+  "1073": "b6ccbe3a15c00db4",
+  "1074": "544c25610d08d2ac",
+  "1075": "96cde9c0524154d1",
+  "1076": "5cb3ed69e0d66daa",
+  "1077": "6c8a552d72b67a2f",
+  "1078": "04e3bca35e222774",
+  "1079": "ae9abe18903fa0f9",
+  "1080": "565e161f8ed727d5",
+  "1081": "008a48134dc6b9ec",
+  "1082": "b86a955e78f2468a",
+  "1083": "816df352b3e9aa64",
+  "1084": "69ff474ae5a263e2",
+  "1085": "27e5b2fa62e19cc3",
+  "1086": "837f212faf7108c7",
+  "1087": "2ae379abf4da4f85",
+  "1088": "ed06440e9e40af88",
+  "1089": "58d67ce1397c3e0f",
+  "1090": "21f7110164c28cf7",
+  "1091": "ad6788c29b9da355",
+  "1092": "b7f4c1a2250cbbff",
+  "1093": "1bbcedaa191e7866",
+  "1094": "b175b0bc211d37f6",
+  "1095": "f425be9f861e3bad",
+  "1096": "a0d236708a84dab4",
+  "1097": "26a9e6699afb118f",
+  "1098": "c94dd605e4c84f7c",
+  "1099": "e03acf13c41707dd",
+  "1100": "25c8374cbf1d4841",
+  "1101": "28f575dfdb5a64fd",
+  "1102": "7d5bc0b09dda3590",
+  "1103": "ad0c414d85f220c3",
+  "1104": "183fd54285cf3cb2",
+  "1105": "709deca0e532b7fe",
+  "1106": "8356164f8a72e0e1",
+  "1107": "931d7ab4171fdfd5",
+  "1108": "9f966300f167c351",
+  "1109": "d7c1986c61b4f96d",
+  "1110": "5ba0074e85c1e153",
+  "1111": "9e6f073c2eb0423e",
+  "1112": "7a8fc1f52320824f",
+  "1113": "f3011f68d5aac9d3",
+  "1114": "179422645fe2da8b",
+  "1115": "c785c5a1a505fc16",
+  "1116": "a805e4f8ab82ef35",
+  "1117": "39b6393cda790eef",
+  "1118": "fb6e47e27099336d",
+  "1119": "a14177db2edaf6ab",
+  "1120": "3e0297d95def81bb",
+  "1121": "2b0acd5a51a63cb4",
+  "1122": "b25274ace5d18456",
+  "1123": "e67129df9073027a",
+  "1124": "816b2dcd913c5d4b",
+  "1125": "deabcffcd24a299d",
+  "1126": "5035246b54bce98c",
+  "1127": "49ab1ca77462bb25",
+  "1128": "229763b28087e880",
+  "1129": "59d3c1e8959a2940",
+  "1130": "973db3b1fa6ce81c",
+  "1131": "d0acbb9aefa0318c",
+  "1132": "81d373fd82b63fcd",
+  "1133": "031f67b8a4e40d9d",
+  "1134": "e2818fd0e35c0e12",
+  "1135": "0c5b6feeb7121d41",
+  "1136": "952bb881b617c79b",
+  "1137": "213f95caceac8823",
+  "1138": "d67d1fd656dda8d5",
+  "1139": "94c3b1184452dd44",
+  "1140": "0202f6d2d644300e",
+  "1141": "d0a3fb0e964b7b80",
+  "1142": "fcde0fb855919ef2",
+  "1143": "49273a59598537c5",
+  "1144": "722912c0c04ed6db",
+  "1145": "fcddc24081edec38",
+  "1146": "951423468ff4e404",
+  "1147": "b6939eb47992927a",
+  "1148": "ba19b58d7c6feb2d",
+  "1149": "87859836269085ad",
+  "1150": "a2e17f1a4ebe3977",
+  "1151": "1a6d207ab5452066",
+  "1152": "b8f0fcbb5e33b19c",
+  "1153": "6dff3a8db123b1d1",
+  "1154": "20b37cfb4bb1bf46",
+  "1155": "1579f957bd38be04",
+  "1156": "fb980fca277b0ea0",
+  "1157": "70b0f0893c7980e3",
+  "1158": "79f487bee83d64cc",
+  "1159": "6bc14de95bdfb283",
+  "1160": "b41b045b7e931efb",
+  "1161": "1f4bee59e283371f",
+  "1162": "a726bb7372a388b5",
+  "1163": "3228dfcde875eb1b",
+  "1164": "3b597ae462eb6971",
+  "1165": "b46ada233bdde0c0",
+  "1166": "9d3417b8e875d7fb",
+  "1167": "81b5ac168c8b505e",
+  "1168": "d67edb29dbc841f2",
+  "1169": "f201e884835231ca",
+  "1170": "d62059da5bc90c0e",
+  "1171": "885c5e0cf61d1bba",
+  "1172": "8cf0e64bd6a0b0ba",
+  "1173": "02eb642f2cea92db",
+  "1174": "dc04271d127cdc06",
+  "1175": "1ba898341e340b0b",
+  "1176": "f8f3ec6bbdce30f1",
+  "1177": "5b80da26e7aa1c71",
+  "1178": "74099220ae9a0c09",
+  "1179": "063799b1b3f3b09a",
+  "1180": "241782e9d73ab178",
+  "1181": "a2e9eafb865627f4",
+  "1182": "5cd9b4cd71c16cc0",
+  "1183": "e5e74fc1ab593d12",
+  "1184": "10b12d9528c749e1",
+  "1185": "1e93ae43d53d92e2",
+  "1186": "26adefd3e6e43512",
+  "1187": "8bb586047b10136a",
+  "1188": "4034e9450c2fc3dc",
+  "1189": "06680780d4bb82cd",
+  "1190": "8d861f7b235a1a19",
+  "1191": "bf7f0860c4aaab9d",
+  "1192": "a9b9787703c3e914",
+  "1193": "cea72315c9abf590",
+  "1194": "fe243e654546b2ee",
+  "1195": "08961231628c71c0",
+  "1196": "6b2609d49d3d2e87",
+  "1197": "d898f9af371a4631",
+  "1198": "a460e6e3d2541755",
+  "1199": "4c215e3e50535ed6",
+  "1200": "b68be4fa491f0458",
+  "1201": "e63c68241bcd726d",
+  "1202": "51246b83d9a60fd0",
+  "1203": "8a4242389ed20066",
+  "1204": "104ea59ccd596787",
+  "1205": "e47f82ec9f83b387",
+  "1206": "23670db106b42eab",
+  "1207": "8c9712f1ad04ebf3",
+  "1208": "ee7fc6973f9be6b1",
+  "1209": "65e676c396a39010",
+  "1210": "77b205ab4c71e40a",
+  "1211": "5afdbc17fafcd42e",
+  "1212": "196c7dcc48f5aed8",
+  "1213": "c601eb271139e30e",
+  "1214": "207ef2c491c8ea1d",
+  "1215": "00a5c19bcbeb1b5a",
+  "1216": "13700629ddc64b54",
+  "1217": "5cead458a76a7baf",
+  "1218": "02235b6f9b8a8ac9",
+  "1219": "1bae198f217633d0",
+  "1220": "7d9131d9581b79ae",
+  "1221": "083550f33e95ccc9",
+  "1222": "324c95a2a98e221f",
+  "1223": "a290676127f1aa5c",
+  "1224": "61cca184a32e14b2",
+  "1225": "060fe1927698f0db",
+  "1226": "1b235a5cffd6b037",
+  "1227": "3447117ea1a53c70",
+  "1228": "374e76815adce997",
+  "1229": "deba023fb67cea1e",
+  "1230": "30741e0e54d39e48",
+  "1231": "222f1a0687b3438f",
+  "1232": "702ffbffbd78e0dc",
+  "1233": "01ca07c28a750fa8",
+  "1234": "b02263cb4401c119",
+  "1235": "07cf45c190bb33bb",
+  "1236": "cae64e86364cadef",
+  "1237": "f97a113aa9871724",
+  "1238": "265e9f393b49afe8",
+  "1239": "6428956abfea7742",
+  "1240": "4c9f8feb1761010f",
+  "1241": "178313b0a3569951",
+  "1242": "4d9379f13abf55b8",
+  "1243": "7af5687465f57af7",
+  "1244": "2cee5a8d1c5319ae",
+  "1245": "612a1e203be924cf",
+  "1246": "7225235c11a1084c",
+  "1247": "37e7448e6405aa15",
+  "1248": "9a3c60023d95ac7a",
+  "1249": "55046a247173b17b",
+  "1250": "5b0907c5c6c434de",
+  "1251": "b6ef205c36098bbc",
+  "1252": "f73c8cc63e4f253f",
+  "1253": "500969d04b9ca2d2",
+  "1254": "87116e005ed38e24",
+  "1255": "bceb68efdc7ea536",
+  "1256": "eead4a60fc825449",
+  "1257": "f880dca425d7b554",
+  "1258": "8208c554f5295721",
+  "1259": "9a849c6ecb0d9797",
+  "1260": "507a313cb653b758",
+  "1261": "aedc624cf8971f21",
+  "1262": "8c48fd7a6961eeb9",
+  "1263": "abadbcf79c374c51",
+  "1264": "674934fc093279ce",
+  "1265": "837fa5f904d9d6e1",
+  "1266": "a2255d8e3bcaa07c",
+  "1267": "03e95d361e8d4d27",
+  "1268": "9143cae684a99040",
+  "1269": "0c49dabdd2a48de5",
+  "1270": "387fa2d4e44c5593",
+  "1271": "ebc67d6acfcf99f3",
+  "1272": "1c7e2cade2da4ff1",
+  "1273": "7ce6ddec386334c9",
+  "1274": "bb93d9198a9f4a5b",
+  "1275": "89e87b64dcd60cc3",
+  "1276": "f35c1d2d82793153",
+  "1277": "3f9bc0f77946c94b",
+  "1278": "28a049bb3540c514",
+  "1279": "df129ec710441544",
+  "1280": "cde7f054d65bb805",
+  "1281": "801a8ac8acd2d172",
+  "1282": "5e418bb59d17f7b6",
+  "1283": "27c96932ae07fc79",
+  "1284": "802d5d0ad617a67d",
+  "1285": "015b562a27405672",
+  "1286": "69485ec17c4d799b",
+  "1287": "5168e897ce9f2ff2",
+  "1288": "6b1767cd3e49b988",
+  "1289": "61d94f616c0a1192",
+  "1290": "f4e31c652b478925",
+  "1291": "5bcd712936c0faa5",
+  "1292": "ea3283f811cdf6eb",
+  "1293": "4e147dcc667d6504",
+  "1294": "324e283173b2853d",
+  "1295": "96a198e903b2d67a",
+  "1296": "d91111b4463a1cdd",
+  "1297": "27a8aa67b62fb1ac",
+  "1298": "2e7e25902c119f0b",
+  "1299": "f683f76ab4733251",
+  "1300": "524d921e0c998ba9",
+  "1301": "79bc1eadf78b918a",
+  "1302": "710ee9d32bed4050",
+  "1303": "ed6aeb60598b8454",
+  "1304": "1b1d16af0d87ef84",
+  "1305": "23ebc06bba699612",
+  "1306": "779f6ef02378afff",
+  "1307": "c65855bb4f5eeca7",
+  "1308": "02bcee5e81fb1a1b",
+  "1309": "4f18bb81c0b9a287",
+  "1310": "e817861ff6e89410",
+  "1311": "c5372e59ff0c7e5f",
+  "1312": "f1aebdabc47d72b0",
+  "1313": "511dbb2d5e8d96f1",
+  "1314": "e9cf7876eeec478c",
+  "1315": "bb26d300879f8b5b",
+  "1316": "65970f366bc20dd4",
+  "1317": "d5b0281e10fecc79",
+  "1318": "a69264a2c6584e90",
+  "1319": "76faded936c17e3c",
+  "1320": "9953e1ece834ebb1",
+}
+`;
