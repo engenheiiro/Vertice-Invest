@@ -1,0 +1,38 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`caracterização do ProfileIdentity > HTML de cada usuário × interação 1`] = `
+[
+  "semUsuario/nada: 614026c660d08e26",
+  "semUsuario/seletor: 614026c660d08e26",
+  "semUsuario/salvandoBanner: 614026c660d08e26",
+  "semUsuario/removendoFoto: 614026c660d08e26",
+  "pro/nada: c05c6c20c235487e",
+  "pro/seletor: e8f3163e96e1730b",
+  "pro/salvandoBanner: 75b0ace2c0586ebc",
+  "pro/removendoFoto: c05c6c20c235487e",
+  "guest/nada: 57ba8e2ee1b5f96c",
+  "guest/seletor: de4103b4f0bb3b53",
+  "guest/salvandoBanner: c6f3c367c050c9dd",
+  "guest/removendoFoto: 57ba8e2ee1b5f96c",
+  "essential/nada: c4befc03ca371245",
+  "essential/seletor: 6528f046587f3e63",
+  "essential/salvandoBanner: e9fa1e1be5c3a2a5",
+  "essential/removendoFoto: c4befc03ca371245",
+  "elite/nada: 0762ecb496e6891a",
+  "elite/seletor: 08648e9c67f61d30",
+  "elite/salvandoBanner: c0c2bfa512eeee31",
+  "elite/removendoFoto: 0762ecb496e6891a",
+  "black/nada: 2d27a820d557a67a",
+  "black/seletor: ec3a9a1e50fe9918",
+  "black/salvandoBanner: 961aeda248973c46",
+  "black/removendoFoto: 253f80f382438715",
+  "semPlano/nada: 8c3333840aed8456",
+  "semPlano/seletor: a8996a6ddfffe140",
+  "semPlano/salvandoBanner: bf8a1d8cab130e85",
+  "semPlano/removendoFoto: 65773ec50fb5a8ad",
+  "presetInvalido/nada: c05c6c20c235487e",
+  "presetInvalido/seletor: 07c2dcde5b433278",
+  "presetInvalido/salvandoBanner: 8983efcdb1e9270d",
+  "presetInvalido/removendoFoto: c05c6c20c235487e",
+]
+`;
