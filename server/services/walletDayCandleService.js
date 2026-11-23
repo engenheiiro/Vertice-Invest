@@ -11,7 +11,7 @@ import {
     missingBusinessDays,
 } from './b3HistoryFallback.js';
 import { logDayCandleOutcome, logGapHealOutcome, recordDayCandleChain } from './candles/walletCandleReport.js';
-import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
+import { historyStorageKey, isStorableCandleDate, mergeCandleSeries } from '../utils/assetHistory.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { ASSET_HISTORY_MAX_POINTS } from '../config/financialConstants.js';
 
@@ -68,13 +68,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * que faz pergunta. Chamada com uma série que TEM o dia, devolve o motivo
  * genérico do fim da lista, que aí seria mentira.
  */
-export const describeMiss = (dayStr, payload) => {
+export const describeMiss = (dayStr, payload, type) => {
     if (!payload) return 'sem resposta da fonte';
     const { candles = [], emptyDates = [] } = payload;
     if (emptyDates.includes(dayStr)) return 'dia publicado VAZIO pela fonte (close nulo)';
     if (candles.length === 0) return 'sem série na fonte';
     const latest = candles[candles.length - 1]?.date;
     if (latest && latest < dayStr) return `fonte ainda sem o dia (última: ${latest})`;
+    // A fonte trouxe uma barra no dia, mas a classe não negocia nele (fim de semana).
+    if (type && !isStorableCandleDate(dayStr, type)) return 'dia sem pregão para a classe (candle da fonte recusado)';
     return 'dia ausente na série da fonte';
 };
 
@@ -278,11 +280,13 @@ const fetchOneDayCandle = async (storageKey, { ticker, type }, ctx) => {
         // acaso do fuso UTC às 23:59 BRT.
         const payload = await externalMarketService.getFullHistoryDetailed(ticker, type, dayStr);
         const series = payload?.candles;
-        const dayCandle = Array.isArray(series)
+        // Candle que a mescla recusaria (fim de semana de classe só de dia útil)
+        // não é fechamento: o snapshot usaria um close que nunca foi gravado.
+        const dayCandle = Array.isArray(series) && isStorableCandleDate(dayStr, type)
             ? series.find((c) => c?.date === dayStr && c.close > 0)
             : undefined;
         if (!dayCandle) { // sem série, sem negócio no dia ou fonte atrasada → fallback
-            ctx.unresolved.push({ ticker, storageKey, type, reason: describeMiss(dayStr, payload) });
+            ctx.unresolved.push({ ticker, storageKey, type, reason: describeMiss(dayStr, payload, type) });
             return;
         }
 

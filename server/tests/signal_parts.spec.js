@@ -64,12 +64,13 @@ describe('scanner', () => {
       _grahamUrgency: () => 'CRITICAL',
     };
     const scan = newScanState();
-    const asset = { ticker: 'X', type: 'STOCK', lastPrice: 10, pl: 4, p_vp: 0.5, roe: '7' };
-    scanAsset(engine, asset, new Map([['X', [{ close: 10 }]]]), {}, scan);
+    const asset = { ticker: 'X', type: 'STOCK', lastPrice: 10, pl: 4, p_vp: 0.5, roe: 7 };
+    const quebra = { ...engine, _grahamUrgency: () => { throw new Error('falha no meio'); } };
+    scanAsset(quebra, asset, new Map([['X', [{ close: 10 }]]]), {}, scan);
     expect(scan.scannedTickers.has('X')).toBe(false);
     expect(scan.upsertOps).toEqual([]);
 
-    scanAsset(engine, { ...asset, roe: 7 }, new Map([['X', [{ close: 10 }]]]), {}, scan);
+    scanAsset(engine, asset, new Map([['X', [{ close: 10 }]]]), {}, scan);
     expect(scan.scannedTickers.has('X')).toBe(true);
     expect(scan.upsertOps[0].updateOne.filter).toEqual({ ticker: 'X', type: 'DEEP_VALUE', status: 'ACTIVE' });
     expect(scan.upsertOps[0].updateOne.update.$setOnInsert.timestamp).toEqual(NOW);

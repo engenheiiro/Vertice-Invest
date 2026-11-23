@@ -79,8 +79,10 @@ function signalOutcome(ctx, type, set, riskProfile) {
     };
 }
 
-const correlationOk = (engine, ctx) =>
-    engine.isValidCorrelation(ctx.asset.ticker, 'RSI_OVERSOLD', ctx.macroContext, ctx.asset.type).valid;
+// Cada sinal passa pelo filtro macro com o PRÓPRIO tipo: o veto de dia de crash
+// isenta só o RSI_OVERSOLD.
+const correlationOk = (engine, ctx, type) =>
+    engine.isValidCorrelation(ctx.asset.ticker, type, ctx.macroContext, ctx.asset.type).valid;
 
 // CHECK 1: RSI OVERSOLD (GOLD only: RSI < 30 + reversão + volume).
 function rsiOversoldCheck(engine, ctx) {
@@ -91,7 +93,7 @@ function rsiOversoldCheck(engine, ctx) {
     const isReverting = closes.length >= 3 && closes[0] > closes[1];
     if (!(rsi !== null && rsi < 30 && isReverting && ctx.hasVolumeConfirmation)) return null;
     if (isTrendBlocked(asset, ctx.currentPrice)) return BLOCKED;
-    if (!correlationOk(engine, ctx)) return BLOCKED;
+    if (!correlationOk(engine, ctx, 'RSI_OVERSOLD')) return BLOCKED;
 
     const urgencyLevel = engine._rsiUrgency(rsi);
     const message = `${rsi < 20 ? 'Sobrevenda Extrema' : 'Sobrevenda Técnica'}: RSI em ${rsi.toFixed(0)}. Anomalia estatística detectada.`;
@@ -106,7 +108,7 @@ function divergenceCheck(engine, ctx) {
     const divergence = engine.detectBullishDivergence(ctx.closes, 14);
     const trendBlock = isTrendBlocked(asset, ctx.currentPrice);
     if (!divergence || trendBlock) return null;
-    if (!correlationOk(engine, ctx)) return BLOCKED;
+    if (!correlationOk(engine, ctx, 'BULLISH_DIVERGENCE')) return BLOCKED;
 
     const urgencyLevel = engine._divergenceUrgency(divergence.rsiAtLow);
     const rsiPair = `${divergence.rsiAtLow.toFixed(0)} vs ${divergence.priorRsiLow.toFixed(0)}`;
@@ -115,21 +117,30 @@ function divergenceCheck(engine, ctx) {
         { quality: 'GOLD', value: divergence.rsiAtLow, message, urgencyLevel, volumeRatio: ctx.volumeRatio }, ctx.riskProfile);
 }
 
-function isDeepValueCandidate(asset, currentPrice) {
+// `roe` gravado em texto: vale o número só se o texto for numérico finito;
+// qualquer outro texto é ROE ausente.
+function readRoe(roe) {
+    if (typeof roe !== 'string') return roe;
+    const n = roe.trim() === '' ? NaN : Number(roe);
+    return Number.isFinite(n) ? n : null;
+}
+
+function isDeepValueCandidate(asset, roe, currentPrice) {
     const inDowntrend = asset.sma200 > 0 && currentPrice < asset.sma200;
-    return asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK' && asset.roe > 0 && !inDowntrend;
+    return asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK' && roe > 0 && !inDowntrend;
 }
 
 // CHECK 2: DEEP VALUE Graham (GOLD only: desconto < 70% + ROE > 0 + sem downtrend).
 function deepValueCheck(engine, ctx) {
     const { asset, currentPrice } = ctx;
-    if (!isDeepValueCandidate(asset, currentPrice)) return null;
+    const roe = readRoe(asset.roe);
+    if (!isDeepValueCandidate(asset, roe, currentPrice)) return null;
     const grahamNumber = Math.sqrt(22.5 * (currentPrice / asset.pl) * (currentPrice / asset.p_vp));
     const discount = currentPrice / grahamNumber;
     if (!(grahamNumber > 0 && discount < 0.70)) return null;
 
     const urgencyLevel = engine._grahamUrgency(discount);
-    const message = `Deep Value: Negociando a ${(discount * 100).toFixed(0)}% do Valor Intrínseco. ROE: ${asset.roe?.toFixed(1)}%.`;
+    const message = `Deep Value: Negociando a ${(discount * 100).toFixed(0)}% do Valor Intrínseco. ROE: ${roe.toFixed(1)}%.`;
     return signalOutcome(ctx, 'DEEP_VALUE', { quality: 'GOLD', value: grahamNumber, message, urgencyLevel }, 'DEFENSIVE');
 }
 
