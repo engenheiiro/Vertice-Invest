@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`WalletSummary — caracterização > base 1`] = `"dd8bb2e08b1788e5"`;
+
+exports[`WalletSummary — caracterização > campos ausentes 1`] = `"af0b1694968a72ff"`;
+
+exports[`WalletSummary — caracterização > carregando 1`] = `"7cf39f7c6a4320a2"`;
+
+exports[`WalletSummary — caracterização > dia zerado 1`] = `"6c05c5eea3390fe1"`;
+
+exports[`WalletSummary — caracterização > estimado com sharpe 1`] = `"9ae6edba75c03710"`;
+
+exports[`WalletSummary — caracterização > link público 1`] = `"a25acfa157ce3580"`;
+
+exports[`WalletSummary — caracterização > privacidade 1`] = `"db9529031fdd8592"`;
+
+exports[`WalletSummary — caracterização > sem aporte 1`] = `"7ef6043fc4e19aa5"`;
+
+exports[`WalletSummary — caracterização > tooltip aberto em portal e o modal do dia 1`] = `"651808d9443ce9b3"`;
+
+exports[`WalletSummary — caracterização > tudo negativo 1`] = `"b52ce45dd74d45ca"`;
+
+exports[`WalletSummary — caracterização > valores travados 1`] = `"2e050dec14b17bd9"`;

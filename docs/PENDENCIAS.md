@@ -5,13 +5,13 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-22) Maior complexidade agora é 45.** Já quebrados: perfil
+- **(dono, 2026-11-23) Maior complexidade agora é 44.** Já quebrados: perfil
   FII do scoring e `auditDividendPaymentSources.js` (73), `dataSourceStatus.js`
   (60), Indicators e AuditDetailModal (53), o gate `isEligibleForDefensive`
   (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
   (49), EquitySummary, CreateGoalModal e WalletContext (48), DataSourcesPanel e
-  `rebuildUserHistory` (46). O teto passa a ser `WalletSummary.tsx` (45),
-  seguido de `TopPicksCard.tsx` e `Research.tsx` (44) e de `ProfileIdentity.tsx`
+  `rebuildUserHistory` (46), WalletSummary (45). O teto passa a ser
+  `TopPicksCard.tsx` e `Research.tsx` (44), seguidos de `ProfileIdentity.tsx`
   e `_applyDayTransactions` do `financialService.js` (43).
 - **(dono, 2026-11-23) Último 5,75 vive no resolvedor de câmbio.** Telas e
   gravações já não inventam câmbio (`loadDisplayUsdRate`: macro → último candle
@@ -49,7 +49,8 @@ mesmo commit que o resolve.
   travado em `createGoalForm.test.ts`.
 - **Direção do resultado aparece no modo privacidade (22/11/2026).** O sinal
   ("+•••%") e a cor verde/vermelha seguem visíveis com os valores mascarados;
-  o múltiplo bruto, que reconstituía o patrimônio, passou a ser mascarado.
+  o múltiplo bruto, que reconstituía o patrimônio, passou a ser mascarado —
+  no Terminal e, desde 23/11, também no resumo da aba Carteira.
 - **`getMarketData`: `metrics.price` fica cru (22/11/2026).** Sem cotação ele
   sai `undefined`, que é o estado honesto (regra 13: nunca número inventado
   como real). O `asset.lastPrice || 0` do topo do item é o desvio, mas a tela

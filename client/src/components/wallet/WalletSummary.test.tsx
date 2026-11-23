@@ -35,7 +35,7 @@ vi.mock('../../hooks/useCountUp', () => ({ useCountUp: (value: number) => value 
 
 import { WalletSummary } from './WalletSummary';
 
-afterEach(() => { walletState.isReadOnly = false; });
+afterEach(() => { walletState.isReadOnly = false; walletState.isPrivacyMode = false; });
 
 describe('WalletSummary', () => {
     it('explica a Variação Hoje com texto curto e simples', () => {
@@ -78,6 +78,16 @@ describe('WalletSummary', () => {
         render(<WalletSummary />);
 
         expect(screen.queryByRole('button', { name: /variação de hoje/i })).not.toBeInTheDocument();
+    });
+
+    // O múltiplo bruto (Aplicado + Resultado ÷ Aplicado) saía em claro no modo
+    // privacidade: com ele e qualquer valor, o patrimônio se reconstituía.
+    it('modo privacidade mascara o múltiplo bruto junto com os valores', () => {
+        walletState.isPrivacyMode = true;
+        render(<WalletSummary />);
+
+        expect(screen.queryByText(/1\.01x/)).not.toBeInTheDocument();
+        expect(screen.getByText(/•••x/)).toBeInTheDocument();
     });
 
     it('usa a mesma identidade canônica do gráfico para o saldo total', () => {
