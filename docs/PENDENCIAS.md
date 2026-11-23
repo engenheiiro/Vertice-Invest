@@ -5,13 +5,25 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-22) Maior complexidade agora é 48.** Já quebrados: perfil
+- **(dono, 2026-11-22) Maior complexidade agora é 46.** Já quebrados: perfil
   FII do scoring e `auditDividendPaymentSources.js` (73), `dataSourceStatus.js`
   (60), Indicators e AuditDetailModal (53), o gate `isEligibleForDefensive`
-  (52), PerformanceOverview e WalletView (51) e AssetDetailModal da Pesquisa
-  (49). O teto passa a ser `EquitySummary.tsx`, `CreateGoalModal.tsx` e o
-  `WalletContext.tsx` (48), seguidos de `DataSourcesPanel.tsx` e
-  `financialService.js` (46).
+  (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
+  (49), EquitySummary, CreateGoalModal e WalletContext (48). O teto passa a ser
+  `DataSourcesPanel.tsx` e `financialService.js` (46).
+- **(dono, 2026-11-22) Achados das refatorações que pedem decisão** (o
+  comportamento foi congelado como estava, cada um com teste):
+  - **Modo privacidade vaza o múltiplo bruto** no Dashboard (EquitySummary):
+    "1.01x" aparece com os valores mascarados, e o badge de capital mostra
+    "+•••%".
+  - **Demo mode ainda lê da API**: no WalletContext, desempenho, proventos e
+    fluxo de caixa chamam `walletService` sem id de carteira quando
+    `isDemoMode` (só leitura; as mutações estão bloqueadas). Teste "dataSource
+    NÃO é bloqueado no demo".
+  - **Prazo da meta em UTC** (CreateGoalModal, edição): o
+    `toISOString().slice(0, 10)` pode mostrar o dia anterior em Brasília.
+  - **Botões de ícone da meta sem nome acessível** (axe `button-name`,
+    desligado só nesse teste; correção de uma linha com `aria-label`).
 - **(dono, 2026-11-22) Estranhezas mantidas de propósito nas refatorações de
   tela** (o comportamento foi congelado como estava; cada uma é decisão
   própria):
