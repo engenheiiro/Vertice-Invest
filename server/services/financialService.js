@@ -14,7 +14,7 @@ import { marketDataService } from './marketDataService.js';
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js'; // (M9)
 import { externalMarketService } from './externalMarketService.js';
 import { DERIVED_EXPIRY_MS, DERIVED_RECONCILE_WINDOW_MS } from '../utils/dividendGap.js';
-import { safeFloat, safeCurrency, safeAdd, safeMult, safeDiv, calculateDailyDietz, safeValue, addQty, QUANTITY_EPSILON, resolveCurrentCdiRate } from '../utils/mathUtils.js';
+import { safeCurrency, safeAdd, safeMult, safeDiv, safeValue, addQty, QUANTITY_EPSILON } from '../utils/mathUtils.js';
 import { HISTORICAL_CDI_RATES } from '../config/financialConstants.js';
 import { isBusinessDay, toDateKey as toDateKeyUtil, startOfDay } from '../utils/dateUtils.js';
 import { normalizeToUtcDay, resolvePaymentDate as resolvePaymentDateUtil } from '../utils/dividendPaymentDate.js';
@@ -22,11 +22,15 @@ import { fillPaymentDatesForTicker } from './dividendPaymentDateService.js';
 import { isDollarized as isDollarizedAsset, resolveTransactionCurrency } from '../utils/assetCurrency.js';
 import logger from '../config/logger.js';
 import { dropUntradableCandles, historyStorageKey } from '../utils/assetHistory.js';
-import { brazilDayKey, isTwrrReturnAnomalous, isValidDayKey, snapshotInstantForDay } from '../utils/walletSnapshot.js';
+import { brazilDayKey, isValidDayKey } from '../utils/walletSnapshot.js';
 import { loadUsdRateResolver, effectiveFxRate, positionCostBRL } from '../utils/fxRate.js';
 import { markLotsToMarket, findTreasuryPu, accrueLotsValue } from '../utils/fixedIncome.js';
 import { loadCdiCurve, annualRateFromDailyFactor } from '../utils/cdiCurve.js';
 import { loadTreasuryPricing, EMPTY_TREASURY_PRICING } from './treasuryPriceService.js';
+import {
+    buildRebuildSnapshot, cdiFactorForDay, dayDividendCash, describeCoverageGaps, nextQuota,
+    rebuildWindow, requiredFromByTicker, resolveRebuildRates,
+} from '../utils/rebuildHistoryRules.js';
 import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 import {
     resolveNativeCurrency, buildFxRateOf, replayPositionLedger, stampFxRates, createPositionAsset, healAllocationClass, applyLedgerToAsset,
@@ -736,6 +740,99 @@ export const financialService = {
         });
     },
 
+    /**
+     * Contexto do rebuild: metadados das posições, séries de preço, proventos,
+     * câmbio e PU — cada fonte isolada num helper testável.
+     */
+    async _loadRebuildContext(userId, walletId, txs, currentUsdRate) {
+        const userAssets = await UserAsset.find({ user: userId, wallet: walletId });
+        const assetMetadataMap = new Map(userAssets.map(ua => [ua.ticker, ua]));
+        const requiredFrom = requiredFromByTicker(txs, assetMetadataMap);
+        const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
+        const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
+        const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFrom);
+        const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
+        // Mesma regra de moeda do acumulado (lançamento + posição): um ativo em
+        // dólar já vendido não pode ser convertido lá e ficar em real aqui.
+        const dividendFx = await this._dividendFxResolver(
+            [...txs.filter(t => t.currency === 'USD'), ...userAssets],
+            getUsdRateForDate,
+        );
+        // Séries de PU: o histórico precisa marcar o título público pela mesma
+        // régua do KPI ao vivo e do snapshot, senão a curva de patrimônio dá um
+        // degrau no dia em que os dois caminhos se encontram.
+        const treasuryPricing = await loadTreasuryPricing(userAssets);
+        return { assetMetadataMap, requiredFrom, getUsdRateForDate, priceCacheMap, dividendDateMap, dividendFx, treasuryPricing };
+    },
+
+    /**
+     * Fail-closed: sem série que cubra a posição, ABORTA em vez de gravar
+     * patrimônio marcado no custo. Os chamadores (walletController,
+     * backfillUserGap) tratam o rebuild como best-effort — falhar aqui
+     * preserva o histórico atual, que é sempre melhor que substituí-lo por
+     * uma reta no preço de compra.
+     */
+    _assertPriceCoverage(ctx, { userId, walletId, allowSparseHistory }) {
+        const coverageGaps = this.findPriceCoverageGaps(ctx.priceCacheMap, ctx.requiredFrom);
+        if (coverageGaps.length === 0) return;
+        logger.error('❌ [History] Rebuild abortado: série de preços não cobre a posição.', {
+            source: 'rebuildUserHistory', userId: String(userId), walletId: String(walletId), gaps: coverageGaps,
+        });
+        if (!allowSparseHistory) {
+            throw new Error(`Histórico de preços insuficiente para reconstruir a carteira: ${describeCoverageGaps(coverageGaps)}.`);
+        }
+    },
+
+    /** Um dia do rebuild: proventos → movimentações → juros da RF → marcação → cota. */
+    _rebuildDay(ctx, state, cursor) {
+        const cursorIso = this.toDateKey(cursor);
+        const cdiDailyFactor = cdiFactorForDay(ctx.dailyFactorsMap, ctx.cdiFactorsCacheFallback, cursor, cursorIso);
+
+        // 1) Proventos do dia, sobre a posição de ANTES das movimentações do dia:
+        //    no dia-ex quem compra não tem direito e quem vende tem (ver
+        //    `accrueDividendsByTicker`). Por isso vem antes do passo 2 — na ordem
+        //    inversa, compra no dia-ex recebia e venda no dia-ex perdia o provento.
+        //    Além de acumular o total exibido, o caixa é creditado na cota como
+        //    RENDA — senão a queda de preço do dia-ex vira prejuízo-fantasma
+        //    (vazamento de proventos: o adjClose da fonte BR vem SEM ajuste, então a
+        //    cota precisa do provento explícito).
+        const dividendCash = dayDividendCash(ctx.dividendDateMap.get(cursorIso) || [], state.portfolio, ctx.dividendFx, cursorIso);
+        state.accumulatedDividends += dividendCash;
+
+        // 2) Movimentações do dia → posição + fluxo de caixa ajustado.
+        const dayTx = this._applyDayTransactions({
+            txs: ctx.txs, txIndex: state.txIndex, cursorIso, portfolio: state.portfolio, fixedIncomeState: state.fixedIncomeState,
+            assetMetadataMap: ctx.assetMetadataMap, priceCacheMap: ctx.priceCacheMap, lastKnownPrices: state.lastKnownPrices,
+            getUsdRateForDate: ctx.getUsdRateForDate, treasuryPricing: ctx.treasuryPricing,
+        });
+        state.txIndex = dayTx.txIndex;
+
+        // 3) Juros da renda fixa do dia.
+        this._accrueDailyFixedIncome({
+            cursor, cursorIso, portfolio: state.portfolio, fixedIncomeState: state.fixedIncomeState,
+            dailyFactorsMap: ctx.dailyFactorsMap, cdiDailyFactor, cdiCurve: ctx.cdiCurve, ...ctx.rates,
+        });
+
+        // 4) Marcação a mercado.
+        const { totalEquityNominal, totalInvested, hasPosition } = this._markPortfolioToMarket({
+            cursorIso, portfolio: state.portfolio, fixedIncomeState: state.fixedIncomeState, assetMetadataMap: ctx.assetMetadataMap,
+            priceCacheMap: ctx.priceCacheMap, lastKnownPrices: state.lastKnownPrices, usdRateForDay: ctx.getUsdRateForDate(cursorIso),
+        });
+
+        // 5) Cota TWRR (Modified Dietz diário) em espaço NOMINAL + provento explícito.
+        state.quota = nextQuota(state.quota, {
+            previousEquity: state.previousEquity, equity: totalEquityNominal, flow: dayTx.dayFlowNominal, dividendCash,
+        });
+
+        if (isBusinessDay(cursor) && (hasPosition || totalInvested > 0 || state.accumulatedDividends > 0)) {
+            state.snapshots.push(buildRebuildSnapshot({
+                userId: ctx.userId, walletId: ctx.walletId, cursorIso, source: ctx.source, calculatedAt: ctx.calculatedAt,
+                equity: totalEquityNominal, invested: totalInvested, dividends: state.accumulatedDividends, quota: state.quota,
+            }));
+        }
+        state.previousEquity = totalEquityNominal;
+    },
+
     async rebuildUserHistory(userId, walletId, options = {}) {
         const startTime = Date.now();
         const calculatedAt = new Date();
@@ -766,177 +863,33 @@ export const financialService = {
                 return [];
             }
 
-            const sysConfig = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
-            // Mesma cadeia do card e do snapshot (CDI → Selic → fallback).
-            const currentCdiRate = resolveCurrentCdiRate(sysConfig, DEFAULT_SELIC_FALLBACK);
-            const currentIpcaRate = (sysConfig?.ipca && sysConfig.ipca > 0) ? sysConfig.ipca : 4.5;
-            const currentSelicRate = (sysConfig?.selic && sysConfig.selic > 0) ? sysConfig.selic : undefined;
-            const currentUsdRate = sysConfig?.dollar || 5.75;
+            const { currentUsdRate, ...rates } = resolveRebuildRates(await SystemConfig.findOne({ key: 'MACRO_INDICATORS' }));
+            const loaded = await this._loadRebuildContext(userId, walletId, txs, currentUsdRate);
+            this._assertPriceCoverage(loaded, { userId, walletId, allowSparseHistory });
 
-            const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
-
-            const assetMetadataMap = new Map();
-            const userAssets = await UserAsset.find({ user: userId, wallet: walletId });
-            userAssets.forEach(ua => assetMetadataMap.set(ua.ticker, ua));
-
-            // Primeiro dia em que cada ticker entrou na carteira — é a profundidade
-            // de série que o rebuild exige para marcar a mercado sem inventar preço.
-            const requiredFromByTicker = new Map();
-            for (const tx of txs) {
-                const meta = assetMetadataMap.get(tx.ticker);
-                if (meta?.type === 'FIXED_INCOME' || meta?.type === 'CASH' || tx.ticker === 'RESERVA') continue;
-                const dayKey = this.toDateKey(tx.date);
-                const known = requiredFromByTicker.get(tx.ticker);
-                if (!known || dayKey < known) requiredFromByTicker.set(tx.ticker, dayKey);
-            }
-
-            // Carregamento de contexto (cada fonte isolada num helper testável).
-            const getUsdRateForDate = await this._loadUsdRateResolver(currentUsdRate);
-            const priceCacheMap = await this._loadPriceCacheMap(uniqueTickers, assetMetadataMap, requiredFromByTicker);
-            const dividendDateMap = await this._loadDividendDateMap(uniqueTickers);
-            // Mesma regra de moeda do acumulado (lançamento + posição): um ativo em
-            // dólar já vendido não pode ser convertido lá e ficar em real aqui.
-            const dividendFx = await this._dividendFxResolver(
-                [...txs.filter(t => t.currency === 'USD'), ...userAssets],
-                getUsdRateForDate,
-            );
-            // Séries de PU: o histórico precisa marcar o título público pela mesma
-            // régua do KPI ao vivo e do snapshot, senão a curva de patrimônio dá um
-            // degrau no dia em que os dois caminhos se encontram.
-            const treasuryPricing = await loadTreasuryPricing(userAssets);
-
-            // Fail-closed: sem série que cubra a posição, ABORTA em vez de gravar
-            // patrimônio marcado no custo. Os chamadores (walletController,
-            // backfillUserGap) tratam o rebuild como best-effort — falhar aqui
-            // preserva o histórico atual, que é sempre melhor que substituí-lo por
-            // uma reta no preço de compra.
-            const coverageGaps = this.findPriceCoverageGaps(priceCacheMap, requiredFromByTicker);
-            if (coverageGaps.length > 0) {
-                const detail = coverageGaps
-                    .map(g => `${g.ticker} (posição desde ${g.requiredFrom}, série desde ${g.availableFrom || 'nenhuma'})`)
-                    .join('; ');
-                logger.error('❌ [History] Rebuild abortado: série de preços não cobre a posição.', {
-                    source: 'rebuildUserHistory', userId: String(userId), walletId: String(walletId), gaps: coverageGaps,
-                });
-                if (!allowSparseHistory) {
-                    throw new Error(`Histórico de preços insuficiente para reconstruir a carteira: ${detail}.`);
-                }
-            }
-
-            // Rebuild nunca antecipa o snapshot do dia corrente. O cron das 23:59
-            // é o único dono desse fechamento; durante o dia, KPI/gráfico usam o
-            // ponto live com os fluxos pendentes.
-            const currentDayKey = brazilDayKey(new Date());
-            const defaultEnd = new Date(`${currentDayKey}T12:00:00.000Z`);
-            defaultEnd.setUTCDate(defaultEnd.getUTCDate() - 1);
-            const endDayKey = throughDayKey || defaultEnd.toISOString().slice(0, 10);
-            const startDate = new Date(`${this.toDateKey(txs[0].date)}T12:00:00.000Z`);
-            const today = new Date(`${endDayKey}T12:00:00.000Z`);
-
-            const { dailyFactorsMap, cdiFactorsCacheFallback } = await this._loadCdiFactors(startDate, today, currentCdiRate);
+            const { startDate, today } = rebuildWindow(txs[0].date, throughDayKey, brazilDayKey(new Date()));
+            const { dailyFactorsMap, cdiFactorsCacheFallback } = await this._loadCdiFactors(startDate, today, rates.currentCdiRate);
             // Curva histórica do CDI: a MESMA que o KPI ao vivo e o snapshot diário
             // consultam, para que os três caminhos rendam pela taxa vigente em cada dia.
-            const cdiCurve = await loadCdiCurve({ since: startDate, currentRate: currentCdiRate });
+            const cdiCurve = await loadCdiCurve({ since: startDate, currentRate: rates.currentCdiRate });
 
+            const ctx = { ...loaded, txs, rates, dailyFactorsMap, cdiFactorsCacheFallback, cdiCurve, userId, walletId, source, calculatedAt };
             // Estado mutável acumulado ao longo do loop diário.
-            const snapshots = [];
-            const portfolio = {};
-            const fixedIncomeState = {};
-            const lastKnownPrices = {};
-            let accumulatedDividends = 0;
-            let currentQuota = 100.0;
-            let previousEquityNominal = 0;
-            let txIndex = 0;
-
-            let cursor = new Date(startDate);
-            while (cursor <= today) {
-                const cursorIso = this.toDateKey(cursor);
-                let cdiDailyFactor = dailyFactorsMap.get(cursorIso);
-                if (!cdiDailyFactor) {
-                    cdiDailyFactor = cdiFactorsCacheFallback[cursor.getFullYear()] || 1.0003;
-                }
-
-                // 1) Proventos do dia, sobre a posição de ANTES das movimentações
-                //    do dia: no dia-ex quem compra não tem direito e quem vende tem
-                //    (ver `accrueDividendsByTicker`). Por isso vem antes do passo 2 —
-                //    na ordem inversa, compra no dia-ex recebia e venda no dia-ex
-                //    perdia o provento. Além de acumular o total exibido, o caixa é
-                //    creditado na cota como RENDA — senão a queda de preço do dia-ex
-                //    vira prejuízo-fantasma (vazamento de proventos: o adjClose da
-                //    fonte BR vem SEM ajuste, então a cota precisa do provento explícito).
-                const dayDividends = dividendDateMap.get(cursorIso) || [];
-                let dayDividendCash = 0;
-                for (const div of dayDividends) {
-                    if (portfolio[div.ticker] && portfolio[div.ticker].qty > 0) {
-                        // Provento em dólar entra em reais pelo câmbio do dia-ex.
-                        dayDividendCash += (portfolio[div.ticker].qty * div.amount * dividendFx(div.ticker, cursorIso));
-                    }
-                }
-                accumulatedDividends += dayDividendCash;
-
-                // 2) Movimentações do dia → posição + fluxo de caixa ajustado.
-                const dayTx = this._applyDayTransactions({
-                    txs, txIndex, cursorIso, portfolio, fixedIncomeState,
-                    assetMetadataMap, priceCacheMap, lastKnownPrices, getUsdRateForDate,
-                    treasuryPricing,
-                });
-                txIndex = dayTx.txIndex;
-                const dayFlowNominal = dayTx.dayFlowNominal;
-
-                // 3) Juros da renda fixa do dia.
-                this._accrueDailyFixedIncome({
-                    cursor, cursorIso, portfolio, fixedIncomeState,
-                    dailyFactorsMap, cdiDailyFactor, currentIpcaRate, currentSelicRate, currentCdiRate, cdiCurve,
-                });
-
-                // 4) Marcação a mercado.
-                const usdRateForDay = getUsdRateForDate(cursorIso);
-                const { totalEquityNominal, totalInvested, hasPosition } =
-                    this._markPortfolioToMarket({
-                        cursorIso, portfolio, fixedIncomeState, assetMetadataMap,
-                        priceCacheMap, lastKnownPrices, usdRateForDay,
-                    });
-
-                // 5) Cota TWRR (Modified Dietz diário) em espaço NOMINAL + provento
-                //    explícito — mesma metodologia do snapshot diário (schedulerService).
-                if (previousEquityNominal > 0 || dayFlowNominal > 0 || dayDividendCash > 0) {
-                    const dailyReturn = calculateDailyDietz(previousEquityNominal, totalEquityNominal, dayFlowNominal, dayDividendCash);
-
-                    // Proteção contra spikes absurdos (ex: dados sujos)
-                    if (!isTwrrReturnAnomalous(dailyReturn)) {
-                        currentQuota = currentQuota * (1 + dailyReturn);
-                    }
-                }
-
-                if (isBusinessDay(cursor) && (hasPosition || totalInvested > 0 || accumulatedDividends > 0)) {
-                    snapshots.push({
-                        user: userId,
-                        wallet: walletId,
-                        date: snapshotInstantForDay(cursorIso),
-                        dayKey: cursorIso,
-                        source,
-                        calculationVersion: 5,
-                        calculatedAt,
-                        totalEquity: safeCurrency(totalEquityNominal),
-                        totalInvested: safeCurrency(totalInvested),
-                        totalDividends: safeCurrency(accumulatedDividends),
-                        profit: safeCurrency(totalEquityNominal - totalInvested + accumulatedDividends),
-                        profitPercent: safeFloat(totalInvested > 0 ? ((totalEquityNominal - totalInvested + accumulatedDividends) / totalInvested) * 100 : 0),
-                        quotaPrice: safeFloat(currentQuota)
-                    });
-                }
-
-                previousEquityNominal = totalEquityNominal;
-                cursor.setUTCDate(cursor.getUTCDate() + 1);
+            const state = {
+                snapshots: [], portfolio: {}, fixedIncomeState: {}, lastKnownPrices: {},
+                accumulatedDividends: 0, quota: 100.0, previousEquity: 0, txIndex: 0,
+            };
+            for (const cursor = new Date(startDate); cursor <= today; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+                this._rebuildDay(ctx, state, cursor);
             }
 
-            if (!dryRun) await this._persistSnapshots(userId, walletId, snapshots);
+            if (!dryRun) await this._persistSnapshots(userId, walletId, state.snapshots);
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(2);
             logger.info(`✅ [History] Reconstrução V5 (Typed History) concluída em ${duration}s.`, {
-                source: 'rebuildUserHistory', userId: String(userId), durationSec: Number(duration), snapshots: snapshots.length, dryRun,
+                source: 'rebuildUserHistory', userId: String(userId), durationSec: Number(duration), snapshots: state.snapshots.length, dryRun,
             });
-            return snapshots;
+            return state.snapshots;
 
         } catch (error) {
             logger.error(`❌ [Engine] Erro Fatal no Rebuild: ${error.message}`);
