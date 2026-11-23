@@ -21,26 +21,26 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | Métrica | Limite | 2026-11-22 | 2026-11-23 |
 |---|---|---|---|
 | `cobertura.server.config` — Cobertura de linhas — server/config (%) | 90 | 90.2 | 90.2 |
-| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 71.5 | 71.7 | 71.8 |
+| `cobertura.server.controllers` — Cobertura de linhas — server/controllers (%) | 72 | 71.7 | 72.1 |
 | `cobertura.server.middleware` — Cobertura de linhas — server/middleware (%) | 93.5 | 93.9 | 93.9 |
 | `cobertura.server.models` — Cobertura de linhas — server/models (%) | 91 | 91.3 | 91.3 |
 | `cobertura.server.routes` — Cobertura de linhas — server/routes (%) | 81.5 | 81.6 | 81.6 |
 | `cobertura.server.schemas` — Cobertura de linhas — server/schemas (%) | 94 | 94.2 | 94.2 |
-| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 76.5 | 76.5 | 76.8 |
-| `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 93.5 | 93.7 | 93.7 |
-| `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96.5 | 96.4 | 96.5 |
+| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 77.5 | 76.5 | 77.7 |
+| `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 94.5 | 93.7 | 94.7 |
+| `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96.5 | 96.4 | 96.6 |
 | `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 82.5 | 82.4 | 82.7 |
 | `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 97 | 97.4 | 97.4 |
 | `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 100 | 100 | 100 |
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89.5 | 89.3 | 89.6 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 | 87.1 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89 | 89.1 | 89.1 |
-| `testes.server` — Casos de teste do server | 3432 | 3404 | 3432 |
-| `testes.client` — Casos de teste do client | 2167 | 2110 | 2167 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 42.2 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 50.8 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 36 | 37 | 36 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1048 | 1079 | 1048 |
+| `testes.server` — Casos de teste do server | 3502 | 3404 | 3502 |
+| `testes.client` — Casos de teste do client | 2170 | 2110 | 2170 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 40 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 40.9 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 35 | 37 | 35 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1042 | 1079 | 1042 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |
 | `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 | 145 |
@@ -56,7 +56,7 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `lint.erros` — Erros do ESLint | 0 | 0 | 0 |
 | `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 11 | 13 | 11 |
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 | 0 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 101 | 105 | 101 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 97 | 105 | 97 |
 | `complexidadeMax` — Maior complexidade ciclomática de uma função | 43 | 45 | 43 |
 | `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.47 | 0.49 | 0.47 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 | 0 |

@@ -11,9 +11,30 @@ mesmo commit que o resolve.
   (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
   (49), EquitySummary, CreateGoalModal e WalletContext (48), DataSourcesPanel e
   `rebuildUserHistory` (46), WalletSummary (45), TopPicksCard e Research (44),
-  ProfileIdentity e `_applyDayTransactions` (43). O teto passa a ser
-  `utils/weeklyRetention.js` (43); depois vêm `scoringEngine.js` (42),
-  PerformanceChart e `schedulerService.js` (41).
+  ProfileIdentity e `_applyDayTransactions` (43). Onda 1 (23/11, subagentes):
+  `scoringEngine` (42/41/32/25/25), `persistUserSnapshotForDay` (41),
+  `computeWalletKpis` (40), `buildDayMovers` (35), `buildTaxPdf` (34),
+  `_loadPriceCacheMap` e `resolveRows` (31), `accrueDividendsByTicker` (26).
+  O teto segue `utils/weeklyRetention.js` (43); depois PerformanceChart (41),
+  `authController.updateProfile` e `dataHealthService.collectFacts` (39). Plano
+  das ondas 2–5 na conversa de 23/11: jobs, dados de mercado, motores, telas.
+- **(dono, 2026-11-23) Estranhezas congeladas na onda 1** (cada uma é decisão
+  própria; a caracterização trava o comportamento atual):
+  - `persistUserSnapshotForDay`: `calculatedAt` inválido ou lançamento que não
+    é BUY/SELL lança `TypeError` sem código de retorno; o comentário cita o
+    retorno `'exists'`, que não existe; quantidade negativa vira 0 no provento
+    do dia mas entra no patrimônio; provento sem `type` deduplica com
+    `'DIVIDEND'`.
+  - `_loadPriceCacheMap`: se gravar a série aprofundada falha, a série externa
+    mais longa é descartada. `accrueDividendsByTicker` não reordena lançamentos
+    fora de ordem.
+  - `scoringEngine`: FII com `beta: null` passa em `null < 0.7` e quebraria em
+    `null.toFixed` na tese (hoje ninguém grava null); o "Teto Especulativo
+    Cripto" é inalcançável (base 50 + bônus não passam de 80).
+  - PDF de IR: DARF com mês inválido imprime "Competência undefined/2025";
+    mês/categoria desconhecidos saem crus.
+  - `computeWalletKpis`/`buildDayMovers`: NaN de um ativo se propaga ao total;
+    variação NaN não é tratada na ordenação.
 - **(dono, 2026-11-23) Renda fixa no rebuild (`utils/rebuildDayTransactions.js`),
   congelado como estava na quebra:** (a) o estado criado na primeira compra usa
   taxa 10 (100 para CASH) quando a taxa falta ou é ≤ 0, mas o criado depois
