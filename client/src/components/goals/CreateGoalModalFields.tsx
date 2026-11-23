@@ -4,7 +4,7 @@ import { Input } from '../ui/Input';
 import { CurrencyInput } from '../ui/CurrencyInput';
 import type { Goal, RateContext } from '../../services/goals';
 import { formatCurrency } from '../../utils/format';
-import { ICON_OPTIONS, COLOR_OPTIONS, getGoalIcon, getGoalTheme } from './goalTheme';
+import { ICON_OPTIONS, COLOR_OPTIONS, GOAL_ICON_LABELS, getGoalIcon, getGoalTheme } from './goalTheme';
 import { formatPct, shortHistoryDays, walletHistoryRate } from './createGoalForm';
 
 const LABEL = 'block text-xs font-semibold text-slate-400';
@@ -35,6 +35,7 @@ export const GoalAppearanceFields: React.FC<AppearanceProps> = ({ fieldId, icon,
                 key={key}
                 type="button"
                 onClick={() => onIcon(key)}
+                aria-label={GOAL_ICON_LABELS[key] || key}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-colors ${tone}`}
               >
                 <Ic size={18} />

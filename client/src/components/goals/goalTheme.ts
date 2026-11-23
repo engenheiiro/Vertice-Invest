@@ -20,6 +20,12 @@ export const GOAL_ICONS: Record<string, LucideIcon> = {
   shield: Shield,
 };
 
+/** Nome falado de cada ícone: o botão só tem o SVG, e sem isto o leitor de tela anuncia "botão". */
+export const GOAL_ICON_LABELS: Record<string, string> = {
+  target: 'Alvo', home: 'Casa', car: 'Carro', plane: 'Viagem', graduation: 'Formatura',
+  piggy: 'Cofrinho', rocket: 'Foguete', gift: 'Presente', heart: 'Coração', shield: 'Escudo',
+};
+
 export interface GoalColorTheme {
   text: string;
   bgSoft: string;

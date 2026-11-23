@@ -55,6 +55,9 @@ export const initialGoalForm = (goal?: Goal | null): GoalFormState => {
     monthlyTarget: amountField(goal.monthlyTarget),
     rate: String(goal.expectedAnnualRate),
     mirrorWallet: goal.mirrorWallet,
+    // O prazo é data de calendário: o servidor valida com calendarDate() e o grava como
+    // meia-noite UTC. Ler em UTC devolve o dia gravado; ler no fuso local daria o dia
+    // anterior em Brasília (21h da véspera).
     targetDate: goal.targetDate ? new Date(goal.targetDate).toISOString().slice(0, 10) : '',
     manualBalance: '',
     previousGoalId: goal.previousGoalId || '',

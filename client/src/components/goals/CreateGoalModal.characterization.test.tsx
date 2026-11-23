@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import type { Goal, RateContext } from '../../services/goals';
 import { goalsService } from '../../services/goals';
@@ -42,9 +42,8 @@ vi.mock('@tanstack/react-query', () => ({
 
 const AGORA = new Date('2026-11-22T12:00:00-03:00');
 const AXE_CONFIG = { rules: { 'color-contrast': { enabled: false } } };
-// Os botões de ícone não têm nome acessível (só o SVG) — lacuna anterior a esta
-// caracterização, mantida de propósito para não mudar o HTML; o resto do axe vale.
-const AXE_SEM_NOME_DE_ICONE = { rules: { ...AXE_CONFIG.rules, 'button-name': { enabled: false } } };
+// Os botões de ícone tinham só o SVG, sem nome acessível (axe button-name); agora
+// cada um diz qual ícone é, e a regra vale de novo.
 
 const context = (over: Partial<RateContext> = {}): RateContext => ({
   suggested: 14,
@@ -401,11 +400,13 @@ describe('CreateGoalModal (caracterização) — ícone, cor, fechar e foco', ()
     state.goals = [makeGoal({ _id: 'p1' })];
     const { unmount } = render(<CreateGoalModal isOpen onClose={onClose} />);
     type(/Valor-alvo/, '100000');
-    expect(await axe(document.body, AXE_SEM_NOME_DE_ICONE)).toHaveNoViolations();
+    expect(await axe(document.body, AXE_CONFIG)).toHaveNoViolations();
     unmount();
     render(<CreateGoalModal isOpen onClose={onClose} goal={makeGoal()} />);
-    expect(await axe(document.body, AXE_SEM_NOME_DE_ICONE)).toHaveNoViolations();
-    const semNome = screen.getAllByRole('button').filter((b) => !b.textContent?.trim() && !b.getAttribute('aria-label'));
-    expect(semNome.every((b) => b.closest('[role="group"]') === screen.getAllByRole('group')[0])).toBe(true);
+    expect(await axe(document.body, AXE_CONFIG)).toHaveNoViolations();
+    const icones = within(screen.getByRole('group', { name: 'Ícone' })).getAllByRole('button');
+    expect(icones.map((b) => b.getAttribute('aria-label'))).toEqual(
+      ['Alvo', 'Casa', 'Carro', 'Viagem', 'Formatura', 'Cofrinho', 'Foguete', 'Presente', 'Coração', 'Escudo'],
+    );
   });
 });
