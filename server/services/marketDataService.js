@@ -11,34 +11,26 @@ import { summarizeTrackRecord } from '../utils/trackRecord.js';
 // (M9) Janela de cache e fallback de Selic centralizados em financialConstants.
 import { DEFAULT_SELIC_FALLBACK } from '../config/financialConstants.js';
 import { getTunablesSync } from './configService.js'; // (I13) tunables editáveis pelo admin
-import DividendEvent from '../models/DividendEvent.js';
 import { historyStorageKey, mergeCandleSeries } from '../utils/assetHistory.js';
 import { brazilDateKey } from '../utils/dateUtils.js';
 import { isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { loadLatestCloseBefore } from '../utils/dayCloses.js';
-import { deriveDividendFromGap } from '../utils/dividendGap.js';
-import { isAccumulatingBrEtf } from '../config/brEtfList.js';
 import { recordCacheAccess } from '../utils/performanceMetrics.js';
 import {
     judgeQuote, contestsChange, resolveContestedChange,
     needsOwnAnchor, arbitrateStoredJump, applyStoredJumpArbitration,
 } from '../utils/quoteSanity.js';
 import { recordSuspectQuote } from '../utils/sourceHealth.js';
-
-/**
- * Dia da SESSÃO a que a cotação pertence, no calendário brasileiro. É o carimbo
- * que separa "fechou +1,19% hoje" de "fechou +1,19% ontem": `updatedAt` responde
- * quando perguntamos ao provedor, nunca quando o negócio aconteceu.
- *
- * null quando a fonte não publica o horário (scraping do Google Finance, fallback
- * de histórico) — o consumidor decide o que fazer com a ausência, e o de hoje
- * (walletController) mantém o comportamento antigo em vez de zerar a variação.
- */
-const sessionDateKey = (marketTime) => {
-    if (!marketTime) return null;
-    const d = new Date(marketTime);
-    return Number.isNaN(d.getTime()) ? null : brazilDateKey(d);
-};
+import { sessionDateKey } from './marketData/sessionDate.js';
+import {
+    needsNameHeal, healAssetName, respondFromCache, historyFallbackClose,
+    fillPrimaryQuotes, loadFallbackHistories, fillHistoryFallbacks,
+} from './marketData/priceLookup.js';
+import { selectExDateCandidates, findGapHits, writeDerivedDividends } from './marketData/exDateDividends.js';
+import {
+    RETIRE_AFTER_INACTIVE_DAYS, RETIRE_RECENT_CANDLE_DAYS, daysSince,
+    pastQuarantine, keepRegularMarket, dropStillTrading, retirementOps, logRetired,
+} from './marketData/assetRetirement.js';
 
 /** Hora cheia no relógio de Brasília, independente do fuso do processo. */
 const brazilHour = (date = new Date()) => Number(
@@ -105,19 +97,8 @@ const LARGE_ASSET_LIQUIDITY = 1_000_000;     // R$ 1M/dia
 // lacuna de fonte, é ativo que sumiu. O sinal correto continua sendo o painel de
 // Saúde, que acusa o congelamento antes deste teto ser atingido.
 const LARGE_ASSET_FAILURE_CAP = 45;
-// Quarentena antes da APOSENTADORIA automática. Ficar inativo não tem custo de
-// dado (o upsert só grava sucesso), mas tem custo de ruído: o loop de reativação
-// re-cota todo inativo a cada run, e um papel que saiu da bolsa reaparece para
-// sempre no warn "Yahoo falhou para N ativos" — em ago/2026 eram 27 tickers, com
-// mortos de até 192 dias (BPAN4, CPLE5, MMC, HOLX…), sem caminho de saída porque
-// a única baixa possível era manual e a guarda de porte mandava todo papel grande
-// para uma "revisão manual" que nunca acontecia. 90 dias sem cotar em NENHUMA
-// fonte não é mais provedor engasgado: instabilidade real dura dias (caso B3SA3),
-// e o loop de reativação já teria recuperado o papel em qualquer run desse período.
-const RETIRE_AFTER_INACTIVE_DAYS = 90;
-// Idade máxima do último candle para considerar que o papel ainda negocia (e,
-// portanto, NÃO pode ser aposentado, por mais que o endpoint de cotação o ignore).
-const RETIRE_RECENT_CANDLE_DAYS = 10;
+// Quarentena e régua de candle recente da aposentadoria: ver
+// marketData/assetRetirement.js (RETIRE_AFTER_INACTIVE_DAYS, RETIRE_RECENT_CANDLE_DAYS).
 // "MORREU" E "NUNCA NEGOCIOU AQUI" TÊM A MESMA APARÊNCIA DEPOIS DO FATO.
 //
 // Zero negócio há meses descreve os dois: o fundo liquidado e o FII de oferta
@@ -143,9 +124,6 @@ const REGULAR_MARKET_MIN_RATIO = 0.5;
 // Single-flight por processo: uma tela com vários consumidores do mesmo ticker
 // não dispara várias renovações enquanto o primeiro refresh ainda está em voo.
 const interactiveRefreshes = new Map();
-
-/** Dias inteiros desde `date` (null quando a data não existe). */
-const daysSince = (date) => (date ? Math.floor((Date.now() - new Date(date).getTime()) / 86400000) : null);
 
 /** Uma data-chave de pregão bem formada ('YYYY-MM-DD'). */
 const DAY_KEY_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
@@ -489,57 +467,27 @@ export const marketDataService = {
             // Self-heal do nome: se o nome ainda for o próprio ticker (ações BR não
             // enriquecidas), busca o nome real no Yahoo via refresh e relê. Assim o
             // autofill de "Nome do Ativo" recebe o nome correto na hora.
-            if (!interactive && asset && ['STOCK', 'FII', 'STOCK_US', 'ETF'].includes(asset.type)) {
-                const nm = (asset.name || '').trim();
-                if (!nm || nm.toUpperCase() === cleanTicker.toUpperCase()) {
-                    try {
-                        await this.refreshQuotesBatch([cleanTicker], true);
-                        asset = await MarketAsset.findOne({ ticker: cleanTicker });
-                    } catch { /* mantém o asset atual em caso de falha */ }
-                }
+            if (!interactive && needsNameHeal(asset, cleanTicker)) {
+                asset = await healAssetName(this, cleanTicker, asset);
             }
 
-            if (asset && asset.lastPrice > 0) {
-                const cacheMinutes = getTunablesSync().marketCacheMinutes;
-                const staleBefore = Date.now() - cacheMinutes * 60 * 1000;
-                const isStale = !asset.updatedAt || new Date(asset.updatedAt).getTime() < staleBefore;
-                if (interactive && isStale) this.refreshQuoteInBackground(cleanTicker);
-                recordCacheAccess('market-price', isStale ? 'stale' : 'hit');
+            if (asset && asset.lastPrice > 0) return respondFromCache(this, asset, cleanTicker, interactive);
+
+            const lastClose = await historyFallbackClose(cleanTicker, asset);
+            if (interactive) this.refreshQuoteInBackground(cleanTicker);
+            if (lastClose > 0) {
+                recordCacheAccess('market-price', 'fallback');
                 return {
-                    price: asset.lastPrice,
-                    change: asset.change || 0,
-                    priceDate: asset.priceDate || null,
-                    previousClose: asset.previousClose || 0,
-                    name: asset.name,
-                    sector: asset.sector,
-                    dy: asset.dy || 0,
-                    cacheStatus: isStale ? 'STALE' : 'HIT',
-                    isStale,
+                    price: lastClose,
+                    change: 0,
+                    name: ticker,
+                    sector: 'Outros',
+                    isFallback: true,
+                    cacheStatus: 'STALE',
+                    isStale: true,
                 };
             }
 
-            const historyKey = historyStorageKey(cleanTicker, asset?.type || 'INDEX');
-            const history = await AssetHistory.findOne({ ticker: historyKey });
-            if (history && history.history && history.history.length > 0) {
-                const sorted = history.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                const lastClose = sorted[0].close || sorted[0].adjClose;
-                
-                if (lastClose > 0) {
-                    if (interactive) this.refreshQuoteInBackground(cleanTicker);
-                    recordCacheAccess('market-price', 'fallback');
-                    return {
-                        price: lastClose,
-                        change: 0, 
-                        name: ticker,
-                        sector: 'Outros',
-                        isFallback: true,
-                        cacheStatus: 'STALE',
-                        isStale: true,
-                    };
-                }
-            }
-
-            if (interactive) this.refreshQuoteInBackground(cleanTicker);
             recordCacheAccess('market-price', 'miss');
             return { price: 0, change: 0, name: ticker, sector: 'Outros', cacheStatus: 'MISS', isStale: true };
         } catch {
@@ -569,64 +517,12 @@ export const marketDataService = {
         if (cleanList.length === 0) return map;
 
         try {
-            let primaryHits = 0;
-            let fallbackHits = 0;
-            let misses = 0;
             const assets = await MarketAsset.find({ ticker: { $in: cleanList } })
                 .select('ticker name sector type currency allocationClass lastPrice change priceDate previousClose dy');
             const byTicker = new Map(assets.map(a => [a.ticker, a]));
-
-            const missingKeys = new Set();
-            for (const { original, clean } of pairs) {
-                const asset = byTicker.get(clean);
-                if (asset && asset.lastPrice > 0) {
-                    primaryHits += 1;
-                    map.set(original, {
-                        price: asset.lastPrice,
-                        change: asset.change || 0,
-                        priceDate: asset.priceDate || null,
-                        previousClose: asset.previousClose || 0,
-                        name: asset.name,
-                        sector: asset.sector,
-                        ...(asset.allocationClass ? { allocationClass: asset.allocationClass } : {}),
-                        dy: asset.dy || 0,
-                    });
-                } else {
-                    missingKeys.add(historyStorageKey(clean, asset?.type || 'INDEX'));
-                }
-            }
-
-            // Fallback de histórico em UMA query (evita o N+1 de AssetHistory).
-            let histByTicker = new Map();
-            if (missingKeys.size > 0) {
-                const histories = await AssetHistory.find({ ticker: { $in: [...missingKeys] } })
-                    .select('ticker history');
-                histByTicker = new Map(histories.map(h => [h.ticker, h]));
-            }
-
-            for (const { original, clean } of pairs) {
-                if (map.has(original)) continue;
-                const asset = byTicker.get(clean);
-                const hist = histByTicker.get(historyStorageKey(clean, asset?.type || 'INDEX'));
-                let resolved = {
-                    price: 0, change: 0, name: original, sector: 'Outros',
-                    ...(asset?.allocationClass ? { allocationClass: asset.allocationClass } : {}),
-                };
-                if (hist && Array.isArray(hist.history) && hist.history.length > 0) {
-                    const sorted = [...hist.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                    const lastClose = sorted[0].close || sorted[0].adjClose;
-                    if (lastClose > 0) {
-                        fallbackHits += 1;
-                        resolved = {
-                            price: lastClose, change: 0, name: original, sector: 'Outros',
-                            ...(asset?.allocationClass ? { allocationClass: asset.allocationClass } : {}),
-                            isFallback: true,
-                        };
-                    }
-                }
-                if (!resolved.isFallback) misses += 1;
-                map.set(original, resolved);
-            }
+            const { primaryHits, missingKeys } = fillPrimaryQuotes(map, pairs, byTicker);
+            const histByTicker = await loadFallbackHistories(missingKeys);
+            const { fallbackHits, misses } = fillHistoryFallbacks(map, pairs, byTicker, histByTicker);
             recordCacheAccess('market-price', 'hit', primaryHits);
             recordCacheAccess('market-price', 'fallback', fallbackHits);
             recordCacheAccess('market-price', 'miss', misses);
@@ -817,103 +713,11 @@ export const marketDataService = {
     async detectExDateDividends(quotes, assetMap) {
         try {
             const todayBr = brazilDateKey(new Date());
-
-            // 1. Só cotações da sessão de HOJE. Um quote de ontem compararia o
-            //    previousClose de anteontem com o candle da véspera — sem sentido.
-            const candidates = [];
-            for (const quote of quotes || []) {
-                const ticker = this.normalizeSymbol(quote.ticker);
-                const asset = assetMap.get(ticker);
-                const adjusted = Number(quote.previousClose);
-                if (!asset || !(adjusted > 0)) continue;
-                // ETFs brasileiros curados são de acumulação: os rendimentos
-                // ficam na cota e nunca podem virar crédito em DividendEvent.
-                if (asset.type === 'ETF' && isAccumulatingBrEtf(ticker)) continue;
-                if (sessionDateKey(quote.marketTime) !== todayBr) continue;
-                candidates.push({ ticker, type: asset.type, adjusted, volume: quote.volume });
-            }
+            const candidates = selectExDateCandidates((t) => this.normalizeSymbol(t), quotes, assetMap, todayBr);
             if (candidates.length === 0) return 0;
-
-            // 2. Passada barata: sem histórico de proventos. Na esmagadora maioria
-            //    dos dias TODO gap é zero e a função sai aqui, sem tocar em
-            //    DividendEvent — é o que mantém o custo no caminho quente irrisório.
-            const closes = await loadLatestCloseBefore(candidates, todayBr);
-            const hits = [];
-            for (const c of candidates) {
-                const prev = closes.get(historyStorageKey(c.ticker, c.type));
-                if (!prev) continue;
-                const derived = deriveDividendFromGap({
-                    type: c.type,
-                    rawPrevClose: prev.close,
-                    adjustedPrevClose: c.adjusted,
-                    priceDate: todayBr,
-                    rawPrevCloseDate: prev.date,
-                    sessionVolume: c.volume,
-                });
-                if (derived) hits.push({ ...c, prev });
-            }
+            const hits = await findGapHits(candidates, todayBr);
             if (hits.length === 0) return 0;
-
-            // 3. Só agora vale consultar o histórico, para (a) não pisar num evento
-            //    oficial já publicado e (b) aplicar a trava de plausibilidade.
-            const tickers = hits.map((h) => h.ticker);
-            const known = await DividendEvent.find({ ticker: { $in: tickers } })
-                .select('ticker date amount source').sort({ date: -1 }).lean();
-
-            const byTicker = new Map();
-            for (const ev of known) {
-                if (!byTicker.has(ev.ticker)) byTicker.set(ev.ticker, []);
-                byTicker.get(ev.ticker).push(ev);
-            }
-
-            const [ty, tm, td] = todayBr.split('-').map(Number);
-            const exDateUtc = new Date(Date.UTC(ty, tm - 1, td));
-            const NEAR_DAYS_MS = 4 * 86400000;
-
-            let written = 0;
-            for (const hit of hits) {
-                const events = byTicker.get(hit.ticker) || [];
-
-                // Evento OFICIAL perto da data-ex derivada: a fonte já publicou (ou
-                // publicou com a data deslocada em 1-2 dias). Não inventar um segundo.
-                const officialNearby = events.some((ev) => (ev.source || 'PROVIDER') === 'PROVIDER'
-                    && Math.abs(new Date(ev.date).getTime() - exDateUtc.getTime()) <= NEAR_DAYS_MS);
-                if (officialNearby) continue;
-
-                const knownAmounts = events
-                    .filter((ev) => (ev.source || 'PROVIDER') === 'PROVIDER')
-                    .slice(0, 12)
-                    .map((ev) => Number(ev.amount));
-
-                const derived = deriveDividendFromGap({
-                    type: hit.type,
-                    rawPrevClose: hit.prev.close,
-                    adjustedPrevClose: hit.adjusted,
-                    priceDate: todayBr,
-                    rawPrevCloseDate: hit.prev.date,
-                    sessionVolume: hit.volume,
-                    knownAmounts,
-                });
-                if (!derived) continue;
-
-                await DividendEvent.updateOne(
-                    { ticker: hit.ticker, date: exDateUtc, type: 'DIVIDEND' },
-                    {
-                        $set: { amount: derived.amount, source: 'DERIVED' },
-                        $setOnInsert: { ticker: hit.ticker, date: exDateUtc, type: 'DIVIDEND', currency: 'BRL' },
-                    },
-                    { upsert: true },
-                );
-                written++;
-                logger.info('[Dividends] Provento provisório detectado pelo gap do dia-ex', {
-                    ticker: hit.ticker,
-                    exDate: todayBr,
-                    amount: derived.amount,
-                    rawPrevClose: hit.prev.close,
-                    adjustedPrevClose: hit.adjusted,
-                });
-            }
-            return written;
+            return await writeDerivedDividends(hits, todayBr);
         } catch (error) {
             logger.warn(`[Dividends] Detecção de provento por gap falhou: ${error.message}`);
             return 0;
@@ -1438,12 +1242,8 @@ export const marketDataService = {
         );
         if (comFalhas.length === 0) return [];
 
-        // O relógio é a última PROVA DE PREGÃO, não o último toque no documento.
         const idades = await this.lastTradeAgeByTicker(comFalhas);
-        const eligible = comFalhas.filter((a) => {
-            const idade = idades.get(a.ticker);
-            return (idade?.days ?? null) !== null && idade.days >= RETIRE_AFTER_INACTIVE_DAYS;
-        });
+        const eligible = pastQuarantine(comFalhas, idades);
         if (eligible.length === 0) return [];
 
         // Detido em carteira → fora do automático (a baixa muda a tela do dono).
@@ -1452,89 +1252,15 @@ export const marketDataService = {
         const candidates = eligible.filter(a => !held.has(a.ticker));
         if (candidates.length === 0) return [];
 
-        // Papel que nunca teve mercado sai do automático e vai para a triagem a
-        // dedo, com prova externa. Ver a nota em REGULAR_MARKET_MIN_RATIO.
-        let comMercado = candidates;
-        try {
-            const mercado = await this.hadRegularMarketByTicker(candidates);
-            comMercado = candidates.filter((a) => mercado.get(a.ticker)?.regular);
-            const semMercado = candidates.filter((a) => !mercado.get(a.ticker)?.regular);
-            if (semMercado.length > 0) {
-                const detalhe = semMercado
-                    .map((a) => `${a.ticker} (${mercado.get(a.ticker)?.traded}/${mercado.get(a.ticker)?.sessions})`)
-                    .join(', ');
-                logger.warn(
-                    `🫥 [Reativação] ${semMercado.length} ativo(s) sem pregão há ${RETIRE_AFTER_INACTIVE_DAYS}d+ mas que nunca `
-                    + `tiveram mercado regular — fora da baixa automática, decidir a dedo: ${detalhe}`,
-                    { noRegularMarket: semMercado.map((a) => a.ticker) },
-                );
-            }
-        } catch (error) {
-            // Fail-CLOSED: sem a medida não há como separar o liquidado do fundo
-            // de oferta restrita, e a baixa automática espera a próxima rodada.
-            logger.warn(`[Reativação] Densidade de pregão indisponível (${error.message}); nenhuma baixa automática nesta rodada.`);
-            return [];
-        }
-        if (comMercado.length === 0) return [];
+        // Nunca teve mercado regular → triagem a dedo (ver REGULAR_MARKET_MIN_RATIO).
+        const comMercado = await keepRegularMarket(this, candidates);
+        if (!comMercado || comMercado.length === 0) return [];
 
-        // Última prova antes da baixa: o endpoint de cotação e o de histórico do
-        // Yahoo não cobrem o mesmo conjunto de papéis — um FII ilíquido pode não
-        // devolver quote nenhum e mesmo assim ter candle de dois dias atrás.
-        // Sessão recente = papel vivo: mantém inativo (o quote é que não o serve)
-        // e NÃO aposenta. Histórico sem resposta conta como ausência de prova de
-        // vida — o papel já falhou cotação nos 90 dias da quarentena, a baixa é
-        // reversível (`retireDeadTickers.js --undo`) e o log nomeia quem saiu.
-        //
-        // SESSÃO, não barra: o exemplo que originou esta guarda era o próprio
-        // HGPO11, e ele estava morto desde 25/05/2026. O "candle de dois dias
-        // atrás" era continuação com volume 0 — a última prova antes da baixa
-        // absolvia justamente quem ela existia para condenar.
-        const targets = [];
-        for (const a of comMercado) {
-            let candles = null;
-            try {
-                candles = await externalMarketService.getFullHistory(a.ticker, a.type);
-            } catch { /* fonte fora → segue como "sem candle" e a baixa acontece */ }
-            const last = Array.isArray(candles)
-                ? [...candles].reverse().find(c => c?.close > 0 && c?.volume !== 0)
-                : null;
-            const candleAge = last ? daysSince(last.date) : null;
-            if (candleAge !== null && candleAge <= RETIRE_RECENT_CANDLE_DAYS) {
-                logger.info(`↩️ [Reativação] ${a.ticker} segue negociando (candle de ${candleAge}d) — não aposenta, só não cota via quote.`);
-                continue;
-            }
-            targets.push(a);
-        }
+        const targets = await dropStillTrading(comMercado);
         if (targets.length === 0) return [];
 
-        const now = new Date();
-        await MarketAsset.bulkWrite(targets.map(a => ({
-            updateOne: {
-                filter: { ticker: a.ticker, isBlacklisted: false },
-                update: {
-                    $set: {
-                        isBlacklisted: true,
-                        // isActive junto, sempre. Aqui o candidato JÁ vem inativo, então
-                        // a linha é redundante no caminho feliz — e é exatamente por ser
-                        // redundante que ela precisa existir: o estado terminal fica
-                        // completo em uma escrita só, e não depende de quem chamou ter
-                        // deixado o documento no estado certo.
-                        isActive: false,
-                        retiredAt: now,
-                        retiredReason: `auto: ${idades.get(a.ticker)?.days}d sem pregão (${idades.get(a.ticker)?.basis}) e sem cotação em nenhuma fonte`,
-                    },
-                },
-            },
-        })));
-
-        const detail = targets.map(a => `${a.ticker} (${idades.get(a.ticker)?.days}d, ${idades.get(a.ticker)?.basis})`).join(', ');
-        logger.info(
-            `🪦 [Reativação] ${targets.length} ativo(s) aposentado(s) após ${RETIRE_AFTER_INACTIVE_DAYS}d sem pregão: ${detail}`,
-            { retired: targets.map(a => a.ticker), quarantineDays: RETIRE_AFTER_INACTIVE_DAYS },
-        );
-        if (held.size > 0) {
-            logger.warn(`⚠️ [Reativação] Sem cotação há ${RETIRE_AFTER_INACTIVE_DAYS}d+ mas detido(s) em carteira — decidir a dedo: ${[...held].join(', ')}`);
-        }
+        await MarketAsset.bulkWrite(retirementOps(targets, idades, new Date()));
+        logRetired(targets, idades, held);
         return targets.map(a => a.ticker);
     },
 
