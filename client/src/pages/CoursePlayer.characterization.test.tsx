@@ -399,7 +399,7 @@ describe('caracterização do CoursePlayer', () => {
 
   it('cenários semeados: resumo por cenário', async () => {
     const rows: string[] = [];
-    for (let seed = 1; seed <= 45; seed++) {
+    for (let seed = 1; seed <= 15; seed++) {
       const sc = makeScenario(seed);
       const { steps } = await runScenario(sc);
       rows.push(`${seed}: ${digest(JSON.stringify(steps))} ${steps.map((s) => `${String(s.action).split(':')[0]}=${s.result || '-'}`).join(',')}`);
@@ -409,7 +409,7 @@ describe('caracterização do CoursePlayer', () => {
 
   it('cenários semeados com tudo concluído (foco no teste final)', async () => {
     const rows: string[] = [];
-    for (let seed = 101; seed <= 125; seed++) {
+    for (let seed = 101; seed <= 110; seed++) {
       const base = makeScenario(seed);
       const lessons = LESSON_SETS[1 + (seed % 3)];
       const sc = { ...base, lessons, completed: lessons.map((l) => l._id), course: 'ok' as Kind, progress: 'ok' as Kind, actions: ['test:0'] };

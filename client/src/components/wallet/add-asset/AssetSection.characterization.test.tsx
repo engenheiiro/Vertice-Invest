@@ -192,7 +192,7 @@ describe('caracterização do AssetSection', () => {
             rows.push(`${i} ${s.form.type}/${s.transactionType}: ${digest(out.initial)} ${digest(out.final)} ${digest(out.log)}`);
         }
         expect(rows).toMatchSnapshot();
-    });
+    }, 60_000); // 400 cenários com interações: mesmo motivo do DayMoversModal
 
     it('cenários completos legíveis', () => {
         const rng = mulberry32(7);

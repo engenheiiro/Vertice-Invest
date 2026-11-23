@@ -108,7 +108,7 @@ describe('caracterização do DayMoversModal', () => {
             rows.push(`${i} n=${size} p=${privacy ? 1 : 0}: ${digest(out.html)} c=${out.closes}`);
         }
         expect(rows).toMatchSnapshot();
-    });
+    }, 60_000); // 300 renderizações: estoura os 5 s padrão com a máquina carregada
 
     it('cenários completos legíveis', () => {
         const rng = mulberry32(99);

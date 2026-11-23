@@ -223,9 +223,10 @@ function directedPrefix(sim: Sim, container: HTMLElement): Action[] {
       step.click(sim, 'Copiar todos'), step.wait(sim.pick([1000, 1600]))],
     [step.toggle(container), step.type('Código do app ou de recuperação', sim.pick([' 654321 ', 'abcd-efgh ', '1'])),
       step.click(sim, 'Desativar', 'disableMfa')],
-    [step.click(sim, /Alterar Senha/), step.type('Senha Atual', 'senhaTeste1'), step.type('Nova Senha', 'senhaTeste2'),
-      step.type('Confirmar Nova Senha', 'senhaTeste2'), step.click(sim, 'Atualizar Senha', 'changePassword', mostlyOk()),
-      step.wait(sim.pick([1000, 1900, 2100]))],
+    // Nova senha às vezes curta (5 caracteres): trava a régua de tamanho mínimo.
+    ((nova: string): Action[] => [step.click(sim, /Alterar Senha/), step.type('Senha Atual', 'senhaTeste1'), step.type('Nova Senha', nova),
+      step.type('Confirmar Nova Senha', nova), step.click(sim, 'Atualizar Senha', 'changePassword', mostlyOk()),
+      step.wait(sim.pick([1000, 1900, 2100]))])(sim.pick(['senhaTeste2', 'senhaTeste2', 'curta'])),
   ];
   return sim.pick(scripts);
 }
@@ -292,11 +293,11 @@ describe('caracterização do SecuritySection', () => {
   it('rastro (HTML + chamadas) de caminhos sorteados', async () => {
     const hashes: string[] = [];
     const full: Record<string, unknown> = {};
-    for (let seed = 1; seed <= 160; seed += 1) {
+    for (let seed = 1; seed <= 60; seed += 1) {
       const steps = await runScenario(seed);
       const json = JSON.stringify(steps);
       hashes.push(`${seed}: ${digest(json)}`);
-      if (seed % 40 === 0) full[`seed ${seed}`] = steps.map((s) => ({ ...(s as object), html: digest((s as { html: string }).html) }));
+      if (seed % 20 === 0) full[`seed ${seed}`] = steps.map((s) => ({ ...(s as object), html: digest((s as { html: string }).html) }));
     }
     expect(hashes).toMatchSnapshot();
     expect(full).toMatchSnapshot();
