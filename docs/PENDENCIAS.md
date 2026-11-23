@@ -5,14 +5,14 @@ mesmo commit que o resolve.
 
 ## Abertas
 
-- **(dono, 2026-11-23) Maior complexidade agora é 44.** Já quebrados: perfil
+- **(dono, 2026-11-23) Maior complexidade segue 44.** Já quebrados: perfil
   FII do scoring e `auditDividendPaymentSources.js` (73), `dataSourceStatus.js`
   (60), Indicators e AuditDetailModal (53), o gate `isEligibleForDefensive`
   (52), PerformanceOverview e WalletView (51), AssetDetailModal da Pesquisa
   (49), EquitySummary, CreateGoalModal e WalletContext (48), DataSourcesPanel e
-  `rebuildUserHistory` (46), WalletSummary (45). O teto passa a ser
-  `TopPicksCard.tsx` e `Research.tsx` (44), seguidos de `ProfileIdentity.tsx`
-  e `_applyDayTransactions` do `financialService.js` (43).
+  `rebuildUserHistory` (46), WalletSummary (45), TopPicksCard (44). O teto
+  passa a ser `Research.tsx` (44), seguido de `ProfileIdentity.tsx` e
+  `_applyDayTransactions` do `financialService.js` (43).
 - **(dono, 2026-11-23) Último 5,75 vive no resolvedor de câmbio.** Telas e
   gravações já não inventam câmbio (`loadDisplayUsdRate`: macro → último candle
   real → nulo; `missingMacroRates` no rebuild e no snapshot). Sobra o

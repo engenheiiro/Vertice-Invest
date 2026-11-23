@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TopPicksCard — caracterização > BRASIL_10: grade de rankings e carteiras 1`] = `"536a1c2b8db6cfc4"`;
+
+exports[`TopPicksCard — caracterização > CRYPTO: grade de rankings e carteiras 1`] = `"54f0a20ba0f1203a"`;
+
+exports[`TopPicksCard — caracterização > ETF: grade de rankings e carteiras 1`] = `"a960595f23b252e5"`;
+
+exports[`TopPicksCard — caracterização > FII: grade de rankings e carteiras 1`] = `"bad9acdea3ecac21"`;
+
+exports[`TopPicksCard — caracterização > REIT: grade de rankings e carteiras 1`] = `"8a01b3998f582c79"`;
+
+exports[`TopPicksCard — caracterização > STOCK: grade de rankings e carteiras 1`] = `"74a3553634f988a0"`;
+
+exports[`TopPicksCard — caracterização > STOCK_US: grade de rankings e carteiras 1`] = `"1fb8be9a7b874739"`;
+
+exports[`TopPicksCard — caracterização > origem inicial Nacional e aviso ao pai 1`] = `"cf577c94852b9143"`;
+
+exports[`TopPicksCard — caracterização > ranking vazio 1`] = `"7186fa661a2e98d7"`;

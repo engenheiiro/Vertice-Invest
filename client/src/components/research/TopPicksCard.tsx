@@ -1,12 +1,14 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Trophy, BarChart2, Layers, Target, Wallet, PieChart, PlusCircle, Crown, Medal, Calculator, History, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { RankingItem } from '../../services/research';
 import { AssetDetailModal } from './AssetDetailModal';
-import { useWallet, AssetType } from '../../contexts/WalletContext';
-import AssetLogo from '../common/AssetLogo';
-import { useNavigate } from 'react-router-dom';
+import { useWallet } from '../../contexts/WalletContext';
 import { formatCompact as fmtCompact } from '../../utils/format';
-import { onActivateKey } from '../../utils/a11yEvents';
+import { filterPicks, hasBuyInScope, pickPosition, type EtfOriginFilter, type RiskFilter } from './topPicksView';
+import { TopPicksFilterBar } from './TopPicksFilterBar';
+import { TopPicksOverview } from './TopPicksOverview';
+import { TopPickRow } from './TopPickRow';
+
 
 interface TopPicksCardProps {
     picks: RankingItem[];
@@ -23,101 +25,6 @@ interface TopPicksCardProps {
     initialEtfOrigin?: 'BR' | 'US';
 }
 
-type RiskFilter = 'DEFENSIVE' | 'MODERATE' | 'BOLD';
-
-// Composite estrutural (Regra #2): desempate quando dois ativos têm o mesmo score.
-const structuralComposite = (item: RankingItem): number => {
-    const s = item.metrics?.structural;
-    return s ? (s.quality + s.valuation + s.risk) / 3 : 0;
-};
-
-/**
- * Ordenação soberana da lista (Regra #2): score desc, desempate pelo composite
- * estrutural. Devolve CÓPIA — nunca reordena o array recebido (que é o do cache
- * do React Query). Antes era `.sort((a,b) => b.score - a.score)` in-place e sem
- * desempate: empates ficavam na ordem que o cache tivesse no momento.
- */
-export const sortPicksByScore = <T extends RankingItem>(items: T[]): T[] => (
-    [...items].sort((a, b) => (b.score - a.score) || (structuralComposite(b) - structuralComposite(a)))
-);
-
-export type PositionDelta =
-    | { kind: 'new' }
-    | { kind: 'up' | 'down'; steps: number }
-    | { kind: 'same' }
-    | null;
-
-/**
- * Delta de posição (Regra #4) comparando a posição GLOBAL de hoje com a do último
- * ranking publicado. Não usa `visualPosition` (que é a posição dentro do filtro
- * de perfil) — as duas réguas não são comparáveis. `undefined` = documento antigo
- * sem o campo: não desenha nada, em vez de chamar todo mundo de "novo".
- */
-export const getPositionDelta = (position: number | undefined, previousPosition: number | null | undefined): PositionDelta => {
-    if (previousPosition === undefined || !Number.isFinite(position)) return null;
-    if (previousPosition === null) return { kind: 'new' };
-    const diff = previousPosition - (position as number);
-    if (diff > 0) return { kind: 'up', steps: diff };
-    if (diff < 0) return { kind: 'down', steps: -diff };
-    return { kind: 'same' };
-};
-
-const PositionDeltaBadge: React.FC<{ position?: number; previousPosition?: number | null }> = ({ position, previousPosition }) => {
-    const delta = getPositionDelta(position, previousPosition);
-    if (!delta) return null;
-    if (delta.kind === 'new') {
-        return (
-            <span title="Entrou no ranking nesta revisão" className="text-[7px] font-black uppercase tracking-wider text-blue-400 bg-blue-900/10 px-1 py-px rounded border border-blue-900/30 leading-none">
-                novo
-            </span>
-        );
-    }
-    if (delta.kind === 'same') {
-        return (
-            <span title={`Manteve a posição ${previousPosition}`} aria-label="Posição mantida" className="flex items-center text-slate-500 leading-none">
-                <Minus size={10} />
-            </span>
-        );
-    }
-    const isUp = delta.kind === 'up';
-    const Icon = isUp ? ArrowUp : ArrowDown;
-    return (
-        <span
-            title={`${isUp ? 'Subiu' : 'Caiu'} ${delta.steps} ${delta.steps === 1 ? 'posição' : 'posições'} (era ${previousPosition}º)`}
-            aria-label={`${isUp ? 'Subiu' : 'Caiu'} ${delta.steps}`}
-            className={`flex items-center gap-px text-[8px] font-black tabular-nums leading-none ${isUp ? 'text-emerald-400' : 'text-red-400'}`}
-        >
-            <Icon size={9} strokeWidth={3} />{delta.steps}
-        </span>
-    );
-};
-
-const RISK_LABELS: Record<RiskFilter, string> = {
-    'DEFENSIVE': 'Defensiva',
-    'MODERATE': 'Moderado',
-    'BOLD': 'Arrojado'
-};
-
-// Sub-filtro da aba "ETFs": separa o universo nacional (B3) do internacional (US).
-// Sem "Todos" — a aba sempre mostra um mercado por vez (default Internacional).
-type EtfOriginFilter = 'BR' | 'US';
-
-const ETF_ORIGIN_LABELS: Record<EtfOriginFilter, string> = {
-    'BR': 'Nacional',
-    'US': 'Internacional',
-};
-
-// Chips Ações/REITs do Exterior (rankings independentes selecionados via callback).
-const EXTERIOR_VIEWS: Array<{ key: 'STOCK' | 'REIT'; label: string }> = [
-    { key: 'STOCK', label: 'Ações' },
-    { key: 'REIT', label: 'REITs' },
-];
-
-const COLORS = [
-    '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#6366F1', '#D4AF37',
-    '#EF4444', '#84CC16', '#14B8A6', '#F97316', '#A855F7', '#0EA5E9'
-];
-
 export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, onAporte, onExteriorViewChange, onEtfOriginChange, initialEtfOrigin }) => {
     const { assets, kpis, isPrivacyMode } = useWallet();
     const [selectedAsset, setSelectedAsset] = useState<RankingItem | null>(null);
@@ -125,12 +32,10 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
     const [etfOrigin, setEtfOrigin] = useState<EtfOriginFilter>(initialEtfOrigin || 'US');
 
     const isBrasil10 = assetClass === 'BRASIL_10';
-    // Exterior (STOCK_US) e REIT já vêm como rankings puros do backend; o badge de
-    // sub-tipo ainda aparece nas linhas para contexto.
+    // Exterior (STOCK_US) e REIT já vêm como rankings puros do backend; o chip
+    // Ações/REITs ativo deriva da classe do ranking carregado.
     const isStockUS = assetClass === 'STOCK_US' || assetClass === 'REIT';
     const isEtf = assetClass === 'ETF';
-    // Qual chip de Exterior está ativo deriva da classe do ranking carregado.
-    const exteriorActive: 'STOCK' | 'REIT' = assetClass === 'REIT' ? 'REIT' : 'STOCK';
 
     useEffect(() => {
         if (isBrasil10) {
@@ -150,91 +55,12 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
     // Mantém o pai (Research → modal de Aporte) em sincronia com a origem visível.
     useEffect(() => { onEtfOriginChange?.(etfOrigin); }, [etfOrigin, onEtfOriginChange]);
 
-    const filteredPicks = useMemo(() => {
-        let filtered = picks;
-
-        if (riskFilter === 'DEFENSIVE') {
-            filtered = picks.filter(p => p.riskProfile === 'DEFENSIVE');
-        } else if (riskFilter === 'MODERATE') {
-            filtered = picks.filter(p => p.riskProfile === 'MODERATE');
-        } else if (riskFilter === 'BOLD') {
-            filtered = picks.filter(p => p.riskProfile === 'BOLD');
-        }
-
-        // Sub-filtro da aba ETFs: nacional = type 'ETF' (B3); internacional = o resto
-        // (STOCK_US/usSubType ETF). A união BR+US preserva o type original do ativo.
-        if (isEtf) {
-            filtered = filtered.filter(p => {
-                const isNacional = p.type === 'ETF';
-                return etfOrigin === 'BR' ? isNacional : !isNacional;
-            });
-        }
-
-        // Cópia antes de ordenar: `picks` é o array do cache do React Query, e o
-        // `.sort()` in-place reordenava o cache por baixo de todos os outros leitores.
-        return sortPicksByScore(filtered)
-            .slice(0, 10)
-            .map((item, idx) => ({
-                ...item,
-                visualPosition: idx + 1
-            }));
-    }, [picks, riskFilter, isEtf, etfOrigin]);
-
-    // O botão Aporte deve refletir o universo visível: na aba ETFs, se a origem atual
-    // (Nacional/Internacional) não tem nenhum COMPRAR, o botão não aparece — evita abrir
-    // o modal já vazio. Independe do perfil de risco (o modal cobre os três).
-    const hasBuyInScope = useMemo(() => {
-        const scoped = isEtf
-            ? picks.filter(p => (p.type === 'ETF') === (etfOrigin === 'BR'))
-            : picks;
-        return scoped.some(p => p.action === 'BUY');
-    }, [picks, isEtf, etfOrigin]);
+    const filteredPicks = useMemo(() => filterPicks(picks, riskFilter, isEtf, etfOrigin), [picks, riskFilter, isEtf, etfOrigin]);
+    const showAporte = useMemo(() => hasBuyInScope(picks, isEtf, etfOrigin), [picks, isEtf, etfOrigin]);
 
     // A carteira IDEAL é composta apenas pelos COMPRAR: um AGUARDAR não faz parte da
-    // alocação-alvo (Exposição Ideal e Meta % por ativo). O peso-alvo de cada COMPRAR é
-    // 1/nº de COMPRAR; AGUARDAR tem meta 0% (o modelo não recomenda entrada agora).
+    // alocação-alvo (Exposição Ideal e Meta % por ativo).
     const buyPicks = useMemo(() => filteredPicks.filter(p => p.action === 'BUY'), [filteredPicks]);
-    const buyCount = buyPicks.length;
-
-    const stats = useMemo(() => {
-        if (!filteredPicks.length) return { avgScore: 0, avgDy: 0, count: 0 };
-        const totalScore = filteredPicks.reduce((acc, curr) => acc + curr.score, 0);
-        const totalDy = filteredPicks.reduce((acc, curr) => acc + (curr.metrics.dy || 0), 0);
-        return {
-            avgScore: Math.round(totalScore / filteredPicks.length),
-            avgDy: (totalDy / filteredPicks.length).toFixed(2),
-            count: filteredPicks.length
-        };
-    }, [filteredPicks]);
-
-    const getScoreTextColor = (score: number) => {
-        if (score >= 90) return 'text-emerald-400';
-        if (score >= 75) return 'text-green-400';
-        if (score >= 60) return 'text-blue-400';
-        if (score >= 50) return 'text-yellow-400';
-        return 'text-red-500';
-    };
-
-    const getYieldColor = (dy: number) => {
-        if (!dy || dy <= 0) return 'text-slate-500';
-        if (dy > 6) return 'text-emerald-400';
-        return 'text-yellow-400';
-    };
-
-    const getTierBadge = (tier?: string) => {
-        // Usa tier vindo do backend, ou infere se não existir (compatibilidade)
-        if (tier === 'GOLD') return <span title="Top Tier (Rodada 1)" className="text-gold"><Medal size={12} fill="currentColor" /></span>;
-        if (tier === 'SILVER') return <span title="Mid Tier (Rodada 2)" className="text-slate-300"><Medal size={12} fill="currentColor" /></span>;
-        if (tier === 'BRONZE') return <span title="Backfill (Rodada 3)" className="text-amber-700"><Medal size={12} fill="currentColor" /></span>;
-        return null;
-    };
-
-    const getRankStyle = (pos: number) => {
-        if (pos === 1) return 'bg-gold/20 text-gold border-gold/50 shadow-[0_0_10px_rgba(212,175,55,0.2)]';
-        if (pos === 2) return 'bg-slate-300/20 text-slate-300 border-slate-400/50';
-        if (pos === 3) return 'bg-amber-700/20 text-amber-600 border-amber-700/50';
-        return 'bg-slate-900 text-slate-600 border-slate-800';
-    };
 
     const formatCurrency = (val: number) => {
         if (!val && val !== 0) return '-';
@@ -243,152 +69,18 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
 
     return (
         <div className="max-w-7xl mx-auto animate-fade-in space-y-6 pb-20">
-            {/* Header com Filtros de Perfil */}
-            <div className="bg-base border border-slate-800 rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center border border-slate-800">
-                        <Target size={20} className="text-slate-400" />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-white">Perfil da Carteira</h3>
-                        <p className="text-[10px] text-slate-500">Selecione o nível de risco para gerar o Top 10 específico.</p>
-                    </div>
-                </div>
-                {/* Mobile: quebra em linhas em vez de rolar na horizontal — com
-                    `no-scrollbar` não havia pista visual e o botão "Aporte" (CTA)
-                    ficava cortado fora da tela. */}
-                <div className="flex items-center justify-center gap-2 flex-wrap w-full md:w-auto md:flex-nowrap md:justify-start md:overflow-x-auto no-scrollbar min-w-0">
-                    {Object.entries(RISK_LABELS).map(([key, label]) => {
-                        if (isBrasil10 && key !== 'DEFENSIVE') return null;
-                        return (
-                            <button
-                                key={key}
-                                onClick={() => setRiskFilter(key as RiskFilter)}
-                                disabled={isBrasil10}
-                                className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${riskFilter === key ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'} ${isBrasil10 ? 'cursor-default' : 'cursor-pointer'}`}
-                            >
-                                {label}
-                            </button>
-                        );
-                    })}
-                    {isStockUS && onExteriorViewChange && (
-                        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-700/60 shrink-0">
-                            {EXTERIOR_VIEWS.map(({ key, label }) => (
-                                <button
-                                    key={key}
-                                    onClick={() => onExteriorViewChange(key)}
-                                    className={`whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${exteriorActive === key ? 'bg-cyan-700 border-cyan-600 text-white shadow-lg shadow-cyan-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
-                                    title={`Exterior: ${label}`}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {isEtf && (
-                        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-700/60 shrink-0">
-                            {(Object.keys(ETF_ORIGIN_LABELS) as EtfOriginFilter[]).map((key) => (
-                                <button
-                                    key={key}
-                                    onClick={() => setEtfOrigin(key)}
-                                    className={`whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${etfOrigin === key ? 'bg-teal-600 border-teal-500 text-white shadow-lg shadow-teal-900/20' : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
-                                    title={`Filtrar ETFs: ${ETF_ORIGIN_LABELS[key]}`}
-                                >
-                                    {ETF_ORIGIN_LABELS[key]}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    {onAporte && hasBuyInScope && (
-                        <div className="flex items-center gap-2 pl-2 border-l border-slate-700/60 shrink-0">
-                            <button
-                                onClick={onAporte}
-                                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-2 rounded-xl text-xs font-bold bg-blue-900/20 border border-blue-800/50 text-blue-400 hover:bg-blue-900/40 hover:text-blue-300 transition-all"
-                                title="Aporte Inteligente: distribui um valor entre os ativos COMPRAR"
-                            >
-                                <Calculator size={13} /> Aporte
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
+            <TopPicksFilterBar
+                riskFilter={riskFilter}
+                onRiskFilter={setRiskFilter}
+                isBrasil10={isBrasil10}
+                onExteriorViewChange={onExteriorViewChange}
+                exteriorActive={isStockUS ? (assetClass === 'REIT' ? 'REIT' : 'STOCK') : null}
+                etfOrigin={isEtf ? etfOrigin : null}
+                onEtfOrigin={setEtfOrigin}
+                onAporte={showAporte ? onAporte : undefined}
+            />
 
-            {/* --- GRID TRIPLO (4-4-4) --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                
-                {/* 1. RESUMO */}
-                <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between shadow-2xl min-h-[240px]">
-                    <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                        <Trophy size={120} className="text-white" />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center border border-blue-600/30">
-                                <BarChart2 size={16} className="text-blue-500" />
-                            </div>
-                            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest bg-blue-900/10 px-2 py-0.5 rounded border border-blue-900/20">
-                                Vértice Quant 2.0
-                            </span>
-                        </div>
-                        <h2 className="text-xl font-black text-white tracking-tight uppercase leading-none truncate" title={isBrasil10 ? 'TOP 10 BRASIL' : assetClass.replace('_', ' ')}>
-                            {isBrasil10 ? 'TOP 10 BRASIL' : assetClass.replace('_', ' ')}
-                        </h2>
-                        <span className="text-sm text-slate-500 font-medium normal-case block mt-1">{RISK_LABELS[riskFilter]} Selection</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-4">
-                        <div className="bg-card border border-slate-800 p-2.5 rounded-xl text-center">
-                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Score</p>
-                            <p className={`text-sm font-black ${getScoreTextColor(stats.avgScore)}`}>{stats.avgScore}</p>
-                        </div>
-                        <div className="bg-card border border-slate-800 p-2.5 rounded-xl text-center">
-                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">{assetClass === 'CRYPTO' ? 'Avg Cap' : 'Yield 12m'}</p>
-                            {assetClass === 'CRYPTO' ? (
-                                <p className="text-sm font-black text-emerald-400">
-                                    {filteredPicks.length > 0 ? `$${(filteredPicks.reduce((acc, curr) => acc + (curr.metrics.marketCap || 0), 0) / filteredPicks.length / 1e9).toFixed(1)}B` : '-'}
-                                </p>
-                            ) : (
-                                <p className="text-sm font-black text-emerald-400">{stats.avgDy}%</p>
-                            )}
-                        </div>
-                        <div className="bg-card border border-slate-800 p-2.5 rounded-xl text-center">
-                            <p className="text-[8px] text-slate-500 font-bold uppercase mb-0.5">Ativos</p>
-                            <p className="text-sm font-black text-white">{stats.count}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. MINHA CARTEIRA */}
-                <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
-                    <div className="flex items-center gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
-                        <Wallet size={14} className="text-emerald-500" />
-                        <h3 className="text-[10px] font-black text-white uppercase tracking-widest">Minha Alocação</h3>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center relative z-10">
-                        <UserWalletSectorChart assetClass={assetClass} />
-                    </div>
-                </div>
-
-                {/* 3. ALOCAÇÃO IDEAL */}
-                <div className="lg:col-span-4 bg-base border border-slate-800 rounded-3xl p-5 flex flex-col relative overflow-hidden min-h-[240px]">
-                    <div className="flex items-center justify-between gap-2 mb-4 relative z-10 shrink-0 border-b border-slate-800/50 pb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <PieChart size={14} className="text-purple-500 shrink-0" />
-                            <h3 className="text-[10px] font-black text-white uppercase tracking-widest truncate">Exposição Ideal</h3>
-                        </div>
-                        {/* Deixa explícito que a alocação-alvo desconsidera os AGUARDAR. */}
-                        <span
-                            title="A carteira ideal considera apenas os ativos COMPRAR; os AGUARDAR ficam de fora."
-                            className="text-[8px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20 uppercase tracking-wider whitespace-nowrap shrink-0"
-                        >
-                            Só COMPRAR
-                        </span>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center relative z-10">
-                        <SectorDistribution picks={buyPicks} />
-                    </div>
-                    <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-purple-900/10 rounded-full blur-[50px]"></div>
-                </div>
-            </div>
+            <TopPicksOverview picks={filteredPicks} buyPicks={buyPicks} assetClass={assetClass} riskFilter={riskFilter} />
 
             {/* LISTA DETALHADA */}
             <div className="space-y-3">
@@ -397,356 +89,19 @@ export const TopPicksCard: React.FC<TopPicksCardProps> = ({ picks, assetClass, o
                         <Layers size={12} /> Composição Detalhada
                     </h3>
                 </div>
-                {filteredPicks.map((pick, idx) => {
-                        const fairValueLabel = "Preço Teto";
-                        const isBuyPick = pick.action === 'BUY';
-
-                        // Encontra se o usuário possui este ativo
-                        const userAsset = assets.find(a => a.ticker === pick.ticker);
-                        const userHasAsset = !!userAsset && userAsset.quantity > 0;
-                        const userAllocPercent = userHasAsset && kpis.totalEquity > 0
-                            ? (userAsset.totalValue / kpis.totalEquity) * 100
-                            : 0;
-
-                        // Meta = peso na carteira ideal (só COMPRAR). AGUARDAR não entra na
-                        // alocação-alvo, logo meta 0% e sem sugestão de rebalanceamento.
-                        const idealPercent = isBuyPick && buyCount > 0 ? (100 / buyCount) : 0;
-
-                        // Cálculo do Rebalanceamento ($)
-                        const idealValue = kpis.totalEquity * (idealPercent / 100);
-                        const currentValue = userHasAsset ? userAsset.totalValue : 0;
-                        const rebalanceDelta = currentValue - idealValue;
-
-                        return (
-                            <div key={idx} role="button" tabIndex={0} aria-label={`Ver detalhes de ${pick.ticker}`} onClick={() => setSelectedAsset(pick)} onKeyDown={onActivateKey(() => setSelectedAsset(pick))} className="bg-base border border-slate-800 rounded-2xl p-4 hover:border-slate-600 hover:bg-panel transition-all cursor-pointer group relative overflow-hidden">
-                                
-                                <div className="flex flex-col xl:flex-row gap-6 items-center">
-                                    {/* SEÇÃO 1: IDENTIDADE E SCORES */}
-                                    <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 items-center">
-                                        
-                                        {/* Ticker & Info */}
-                                        <div className="lg:col-span-4 flex items-center gap-3">
-                                            <div className="flex flex-col items-center gap-1 shrink-0">
-                                                <div className={`w-8 h-8 flex flex-col items-center justify-center rounded-lg border shrink-0 ${getRankStyle(pick.visualPosition)}`}>
-                                                    <span className="font-black text-sm leading-none">{pick.visualPosition}</span>
-                                                </div>
-                                                <PositionDeltaBadge position={pick.position} previousPosition={pick.previousPosition} />
-                                            </div>
-                                            <AssetLogo ticker={pick.ticker} type={pick.type as AssetType} name={pick.name} sector={pick.sector} size={36} />
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-1 mb-1">
-                                                    <h4 className="text-base font-black text-white tracking-tight">{pick.ticker}</h4>
-                                                    <div className="flex items-center gap-1 shrink-0">
-                                                        {(pick as any).isDividendAristocrat && (
-                                                            <span title="Dividend Aristocrat: Crescimento Consistente" className="text-emerald-400">
-                                                                <Crown size={12} fill="currentColor" />
-                                                            </span>
-                                                        )}
-                                                        {getTierBadge((pick as any).tier)}
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    {/* Único badge de setor/segmento, em linha única (sem quebra). O sub-tipo
-                                                        Stocks/REITs/ETFs deixou de ser badge: o ranking já é puro por classe. */}
-                                                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-bold uppercase border border-slate-700 whitespace-nowrap truncate max-w-full" title={pick.sector || 'Geral'}>{pick.sector || 'Geral'}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Dados Financeiros REORDENADOS: Preço -> Teto -> Yield */}
-                                        <div className="lg:col-span-8 flex flex-col sm:flex-row items-center gap-6 w-full">
-                                            
-                                            <div className="flex gap-6 shrink-0">
-                                                {/* 1. Preço Atual */}
-                                                <div className="text-center sm:text-left">
-                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">Preço Atual</p>
-                                                    <p className="text-xs font-bold text-slate-300 tabular-nums">{formatCurrency(pick.currentPrice)}</p>
-                                                </div>
-                                                
-                                                {/* 2. Preço Teto */}
-                                                <div className="text-center sm:text-left">
-                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">{fairValueLabel}</p>
-                                                    <p className="text-xs font-bold text-blue-400 tabular-nums">{formatCurrency(pick.targetPrice || 0)}</p>
-                                                </div>
-
-                                                {/* 3. Yield / Variável (Com Cores) */}
-                                                <div className="text-center sm:text-left">
-                                                    <p className="text-[8px] font-bold text-slate-500 uppercase">{assetClass === 'CRYPTO' ? 'Market Cap' : 'Yield'}</p>
-                                                    {assetClass === 'CRYPTO' ? (
-                                                        <p className="text-xs font-bold tabular-nums text-slate-300">
-                                                            {pick.metrics.marketCap ? `$${(pick.metrics.marketCap / 1e9).toFixed(1)}B` : '-'}
-                                                        </p>
-                                                    ) : (
-                                                        <p className={`text-xs font-bold tabular-nums ${getYieldColor(pick.metrics.dy)}`}>
-                                                            {pick.metrics.dy ? pick.metrics.dy.toFixed(1) : 0}%
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Divisor Vertical (Desktop) */}
-                                            <div className="hidden sm:block w-px h-8 bg-slate-800"></div>
-
-                                            {/* Barras de Score Inline */}
-                                            <div className="flex-1 grid grid-cols-3 gap-3 w-full">
-                                                <div>
-                                                    <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                                        <span>Qualidade</span> <span>{pick.metrics?.structural?.quality ?? 50}</span>
-                                                    </p>
-                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500" style={{ width: `${pick.metrics?.structural?.quality ?? 50}%` }}></div></div>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                                        <span>Valuation</span> <span>{pick.metrics?.structural?.valuation ?? 50}</span>
-                                                    </p>
-                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${pick.metrics?.structural?.valuation ?? 50}%` }}></div></div>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[7px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
-                                                        <span>Segurança</span> <span>{pick.metrics?.structural?.risk ?? 50}</span>
-                                                    </p>
-                                                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-purple-500" style={{ width: `${pick.metrics?.structural?.risk ?? 50}%` }}></div></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* SEÇÃO 2: ALOCAÇÃO E AÇÃO */}
-                                    <div className="flex flex-col sm:flex-row gap-6 w-full xl:w-auto xl:border-l xl:border-slate-800 xl:pl-6">
-                                        
-                                        {/* Sua Posição */}
-                                        <div className="flex-1 sm:w-40 flex flex-col justify-center">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <p className="text-[8px] font-bold text-slate-500 uppercase flex items-center gap-1">
-                                                    <Wallet size={8} /> Sua Posição
-                                                </p>
-                                                <span className="text-[8px] font-bold text-slate-600">Meta: {isBuyPick ? `${idealPercent.toFixed(0)}%` : '—'}</span>
-                                            </div>
-                                            
-                                            {userHasAsset ? (
-                                                <div>
-                                                    <div className="flex justify-between items-end mb-1">
-                                                        <span className="text-xs font-bold text-white tabular-nums">{formatCurrency(userAsset.totalValue)}</span>
-                                                        <span className={`text-[9px] font-bold ${userAllocPercent > idealPercent ? 'text-yellow-500' : 'text-blue-400'}`}>
-                                                            {userAllocPercent.toFixed(1)}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden relative">
-                                                        <div className="h-full bg-blue-500 absolute left-0" style={{ width: `${Math.min(userAllocPercent * 5, 100)}%` }}></div>
-                                                        <div className="h-full w-0.5 bg-slate-400 absolute z-10" style={{ left: `${Math.min(idealPercent * 5, 100)}%` }}></div>
-                                                    </div>
-                                                    
-                                                    {/* Rebalanceamento só faz sentido para COMPRAR (meta > 0). Num
-                                                        AGUARDAR possuído o modelo não pede aumento nem corte — mostra
-                                                        status neutro em vez de "Excede" (que soaria como ordem de venda). */}
-                                                    <div className="mt-2 text-right">
-                                                        {!isBuyPick ? (
-                                                            <span className="text-[10px] font-black text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700">
-                                                                Aguardar
-                                                            </span>
-                                                        ) : rebalanceDelta > 0 ? (
-                                                            <span className="text-[10px] font-black text-yellow-500 bg-yellow-900/10 px-1.5 py-0.5 rounded border border-yellow-900/20">
-                                                                Excede {formatCurrency(Math.abs(rebalanceDelta))}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20">
-                                                                Falta {formatCurrency(Math.abs(rebalanceDelta))}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="w-full h-5 rounded bg-slate-800/50 border border-dashed border-slate-700 flex items-center justify-center">
-                                                        <span className="text-[8px] text-slate-600 font-bold uppercase">Não possui</span>
-                                                    </div>
-                                                    {/* Só sugere aporte em ativos COMPRAR. Em AGUARDAR o sistema não
-                                                        recomenda entrada — mostra o status neutro em vez do valor. */}
-                                                    <div className="text-right mt-1">
-                                                        {pick.action === 'BUY' ? (
-                                                            <span className="text-[10px] font-black text-emerald-400 bg-emerald-900/10 px-1.5 py-0.5 rounded border border-emerald-900/20">
-                                                                Aportar ~{formatCurrency(idealValue)}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-[10px] font-black text-slate-500 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700">
-                                                                Aguardar
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Ação */}
-                                        <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 border-slate-800 pt-3 sm:pt-0 min-w-[140px]">
-                                            <div className="text-center">
-                                                <div className="text-[8px] font-black uppercase text-slate-500 mb-1">Score</div>
-                                                <span className={`text-lg font-black ${getScoreTextColor(pick.score)}`}>{pick.score}</span>
-                                            </div>
-                                            <div className="flex flex-col items-center gap-1">
-                                                <div className={`px-3 py-1.5 rounded-lg border flex flex-col items-center min-w-[80px] ${pick.action === 'BUY' ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-400 bg-slate-800 border-slate-700'}`}><span className="text-[9px] font-black tracking-tighter">{pick.action === 'BUY' ? 'COMPRAR' : 'AGUARDAR'}</span></div>
-                                                {/* Um AGUARDAR no MEIO do ranking é o que mais confunde: o ativo
-                                                    aparece acima de outros e sem sinal de compra. Ele está ali por
-                                                    continuidade — a lista mantém quem já estava enquanto o score não
-                                                    cai abaixo do mínimo. Sem este marcador o rastro existe no
-                                                    documento e nada chega ao leitor. O selo NÃO fala de ação:
-                                                    COMPRAR/AGUARDAR continua vindo só do score. */}
-                                                {pick.retention?.retained && (
-                                                    <span
-                                                        title={pick.retention.reason
-                                                            + (pick.retention.previousPosition
-                                                                ? ` · era ${pick.retention.previousScore} na posição ${pick.retention.previousPosition}`
-                                                                : '')}
-                                                        className="flex items-center gap-1 text-[8px] font-black text-blue-400 bg-blue-900/10 px-1.5 py-0.5 rounded border border-blue-900/30 uppercase tracking-wider whitespace-nowrap"
-                                                    >
-                                                        <History size={8} /> Já estava
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })
-                }
+                {filteredPicks.map((pick, idx) => (
+                    <TopPickRow
+                        key={idx}
+                        pick={pick}
+                        assetClass={assetClass}
+                        position={pickPosition(pick, assets, kpis.totalEquity, buyPicks.length)}
+                        formatCurrency={formatCurrency}
+                        onSelect={setSelectedAsset}
+                    />
+                ))}
             </div>
 
             <AssetDetailModal isOpen={!!selectedAsset} onClose={() => setSelectedAsset(null)} asset={selectedAsset} />
-        </div>
-    );
-};
-
-const UserWalletSectorChart = ({ assetClass }: { assetClass: string }) => {
-    const { assets } = useWallet();
-    const navigate = useNavigate();
-
-    const stats = useMemo(() => {
-        const allowedTypes = assetClass === 'BRASIL_10' 
-            ? ['STOCK', 'FII'] 
-            : assetClass === 'STOCK_US' ? ['STOCK_US'] : [assetClass];
-
-        const filteredAssets = assets.filter(a => allowedTypes.includes(a.type));
-        
-        if (filteredAssets.length === 0) return { sectors: [], hasData: false, totalValue: 0 };
-
-        const counts: Record<string, number> = {};
-        let totalValue = 0;
-
-        filteredAssets.forEach(a => {
-            const sector = a.sector || 'Outros';
-            const val = a.totalValue || 0; 
-            counts[sector] = (counts[sector] || 0) + val;
-            totalValue += val;
-        });
-
-        const sectors = Object.entries(counts)
-            .map(([name, value]) => ({ 
-                name, 
-                value, 
-                percent: totalValue > 0 ? (value / totalValue) * 100 : 0 
-            }))
-            .sort((a, b) => b.value - a.value);
-
-        return { sectors, hasData: true, totalValue };
-    }, [assets, assetClass]);
-
-    if (!stats.hasData) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center mb-2 border border-slate-800">
-                    <Wallet size={16} className="text-slate-500" />
-                </div>
-                <p className="text-[10px] text-slate-500 font-bold mb-3">Sem ativos nesta categoria.</p>
-                <button onClick={() => navigate('/wallet')} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition-colors">
-                    <PlusCircle size={12} /> Adicionar
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex flex-row items-center gap-4 w-full h-full px-2">
-            <div className="relative w-24 h-24 shrink-0">
-                <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90">
-                    <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#1e293b" strokeWidth="6"></circle>
-                    {stats.sectors.map((sector, i) => {
-                        let cumulativePercent = 0;
-                        for (let j = 0; j < i; j++) cumulativePercent += stats.sectors[j].percent;
-                        const dash = `${sector.percent} ${100 - sector.percent}`;
-                        const offset = 100 - cumulativePercent + 25;
-                        return (
-                            <circle key={sector.name} cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={COLORS[i % COLORS.length]} strokeWidth="6" strokeDasharray={dash} strokeDashoffset={offset} className="transition-all duration-1000 ease-out hover:stroke-[8] cursor-pointer"><title>{sector.name}: {Math.round(sector.percent)}%</title></circle>
-                        );
-                    })}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-[9px] text-slate-500 uppercase font-bold">Você</span>
-                </div>
-            </div>
-            <div className="flex-1 flex flex-col h-full">
-                <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[140px] custom-scrollbar pr-1">
-                    {stats.sectors.map((sector, i) => (
-                        <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
-                            <div className="flex items-center gap-1.5 overflow-hidden">
-                                <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
-                                <span className="text-slate-400 truncate max-w-[80px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
-                            </div>
-                            <span className="font-bold text-slate-300 tabular-nums ml-1">{Math.round(sector.percent)}%</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const SectorDistribution = ({ picks }: { picks: RankingItem[] }) => {
-    const sectors = useMemo(() => {
-        const counts: Record<string, number> = {};
-        picks.forEach(p => {
-            const s = p.sector || 'Outros';
-            counts[s] = (counts[s] || 0) + 1;
-        });
-        return Object.entries(counts)
-            .map(([name, count]) => ({ name, count, percent: (count / picks.length) * 100 }))
-            .sort((a, b) => b.count - a.count);
-    }, [picks]);
-
-    // Pode ficar vazio quando todos os ativos da seleção estão em AGUARDAR (nenhum COMPRAR).
-    if (sectors.length === 0) return <p className="text-[10px] text-slate-500 text-center mt-10">Nenhum ativo COMPRAR nesta seleção.</p>;
-
-    return (
-        <div className="flex flex-row items-center gap-4 w-full h-full">
-            <div className="relative w-20 h-20 shrink-0 ml-2">
-                <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90">
-                    <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#1e293b" strokeWidth="8"></circle>
-                    {sectors.map((sector, i) => {
-                        let cumulativePercent = 0;
-                        for (let j = 0; j < i; j++) cumulativePercent += sectors[j].percent;
-                        const dash = `${sector.percent} ${100 - sector.percent}`;
-                        const offset = 100 - cumulativePercent + 25;
-                        return (
-                            <circle key={sector.name} cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={COLORS[i % COLORS.length]} strokeWidth="8" strokeDasharray={dash} strokeDashoffset={offset} className="transition-all duration-1000 ease-out"></circle>
-                        );
-                    })}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-xs font-black text-white">{picks.length}</span>
-                </div>
-            </div>
-
-            <div className="flex-1 grid grid-cols-1 gap-y-1 content-center overflow-y-auto max-h-[160px] custom-scrollbar pr-1">
-                {sectors.map((sector, i) => (
-                    <div key={sector.name} className="flex items-center justify-between text-[9px] group w-full">
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                            <div className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
-                            <span className="text-slate-400 truncate max-w-[90px] group-hover:text-slate-200 transition-colors" title={sector.name}>{sector.name}</span>
-                        </div>
-                        <span className="font-bold text-slate-300 tabular-nums ml-1">{Math.round(sector.percent)}%</span>
-                    </div>
-                ))}
-            </div>
         </div>
     );
 };

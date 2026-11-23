@@ -29,18 +29,18 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.server.services` — Cobertura de linhas — server/services (%) | 76.5 | 76.5 | 76.9 |
 | `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 93.5 | 93.7 | 93.7 |
 | `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 96 | 96.4 | 96.4 |
-| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 82 | 82.4 | 82.4 |
+| `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 82.5 | 82.4 | 82.9 |
 | `cobertura.client.contexts` — Cobertura de linhas — client/src/contexts (%) | 97 | 97.4 | 97.4 |
 | `cobertura.client.hooks` — Cobertura de linhas — client/src/hooks (%) | 100 | 100 | 100 |
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89 | 89.3 | 89.3 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 | 87.1 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89 | 89.1 | 89.1 |
 | `testes.server` — Casos de teste do server | 3417 | 3404 | 3417 |
-| `testes.client` — Casos de teste do client | 2125 | 2110 | 2125 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 36.5 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 44.9 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 37 | 37 | 37 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1078 | 1079 | 1078 |
+| `testes.client` — Casos de teste do client | 2140 | 2110 | 2140 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 41.3 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 55.3 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 36 | 37 | 36 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1059 | 1079 | 1059 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |
 | `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 | 145 |
@@ -52,11 +52,11 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `quarentenaIrregular` — Teste pulado sem data, vencido ou com prazo > 7 dias | 0 | 0 | 0 |
 | `cssSemUso` — Classes do CSS próprio sem uso | 9 | 9 | 9 |
 | `imgSemSrcset` — <img> sem srcSet | 23 | 23 | 23 |
-| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 705 | 705 |
+| `bundleGzipKB` — Bundle do client, JS+CSS com gzip (KB) | 747 | 705 | 706 |
 | `lint.erros` — Erros do ESLint | 0 | 0 | 0 |
-| `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 13 | 13 | 13 |
+| `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 11 | 13 | 11 |
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 | 0 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 104 | 105 | 104 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 103 | 105 | 103 |
 | `complexidadeMax` — Maior complexidade ciclomática de uma função | 44 | 45 | 44 |
 | `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.47 | 0.49 | 0.47 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 | 0 |

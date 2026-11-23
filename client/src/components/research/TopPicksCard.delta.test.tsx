@@ -5,7 +5,8 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TopPicksCard, sortPicksByScore, getPositionDelta } from './TopPicksCard';
+import { TopPicksCard } from './TopPicksCard';
+import { sortPicksByScore, getPositionDelta } from './topPicksView';
 import type { RankingItem } from '../../services/research';
 
 vi.mock('../../contexts/WalletContext', () => ({
