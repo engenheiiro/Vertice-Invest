@@ -1,0 +1,1906 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`caracterização do TXT do ranking > 300 cenários semeados, hash por cenário 1`] = `
+[
+  "0:cc1518ad4c1ba156",
+  "1:5c0891fc2cdaf266",
+  "2:d2c7f03f6586eefb",
+  "3:d77fb861468b8809",
+  "4:a54decee9c1f644e",
+  "5:eaf43c53324b2c76",
+  "6:c7383f2a44ff2411",
+  "7:cdd3280954f0c9af",
+  "8:d80dc41dd86342a2",
+  "9:79ca0f3476b44063",
+  "10:a144acd9f359ff14",
+  "11:4fd70791f3d90b9d",
+  "12:ee2edb114ca50c0a",
+  "13:16b59f6aad76e3ef",
+  "14:4b2d200d0734a093",
+  "15:fdc2eec6a68b1fc6",
+  "16:76e17fcdfc2f88ca",
+  "17:1a5c4bdbff421e1a",
+  "18:c550244a1668c055",
+  "19:4920561585c87941",
+  "20:bdfd4b3646ab4a00",
+  "21:a8f30e880c398792",
+  "22:3c10c2bf73e35ee8",
+  "23:27ee2357770e4d5d",
+  "24:1ed4e2c19ace988d",
+  "25:983b48916979c0cf",
+  "26:9c74f128d74a2a8e",
+  "27:344475d5e0d49b22",
+  "28:8c7abd6a2c1ea9e6",
+  "29:daf8cd8985f62dee",
+  "30:19ccf60d186dbb7d",
+  "31:65592fbc844b7838",
+  "32:92c873e9377b9f6a",
+  "33:6ecea476d4acdb67",
+  "34:dc3ccb1a4e681719",
+  "35:eead7a74244abbfc",
+  "36:55ea55e3808ada41",
+  "37:56c43d25f3297079",
+  "38:e1cf7eed2c8b7609",
+  "39:d99b465f3b7c3313",
+  "40:206e083861c8597e",
+  "41:24a96a155f442f0c",
+  "42:c49fa416fbc3a0a1",
+  "43:0c5e2450695271d3",
+  "44:e26086ac8ceb432e",
+  "45:55cb2c2e47772716",
+  "46:b66770994ed9f745",
+  "47:eca2f9731ae95043",
+  "48:98413df33e855a38",
+  "49:d10226a9d283b138",
+  "50:c89f198752071b99",
+  "51:7156a4ebd725f835",
+  "52:29d7dc318676256d",
+  "53:dd8dd202b9bf3658",
+  "54:21461727b62ccebf",
+  "55:9e9b589ebe0d65ae",
+  "56:9805dac6ab6a2948",
+  "57:fe55fb457962f414",
+  "58:d47ed0612d92cd28",
+  "59:537966e565b961f2",
+  "60:6c3ace8aecbe1317",
+  "61:24ffa03deae94bde",
+  "62:721e27968780c1ff",
+  "63:0353cacaec1544b9",
+  "64:01efbd5ea0a9d415",
+  "65:38ff1fe4103c4993",
+  "66:0255f48cd30a2426",
+  "67:b8d1c58cbfb7b94c",
+  "68:0ed25d32e075445a",
+  "69:a81b98fecf939180",
+  "70:f0871e2be7b25967",
+  "71:1c9baf883d64fc46",
+  "72:5649fda963657ff6",
+  "73:2f6257a59502d6d5",
+  "74:d45b48c3422a1ac1",
+  "75:6108837e7d49a060",
+  "76:2dd8bc2678c9785d",
+  "77:ddeede29317078a2",
+  "78:098713e4a57ac920",
+  "79:c57328d67ac4aa3a",
+  "80:2575fa2300ffce35",
+  "81:9b54f4ad7c26b8df",
+  "82:e5952d2aa2df00c1",
+  "83:d509d3a16b9794c6",
+  "84:ba3811da6af758fa",
+  "85:42ebfa0a7f64a5bd",
+  "86:552aac02c0af7e1f",
+  "87:6320f4ad01a6f3f1",
+  "88:724898a530e46043",
+  "89:0a71f1f5b5ca48a9",
+  "90:4f1b8a7c9d18fdde",
+  "91:13cbdedcff83e89c",
+  "92:e724129e44b71773",
+  "93:997c8a7be79a3e2d",
+  "94:b946c3fa660b5e38",
+  "95:6bf14c5acc591366",
+  "96:1c7f9ec0dcede1d4",
+  "97:66f1ced50c0ff6dd",
+  "98:1effd8c9617f32ca",
+  "99:473884ed7877d705",
+  "100:3ff9100646de433d",
+  "101:b1152a3dff6063aa",
+  "102:35a1ad3ac9b01a4c",
+  "103:af4323a8e2fcc911",
+  "104:92e1626765f014c8",
+  "105:2b7c7087773f9d2d",
+  "106:89752d49cc690c0a",
+  "107:ffe627e21b4ad57c",
+  "108:9fd36e61c0e2964e",
+  "109:e66b9fd9179123a9",
+  "110:1a586f42eef5a1ab",
+  "111:10972cee8ca11dd3",
+  "112:8297363abe0e37cb",
+  "113:7b806afbf3d2b7c8",
+  "114:5ffc2d8b80373cd0",
+  "115:7a762b8728f901e4",
+  "116:ff51a62a10ed4137",
+  "117:da1e6d22e88fc5ee",
+  "118:b8ab3694426c7abf",
+  "119:abdc1a8aded2a592",
+  "120:f83e4909419e12e1",
+  "121:5e2b2354b48b6d62",
+  "122:c7d74660ec2c1f94",
+  "123:49d81627014f4548",
+  "124:f197d919e20a35c1",
+  "125:36827b28581748b0",
+  "126:d12cd8777e789999",
+  "127:5de842985d94e8e1",
+  "128:c0025e5ca825ad68",
+  "129:21bcc92c10b08e2d",
+  "130:1dce606e4eed472a",
+  "131:36c3440f0cd6bb47",
+  "132:fa582cb4128d5f8c",
+  "133:9cb45b522355247a",
+  "134:61674b17dd35d0dd",
+  "135:288de8e123e49bfd",
+  "136:4f310a0d76b9b204",
+  "137:9a1efa5bf8e200bb",
+  "138:0c54dd5d32b74619",
+  "139:60a2d86eb5298de5",
+  "140:897905740d641b7b",
+  "141:8cc639e22d4634b7",
+  "142:c9fac326c4c22bdb",
+  "143:a79c843247f62dc5",
+  "144:e1ebb255cbb14775",
+  "145:58f02edcbe753554",
+  "146:1e31548850950e7b",
+  "147:55e66a9b09674748",
+  "148:92643a146728cb53",
+  "149:0e0ef98adf0b79a9",
+  "150:d49c201236ef05d7",
+  "151:0cf48b238df55518",
+  "152:78b38dbc94c74d4b",
+  "153:c93b612fdde7e639",
+  "154:82c1258442bb52b6",
+  "155:96031aaee5ba4cda",
+  "156:9fd4b2d5cdf6cc73",
+  "157:a0c6b158d97adb3e",
+  "158:2dc6a127335dcd4f",
+  "159:86ef15fcd3b4ef8d",
+  "160:dfb52280b5142611",
+  "161:d489ee392e403c8b",
+  "162:b70c5436872090a3",
+  "163:e7916e51410036f7",
+  "164:17598ed88e5d4e73",
+  "165:b39cf6136497090e",
+  "166:b7757cc925ba6de9",
+  "167:4645ce49bdd97e09",
+  "168:3789996b89741c06",
+  "169:d8886aa90c4106fd",
+  "170:fcb9e1787920857c",
+  "171:386c0b75c8828a32",
+  "172:26af6b52995712dc",
+  "173:f27725d94b659f7f",
+  "174:20bb61308d13a9fb",
+  "175:cd7b08c7ba377a9f",
+  "176:3a370f4156b27192",
+  "177:d9d075bd99486b48",
+  "178:ca27814e73a698e2",
+  "179:05a10ba8e9f4c33a",
+  "180:bbf08c9c8d6aa121",
+  "181:3b76fe9bf9c4ecda",
+  "182:3f8c118e0aa0592c",
+  "183:ef32634b4f1d9506",
+  "184:3b7af6c72348b370",
+  "185:e75f51225bf15952",
+  "186:a9fad562a01df61f",
+  "187:ee6aee73a68592ea",
+  "188:b7bdd0d9d30c8ac5",
+  "189:4a77e37160f93652",
+  "190:698ccf98a638a6b0",
+  "191:7e66fbb8ff41d388",
+  "192:24b02cb6f526b865",
+  "193:e89b1a9c265d54f8",
+  "194:bda7102618bb1f5b",
+  "195:828bdda12da5fcef",
+  "196:9886f7cd8036aea6",
+  "197:ed353b22aa3fd3dd",
+  "198:a46d236a54d1899b",
+  "199:7af5d1e74dcbbc28",
+  "200:b462e888c3765f5d",
+  "201:5081db46e021a4bc",
+  "202:9282b1a3208d87f5",
+  "203:1bb9931fd8b54a0f",
+  "204:b5b0ac106560590e",
+  "205:12755158e8e5a5c6",
+  "206:f3c1721cfc4bc3e0",
+  "207:0ae79ad7e923973d",
+  "208:575cbc11fa075a32",
+  "209:d2cf3922c2319713",
+  "210:dcd1ee6516ea5e0d",
+  "211:0898532ef2b11e33",
+  "212:480fd6a7f3a20331",
+  "213:fdcd6c38f5d5eab0",
+  "214:69055bbbd2fc2a2a",
+  "215:b49c65fef2a9b01d",
+  "216:34f53810c18f6be3",
+  "217:cea83fa1b36152a7",
+  "218:eb5166e615c83159",
+  "219:d8aba584782b7968",
+  "220:ecbcd07c15e41f51",
+  "221:c954b672a1ddd3bf",
+  "222:4e3473eee3f3f54a",
+  "223:27dbd46059d440ad",
+  "224:d39a9f69655f6d60",
+  "225:3b0a1ac55b875c9d",
+  "226:96309956d44bb2fe",
+  "227:77e640fa02fccf3e",
+  "228:832e1b12f55e7fcd",
+  "229:1ddcd63586a4d468",
+  "230:7fbedcbb20b33550",
+  "231:2857eadf3644b95d",
+  "232:1c5fd7dc5a36d2c1",
+  "233:54a9d7ca00cc17a3",
+  "234:11960d82eed42cdd",
+  "235:b1e7dbcca9b5af90",
+  "236:41ab085aba23868e",
+  "237:3e9858297a9badc8",
+  "238:95a49655fe09aca0",
+  "239:8800cbd8db45693e",
+  "240:b64a1df4dcd6791f",
+  "241:0b3c0d026320f0ca",
+  "242:c450c6df5217b25e",
+  "243:d8ca972b3da02429",
+  "244:0e5d42a3fc81f97e",
+  "245:ed394d6000f4d508",
+  "246:481330007ba815ab",
+  "247:c236cad6a1efa4f3",
+  "248:d71fa4fb2adbe4ce",
+  "249:be6a84baa0c9eb41",
+  "250:47425456b420424f",
+  "251:fa61b27ccc9cbf9c",
+  "252:000ab4ada0ab0ccf",
+  "253:60b9957ad93f5e49",
+  "254:8cbb2ae57723385f",
+  "255:03efa11454114b6a",
+  "256:539b82dc3e6b64ea",
+  "257:2ab79cf377a3a3ba",
+  "258:fa76165def323b19",
+  "259:e05b467be5f4ce9f",
+  "260:840ed9432573ca50",
+  "261:185c28a53cabb12a",
+  "262:648476f2e199e6b5",
+  "263:a6792d01675cb721",
+  "264:2d4571058fbf1a3c",
+  "265:c7ebc41b9bcc0fb9",
+  "266:9a7f9fdc9eec5a17",
+  "267:b62453297bcdf9de",
+  "268:38a8ef5a04b34238",
+  "269:e2d74e6c94147d1f",
+  "270:f0edd4bf965ac135",
+  "271:fc72446e8d28278c",
+  "272:98d4d82e9c3b728e",
+  "273:d8df276abefed38e",
+  "274:f714dc8e987f5504",
+  "275:e2089a9bad29c808",
+  "276:a39591abef0a4b7f",
+  "277:7c7ee71213075981",
+  "278:95d4a6f5d65f5c89",
+  "279:ce4ffa8906f3130f",
+  "280:dfda171958fd6ce7",
+  "281:534391641ad5be43",
+  "282:9e645b718ec8619d",
+  "283:a639b597a32cf854",
+  "284:fec99af1d429041d",
+  "285:3f1c0dbdb537365b",
+  "286:13426974bdb0b512",
+  "287:08937e9e82a99c9b",
+  "288:63c175876c00b67a",
+  "289:1986e8cc6c28d6d4",
+  "290:da6b4a30d3eab318",
+  "291:29d80b91fbd8aeeb",
+  "292:b9ad143418c5106e",
+  "293:249062093aa19ac2",
+  "294:5a5980bed8653395",
+  "295:70f10679420d0a11",
+  "296:c2794ac813fabec5",
+  "297:abca38f22fb1d52e",
+  "298:715ecf72928105fe",
+  "299:3e3d8da1e76edbca",
+]
+`;
+
+exports[`caracterização do TXT do ranking > cenários aleatórios completos para diff legível 1`] = `
+[
+  "════════════════════════════════════════════════════════════════════════════════
+  VÉRTICE INVEST — RANKING QUANTITATIVO
+  Gerado em: <DATA> às <HORA>
+  ────────────────────────────────────────────────────────────────────────────
+  Contexto Macro:
+    SELIC:      1.00%    CDI:        -20000000.00%
+    IPCA:       N/D    Risk Free:  70.00%
+    NTN-B Long: 999.00%    Dólar:      R$ 5.000,00
+    Ibovespa:   0 pts (+5000.00%)
+    BTC:        $3300000000 (N/D)
+════════════════════════════════════════════════════════════════════════════════
+
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: BRASIL 10
+  Total no Ranking: 3   GOLD: 0  SILVER: 1  BRONZE: 1
+  COMPRAR: 2   AGUARDAR: 1   Descartados: 1
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK690  —  N/D  [ETF]
+  Setor: N/D
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥈 SILVER       Perfil: OUTRO
+  Score:   -5.5/100   Delta Posição: ➡️ Manteve
+  ············································································
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: R$ -∞
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ -20.000.000,00   Método: N/D
+  Preço Graham:      R$ 1,01   Preço Bazin:  N/D
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 70
+  Liquidez Média:    N/D
+  Volatilidade:      N/D   Beta: 3300000000.00
+  SMA200:            R$ -20.000.000,00   EMA50: R$ -5,50
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK991  —  N/D  [STOCK]
+  Setor: Financial Services
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: 🥉 BRONZE       Perfil: Moderado
+  Score:   0.0/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:  5000.0/100
+    Moderado:   5000.0/100
+    Arrojado:     1.0/100
+  ············································································
+  Preço Atual:    R$ 0,40               Preço Alvo: R$ 999,00
+  Upside/Downside: +249650.0%
+  🏆 DIVIDEND ARISTOCRAT
+  ············································································
+  TESE: N/D
+
+  Bull Thesis:
+    + Alta 1
+
+  AUDIT LOG:
+  [Valuation]
+    ○ Fator 0 xxxxxxxxxxxxx                                   [   0 pts] (penalidade)
+  [Qualidade]
+    ▲ Fator 1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx        [+100 pts] (penalidade)
+    ▼ Fator 2 xxxxxxxxxxxxxxxxxxx                             [-100 pts] (penalidade)
+  [Risco]
+    ○ Fator 3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                  [   0 pts] (bônus)
+    ▼ Fator 4 xxxxxxxxx                                       [ -15 pts] (penalidade)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 999,00   Método: N/D
+  Preço Graham:      R$ 70,00   Preço Bazin:  N/D
+  PEG Ratio:         4000000000000.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    N/D
+  Volatilidade:      N/D   Beta: N/D
+  SMA200:            N/D   EMA50: R$ 0,00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               -5.50   P/VP:         0.00
+  EV/EBITDA:         N/A (financeiro)   EV/EBIT:      0.00
+  PSR:               -5.50   P/EBIT:       -20000000.00
+  P/Ativos:          2500000.00   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               3300000000.00%   ROIC:         3300000000.00%
+  Margem Líquida:    N/A (financeiro)   Margem EBIT:  N/A (financeiro)
+  Crescimento 5a:    3300000000.00%
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         -20000000.00   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: R$ 5000
+  Receita Líquida:   N/D   Lucro Líq.:   R$ 0
+  Total Ativos:      R$ 5000
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    4000000000000.00%   Payout:       N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         1/100
+  Valuation:         N/D/100
+  Risco:             0/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 12 dias
+  ⚠ Campos Ausentes: roe
+
+────────────────────────────────────────────────────────────────────────────────
+  #3  TCK152  —  N/D  [STOCK]
+  Setor: Insurance
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: N/D             Perfil: Defensivo
+  Score:   12.3/100   Delta Posição: ➡️ Manteve
+  ············································································
+  Scores por Perfil:
+    Defensivo:    7,5/100
+    Moderado:     N/D/100
+    Arrojado:   4000000000000.0/100
+  ············································································
+  Preço Atual:    R$ -5,50              Preço Alvo: N/D
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▼ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx           [-100 pts] (bônus)
+    ▼ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [-100 pts] (penalidade)
+  [Geral]
+    ▲ Fator 1 xxxxxxxx                                        [  +5 pts] (penalidade)
+    ▲ undefined                                               [+2.5 pts] (bônus)
+  [Risco]
+    ▲ Fator 4 xxxxxxxxxxxxxxxxxxxxxxxxx                       [  +5 pts] (penalidade)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 5.000,00   Método: N/D
+  Preço Graham:      R$ 70,00   Preço Bazin:  R$ 4.000.000.000.000,00
+  PEG Ratio:         4000000000000.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ -Infinity
+  Liquidez Média:    R$ 5 mil/dia
+  Volatilidade:      3300000000.00%   Beta: 12.35
+  SMA200:            R$ 2.500.000,00   EMA50: N/D
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               N/D   P/VP:         -5.50
+  EV/EBITDA:         N/A (financeiro)   EV/EBIT:      N/D
+  PSR:               N/D   P/EBIT:       N/D
+  P/Ativos:          -20000000.00   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               999.00%   ROIC:         3300000000.00%
+  Margem Líquida:    N/A (financeiro)   Margem EBIT:  N/A (financeiro)
+  Crescimento 5a:    2500000.00%
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         0.40   Corrente:     2500000.00
+  Patrimônio Líq.:   R$ 3.30 bi   Dív. Líquida: N/D
+  Receita Líquida:   R$ 0   Lucro Líq.:   N/D
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    -5.50%   Payout:       -5.50%
+
+  ⚠ Defasagem dos Dados Fundamentais: 0 dias
+
+════════════════════════════════════════════════════════════════════════════════
+  ATIVOS DESCARTADOS (BRASIL_10) — 1 ativos
+════════════════════════════════════════════════════════════════════════════════
+  DESC3         Motivo: Liquidez
+               Detalhe: baixa
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: AÇÕES
+  Total no Ranking: 3   GOLD: 1  SILVER: 0  BRONZE: 2
+  COMPRAR: 1   AGUARDAR: 2   Descartados: 1
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK435  —  N/D  [ETF]
+  Setor: N/D
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥉 BRONZE       Perfil: Arrojado
+  Score:   -5.5/100   Delta Posição: ➡️ Manteve
+  ············································································
+  Scores por Perfil:
+    Defensivo:    0.0/100
+    Moderado:   2500000.0/100
+    Arrojado:   999.0/100
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: R$ 2.500.000,00
+  🏆 DIVIDEND ARISTOCRAT
+  ············································································
+  TESE: Tese curta
+
+  Bull Thesis:
+    + Alta 1
+
+  AUDIT LOG:
+  [Risco]
+    ▼ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [  -5 pts] (base)
+    ▲ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                [+2.5 pts] (penalidade)
+  [Qualidade]
+    ▲ Fator 1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [+100 pts] (base)
+    ▼ Fator 4 xxxxxxxxxxxxxxxxxxxx                            [  -5 pts] (bônus)
+  [Geral]
+    ○ Fator 3 xxxxxxxx                                        [   0 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       N/D   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    N/D
+  Volatilidade:      N/D   Beta: N/D
+  SMA200:            N/D   EMA50: N/D
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK708  —  N/D  [ETF]
+  Setor: Financial Services
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: 🥉 BRONZE       Perfil: Defensivo
+  Score:   N/D/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:   70.0/100
+    Moderado:   5000.0/100
+    Arrojado:   2500000.0/100
+  ············································································
+  Preço Atual:    R$ -0,00              Preço Alvo: R$ 2.500.000,00
+  ············································································
+  TESE: N/D
+
+  Bull Thesis:
+    + Alta 1
+    + Alta 2
+
+  AUDIT LOG:
+  [Valuation]
+    ▼ Fator 0 x                                               [-100 pts] (bônus)
+    ▲ Fator 4 xxxxxxxx                                        [+2.5 pts] (base)
+  [Qualidade]
+    ▲ undefined                                               [+2.5 pts] (base)
+    ▲ Fator 5 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx           [+2.5 pts] (penalidade)
+    ▲ Fator 6 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx               [+2.5 pts] (penalidade)
+  [Geral]
+    ▼ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    [  -5 pts] (base)
+    ▼ Fator 3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx        [  -5 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 2.500.000,00   Método: Bazin
+  Preço Graham:      R$ 4.000.000.000.000,00   Preço Bazin:  R$ 0,40
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    R$ 1/dia
+  Volatilidade:      0.40%   Beta: 5000.00
+  SMA200:            R$ 70,00   EMA50: R$ 3.300.000.000,00
+
+────────────────────────────────────────────────────────────────────────────────
+  #3  TCK542  —  N/D  [STOCK]
+  Setor: N/D
+  ············································································
+  Ação:    🔴 VENDER           Tier: 🥇 GOLD         Perfil: OUTRO
+  Score:   5000.0/100   Delta Posição: ⬆️ +2 (era #5)
+  ············································································
+  ············································································
+  Preço Atual:    R$ -5,50              Preço Alvo: R$ 3.300.000.000,00
+  ············································································
+  TESE: Tese curta
+
+  Bull Thesis:
+    + Alta 1
+    + Alta 2
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  [Risco]
+    ▲ Fator 0 xxxxxxxxx                                       [  +5 pts] (bônus)
+  [Qualidade]
+    ○ Fator 1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [   0 pts] (base)
+    ▲ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [+2.5 pts] (base)
+  [Valuation]
+    ○ Fator 3 xxxxxxx                                         [   0 pts] (penalidade)
+  [Geral]
+    ▲ Fator 4                                                 [  +5 pts] (penalidade)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       N/D   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         0.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 3.30 bi
+  Liquidez Média:    R$ 2.50 mi/dia
+  Volatilidade:      -5.50%   Beta: N/D
+  SMA200:            N/D   EMA50: N/D
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               N/D   P/VP:         70.00
+  EV/EBITDA:         0.40   EV/EBIT:      0.00
+  PSR:               5000.00   P/EBIT:       N/D
+  P/Ativos:          N/D   P/Cap.Giro:   70.00
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               0.40%   ROIC:         N/D
+  Margem Líquida:    N/D   Margem EBIT:  N/D
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         N/D   Corrente:     N/D
+  Patrimônio Líq.:   R$ Infinity tri   Dív. Líquida: R$ -20000000
+  Receita Líquida:   N/D   Lucro Líq.:   R$ -Infinity
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    0.40%   Payout:       3300000000.00%
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         -20000000/100
+  Valuation:         2500000/100
+  Risco:             5000/100
+
+════════════════════════════════════════════════════════════════════════════════
+  ATIVOS DESCARTADOS (STOCK) — 1 ativos
+════════════════════════════════════════════════════════════════════════════════
+  DESC3         Motivo: Liquidez
+               Detalhe: baixa
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: FIIs
+  Total no Ranking: 3   GOLD: 0  SILVER: 0  BRONZE: 1
+  COMPRAR: 2   AGUARDAR: 1   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK98  —  N/D  [FII]
+  Setor: Petróleo
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: X               Perfil: OUTRO
+  Score:   -20000000.0/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:   12.3/100
+    Moderado:     1.0/100
+    Arrojado:   999.0/100
+  ············································································
+  Preço Atual:    R$ 0,00               Preço Alvo: R$ 999,00
+  Upside/Downside: +8095623887.0%
+  ············································································
+  TESE: Tese curta
+
+  Bull Thesis:
+    + Alta 1
+
+  AUDIT LOG:
+  [Valuation]
+    ○ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                 [   0 pts] (base)
+    ▼ Fator 1 xxxxxxxxxxxxxxxxxxxxxxxxxx                      [-100 pts] (penalidade)
+    ▼ undefined                                               [-100 pts] (base)
+  [Qualidade]
+    ▼ Fator 3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [  -5 pts] (bônus)
+  [Risco]
+    ▲ Fator 4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [  +5 pts] (base)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 2.500.000,00   Método: N/D
+  Preço Graham:      R$ 12,35   Preço Bazin:  R$ -0,00
+  PEG Ratio:         999.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 4.00 tri
+  Liquidez Média:    N/D
+  Volatilidade:      4000000000000.00%   Beta: N/D
+  SMA200:            R$ -20.000.000,00   EMA50: R$ -20.000.000,00
+
+  ── Indicadores de FII ────────────────────────────────
+  P/VP:              -20000000.00   Dividend Yield: 3300000000.00%
+  Vacância:          -5.50%   Cap Rate:     999.00%
+  Qtd. Imóveis:      0   FFO Yield:    N/D
+  VPA por Cota:      R$ -5,50   FFO/Cota:     N/D
+  Preço/m²:          R$ 70,00   Renda/m²:     R$ 1,01
+  Market Cap:        R$ 4.00 tri
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         N/D/100
+  Valuation:         -20000000/100
+  Risco:             N/D/100
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK963  —  N/D  [STOCK_US]
+  Setor: Financeiro
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥉 BRONZE       Perfil: N/D
+  Score:   5000.0/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:    N/D/100
+    Moderado:   4000000000000.0/100
+    Arrojado:    70.0/100
+  ············································································
+  Preço Atual:    $ 2.500.000,00        Preço Alvo: $ ∞
+  Upside/Downside: +Infinity%
+  ············································································
+  TESE: N/D
+
+  Bull Thesis:
+    + Alta 1
+
+  AUDIT LOG:
+  [Qualidade]
+    ▼ Fator 0 xxx                                             [  -5 pts] (penalidade)
+  [Geral]
+    ○ Fator 1 xxxxxxxxxxxxxxxxxxxx                            [   0 pts] (penalidade)
+  [Valuation]
+    ▲ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx        [  +5 pts] (base)
+    ▼ Fator 3 xxxxxxxxxxxxxxxxxxx                             [  -5 pts] (base)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       $ 3,300,000,000.00   Método: N/D
+  Preço Graham:      $ 4,000,000,000,000.00   Preço Bazin:  $ 0.00
+  PEG Ratio:         2500000.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        $ 5000
+  Liquidez Média:    N/D
+  Volatilidade:      N/D   Beta: N/D
+  SMA200:            N/D   EMA50: $ 4,000,000,000,000.00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               2500000.00   P/VP:         N/D
+  EV/EBITDA:         N/A (financeiro)   EV/EBIT:      -5.50
+  PSR:               999.00   P/EBIT:       2500000.00
+  P/Ativos:          999.00   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   -20000000.00   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               999.00%   ROIC:         1.00%
+  Margem Líquida:    N/A (financeiro)   Margem EBIT:  N/A (financeiro)
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         0.00   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: $ 999
+  Receita Líquida:   $ 4.00 tri   Lucro Líq.:   N/D
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    999.00%   Payout:       5000.00%
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         5000/100
+  Valuation:         -20000000/100
+  Risco:             0/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 0 dias
+  ⚠ Campos Ausentes: roe, pl
+
+────────────────────────────────────────────────────────────────────────────────
+  #3  TCK621  —  N/D  [ETF]
+  Setor: N/D
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: N/D             Perfil: Defensivo
+  Score:   0.4/100   Delta Posição: ⬆️ +2 (era #5)
+  ············································································
+  Scores por Perfil:
+    Defensivo:    N/D/100
+    Moderado:     0.0/100
+    Arrojado:   3300000000.0/100
+  ············································································
+  Preço Atual:    R$ -5,50              Preço Alvo: R$ ∞
+  ············································································
+  TESE: N/D
+
+  Bull Thesis:
+    + Alta 1
+    + Alta 2
+
+  AUDIT LOG:
+  [Geral]
+    ▼ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxx                     [  -5 pts] (penalidade)
+    ▲ Fator 1 xx                                              [  +5 pts] (penalidade)
+  [Valuation]
+    ▲ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [+2.5 pts] (penalidade)
+  [Qualidade]
+    ▼ Fator 3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [-100 pts] (penalidade)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 70,00   Método: Graham
+  Preço Graham:      N/D   Preço Bazin:  R$ -5,50
+  PEG Ratio:         2500000.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    R$ Infinity bi/dia
+  Volatilidade:      N/D   Beta: 0.40
+  SMA200:            N/D   EMA50: N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         2500000/100
+  Valuation:         3300000000/100
+  Risco:             1/100
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: CRIPTOMOEDAS
+  Total no Ranking: 2   GOLD: 0  SILVER: 0  BRONZE: 0
+  COMPRAR: 0   AGUARDAR: 2   Descartados: 1
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK557  —  N/D  [CRYPTO]
+  Setor: Seguradoras
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: N/D             Perfil: N/D
+  Score:   70.0/100   Delta Posição: ⬆️ +2 (era #3)
+  ············································································
+  Scores por Perfil:
+    Defensivo:    0.4/100
+    Moderado:   5000.0/100
+    Arrojado:    70.0/100
+  ············································································
+  Preço Atual:    $ -0,00               Preço Alvo: $ 12,35
+  ············································································
+  TESE: Tese curta
+
+  AUDIT LOG:
+  [Qualidade]
+    ○ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxx                       [   0 pts] (base)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 4.000.000.000.000,00   Método: Graham
+  Preço Graham:      N/D   Preço Bazin:  R$ 0,00
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 1
+  Liquidez Média:    $ 12/dia
+  Volatilidade:      0.00%   Beta: -5.50
+  SMA200:            N/D   EMA50: R$ -5,50
+
+  ── Indicadores Cripto ────────────────────────────────
+  Market Cap:        R$ 1
+  Volatilidade:      0.00%   Beta: -5.50
+  Liquidez:          R$ 12/dia
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK554  —  N/D  [FII]
+  Setor: Financeiro
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: X               Perfil: Arrojado
+  Score:   2500000.0/100   Delta Posição: ➡️ Manteve
+  ············································································
+  Scores por Perfil:
+    Defensivo:    N/D/100
+    Moderado:     N/D/100
+    Arrojado:    12.3/100
+  ············································································
+  Preço Atual:    R$ 3.300.000.000,00   Preço Alvo: N/D
+  ············································································
+  TESE: N/D
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  [Qualidade]
+    ○ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [   0 pts] (penalidade)
+  [Risco]
+    ▲ Fator 1 xxxxxxxxxxxxxxxxxxxxxxx                         [ +10 pts] (base)
+  [Valuation]
+    ▼ Fator 2 xxxxx                                           [-100 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 70,00   Método: N/D
+  Preço Graham:      R$ -5,50   Preço Bazin:  R$ 4.000.000.000.000,00
+  PEG Ratio:         1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    N/D
+  Volatilidade:      0.40%   Beta: 5000.00
+  SMA200:            R$ -20.000.000,00   EMA50: R$ 2.500.000,00
+
+  ── Indicadores de FII ────────────────────────────────
+  P/VP:              0.00   Dividend Yield: 3300000000.00%
+  Vacância:          0.00%   Cap Rate:     2500000.00%
+  Qtd. Imóveis:      12   FFO Yield:    N/D
+  VPA por Cota:      R$ 2.500.000,00   FFO/Cota:     R$ -0,00
+  Preço/m²:          R$ 999,00   Renda/m²:     N/D
+  Market Cap:        N/D
+
+  ⚠ Defasagem dos Dados Fundamentais: 12 dias
+
+════════════════════════════════════════════════════════════════════════════════
+  ATIVOS DESCARTADOS (CRYPTO) — 1 ativos
+════════════════════════════════════════════════════════════════════════════════
+  DESC3         Motivo: Liquidez
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: ATIVOS GLOBAIS (S&P 500)
+  Total no Ranking: 2   GOLD: 0  SILVER: 1  BRONZE: 0
+  COMPRAR: 0   AGUARDAR: 2   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK223  —  N/D  [undefined]
+  Setor: Petróleo
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: 🥈 SILVER       Perfil: Defensivo
+  Score:   N/D/100   Delta Posição: 🆕 Novo
+  ············································································
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: R$ 12,35
+  ············································································
+  TESE: N/D
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  [Valuation]
+    ▼ Fator 0 xxxxxxxxxxx                                     [  -5 pts] (penalidade)
+  [Geral]
+    ▲ Fator 1 xxxxxxxxxxxxxx                                  [+100 pts] (penalidade)
+  [Qualidade]
+    ○ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    [   0 pts] (penalidade)
+    ○ Fator 4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [   0 pts] (penalidade)
+    ▼ Fator 5 xxxxxxxxxxxxxxxxxxxxxxxxxxxxx                   [-100 pts] (base)
+  [Risco]
+    ○ Fator 3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                  [   0 pts] (base)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 999,00   Método: Bazin
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 3.30 bi
+  Liquidez Média:    R$ 5 mil/dia
+  Volatilidade:      N/D   Beta: N/D
+  SMA200:            N/D   EMA50: R$ 999,00
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         N/D/100
+  Valuation:         999/100
+  Risco:             N/D/100
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK778  —  N/D  [FII]
+  Setor: N/D
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: X               Perfil: Moderado
+  Score:   7,5/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:    N/D/100
+    Moderado:   5000.0/100
+    Arrojado:     0.0/100
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: R$ 2.500.000,00
+  🏆 DIVIDEND ARISTOCRAT
+  ············································································
+  TESE: N/D
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 1,01   Método: Graham
+  Preço Graham:      N/D   Preço Bazin:  R$ 0,40
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 4.00 tri
+  Liquidez Média:    N/D
+  Volatilidade:      3300000000.00%   Beta: 12.35
+  SMA200:            R$ 999,00   EMA50: N/D
+
+  ── Indicadores de FII ────────────────────────────────
+  P/VP:              N/D   Dividend Yield: -5.50%
+  Vacância:          N/D   Cap Rate:     N/D
+  Qtd. Imóveis:      12   FFO Yield:    N/D
+  VPA por Cota:      N/D   FFO/Cota:     R$ -0,00
+  Preço/m²:          R$ 3.300.000.000,00   Renda/m²:     R$ 0,40
+  Market Cap:        R$ 4.00 tri
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         N/D/100
+  Valuation:         -20000000/100
+  Risco:             999/100
+
+════════════════════════════════════════════════════════════════════════════════
+  LISTA COMPLETA PONTUADA — FORA DO RANKING (1 ativos)
+════════════════════════════════════════════════════════════════════════════════
+  TCK532      Score: 3300000000.0/100  D:  0  M:  1  B:5000  ⏳ AGUARDAR      $ -5.50         Insurance
+             Audit: undefined(+10) | Fator 1 xxxxxxxxxxxxxxxx(0)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  FIM DO RELATÓRIO  |  <DATA> <HORA>
+════════════════════════════════════════════════════════════════════════════════
+",
+  "════════════════════════════════════════════════════════════════════════════════
+  VÉRTICE INVEST — RANKING QUANTITATIVO
+  Gerado em: <DATA> às <HORA>
+  ────────────────────────────────────────────────────────────────────────────
+════════════════════════════════════════════════════════════════════════════════
+
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: AÇÕES
+  Total no Ranking: 2   GOLD: 1  SILVER: 0  BRONZE: 0
+  COMPRAR: 0   AGUARDAR: 2   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK603  —  N/D  [ETF]
+  Setor: Financial Services
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: X               Perfil: OUTRO
+  Score:   N/D/100   Delta Posição: ➡️ Manteve
+  ············································································
+  Scores por Perfil:
+    Defensivo:  999.0/100
+    Moderado:     0.0/100
+    Arrojado:    -5.5/100
+  ············································································
+  Preço Atual:    R$ 70,00              Preço Alvo: R$ -5,50
+  Upside/Downside: -107.9%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       N/D   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  R$ 70,00
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 3.30 bi
+  Liquidez Média:    N/D
+  Volatilidade:      2500000.00%   Beta: 2500000.00
+  SMA200:            N/D   EMA50: N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         999/100
+  Valuation:         0/100
+  Risco:             0/100
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK465  —  N/D  [FII]
+  Setor: Financial Services
+  ············································································
+  Ação:    🔴 VENDER           Tier: 🥇 GOLD         Perfil: Defensivo
+  Score:   0.4/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:    N/D/100
+    Moderado:     N/D/100
+    Arrojado:   4000000000000.0/100
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: N/D
+  ············································································
+  TESE: Tese curta
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       N/D   Método: N/D
+  Preço Graham:      R$ 999,00   Preço Bazin:  R$ 2.500.000,00
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ -6
+  Liquidez Média:    R$ 3.30 bi/dia
+  Volatilidade:      N/D   Beta: -5.50
+  SMA200:            R$ 70,00   EMA50: R$ 12,35
+
+  ── Indicadores de FII ────────────────────────────────
+  P/VP:              0.00   Dividend Yield: 999.00%
+  Vacância:          N/D   Cap Rate:     1.00%
+  Qtd. Imóveis:      N/D   FFO Yield:    -5.50%
+  VPA por Cota:      R$ 1,01   FFO/Cota:     N/D
+  Preço/m²:          R$ 5.000,00   Renda/m²:     N/D
+  Market Cap:        R$ -6
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         7,5/100
+  Valuation:         0/100
+  Risco:             N/D/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 12 dias
+  ⚠ Campos Ausentes: payout, pl
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: CRIPTOMOEDAS
+  Total no Ranking: 3   GOLD: 1  SILVER: 0  BRONZE: 0
+  COMPRAR: 0   AGUARDAR: 3   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK207  —  N/D  [CRYPTO]
+  Setor: Seguradoras
+  ············································································
+  Ação:    🔴 VENDER           Tier: X               Perfil: Arrojado
+  Score:   N/D/100   Delta Posição: ⬆️ +2 (era #3)
+  ············································································
+  Scores por Perfil:
+    Defensivo:  4000000000000.0/100
+    Moderado:     N/D/100
+    Arrojado:     0.4/100
+  ············································································
+  Preço Atual:    $ 0,00                Preço Alvo: $ 12,35
+  🏆 DIVIDEND ARISTOCRAT
+  ············································································
+  TESE: Tese curta
+
+  Bull Thesis:
+    + Alta 1
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 3.300.000.000,00   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  R$ 1,01
+  PEG Ratio:         1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    $ 70/dia
+  Volatilidade:      N/D   Beta: 4000000000000.00
+  SMA200:            N/D   EMA50: R$ -5,50
+
+  ── Indicadores Cripto ────────────────────────────────
+  Market Cap:        N/D
+  Volatilidade:      N/D   Beta: 4000000000000.00
+  Liquidez:          R$ 70/dia
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         -6/100
+  Valuation:         0/100
+  Risco:             0/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 12 dias
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK23  —  N/D  [STOCK]
+  Setor: Insurance
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: N/D
+  Score:   N/D/100   Delta Posição: ⬆️ +2 (era #4)
+  ············································································
+  Scores por Perfil:
+    Defensivo:    0.4/100
+    Moderado:     0.4/100
+    Arrojado:     N/D/100
+  ············································································
+  Preço Atual:    R$ -20.000.000,00     Preço Alvo: N/D
+  🏆 DIVIDEND ARISTOCRAT
+  ············································································
+  TESE: N/D
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ -20.000.000,00   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         5000.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 5000
+  Liquidez Média:    N/D
+  Volatilidade:      N/D   Beta: 999.00
+  SMA200:            R$ 0,40   EMA50: R$ 4.000.000.000.000,00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               7,5   P/VP:         N/D
+  EV/EBITDA:         N/A (financeiro)   EV/EBIT:      0.00
+  PSR:               0.00   P/EBIT:       N/D
+  P/Ativos:          N/D   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: 0.00%
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               70.00%   ROIC:         0.00%
+  Margem Líquida:    N/A (financeiro)   Margem EBIT:  N/A (financeiro)
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         4000000000000.00   Corrente:     N/D
+  Patrimônio Líq.:   R$ 5000   Dív. Líquida: N/D
+  Receita Líquida:   N/D   Lucro Líq.:   R$ -Infinity
+  Total Ativos:      R$ 12
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    5000.00%   Payout:       12.35%
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         4000000000000/100
+  Valuation:         70/100
+  Risco:             4000000000000/100
+
+────────────────────────────────────────────────────────────────────────────────
+  #3  TCK666  —  N/D  [undefined]
+  Setor: Holdings
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: X               Perfil: OUTRO
+  Score:   -20000000.0/100   Delta Posição: ➡️ Manteve
+  ············································································
+  ············································································
+  Preço Atual:    R$ 3.300.000.000,00   Preço Alvo: R$ ∞
+  Upside/Downside: +Infinity%
+  🏆 DIVIDEND ARISTOCRAT
+  ············································································
+  TESE: N/D
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  [Valuation]
+    ▼ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxx                       [ -15 pts] (base)
+    ▲ Fator 1 xxx                                             [+2.5 pts] (penalidade)
+    ▲ undefined                                               [  +5 pts] (bônus)
+    ▲ Fator 4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx     [+2.5 pts] (penalidade)
+    ○ Fator 13 xx                                             [   0 pts] (penalidade)
+    ▲ Fator 14 xxxxxx                                         [ +10 pts] (penalidade)
+  [Geral]
+    ▼ Fator 2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [-100 pts] (penalidade)
+    ▼ Fator 5 xxxxxxxxxxxxxxxxxxxxxx                          [  -5 pts] (penalidade)
+    ▲ Fator 7 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [+100 pts] (bônus)
+    ○ Fator 8 xxxxxxxxxxxxxxxxxxxxxxxxx                       [   0 pts] (penalidade)
+    ▲ Fator 9 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx       [ +10 pts] (penalidade)
+    ▼ Fator 10 xxxxxx                                         [-100 pts] (penalidade)
+    ○ Fator 11 xxxxxxxxxxxxxxxxxxxxxxxxxx                     [   0 pts] (base)
+    ▼ Fator 15 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx                [  -5 pts] (bônus)
+    ▲ Fator 16 xx                                             [+100 pts] (base)
+    ▲ Fator 21 xxxxxxxxxxxxx                                  [  +5 pts] (penalidade)
+  [Qualidade]
+    ▲ Fator 6 xxxxxxxxxxxx                                    [  +5 pts] (penalidade)
+    ○ Fator 22 xxxxxxxxxxxxxx                                 [   0 pts] (penalidade)
+  [Risco]
+    ▼ Fator 12 xxxxxxxxxxxxxxxxxxxxxxxxxxxxx                  [-100 pts] (penalidade)
+    ○ Fator 17 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [   0 pts] (penalidade)
+    ▼ Fator 18 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx    [-100 pts] (bônus)
+    ○ Fator 19 xxxxxxxx                                       [   0 pts] (penalidade)
+    ▲ Fator 20 xx                                             [ +10 pts] (penalidade)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ -20.000.000,00   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         5000.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 12
+  Liquidez Média:    R$ 3.30 bi/dia
+  Volatilidade:      N/D   Beta: 0.00
+  SMA200:            R$ 2.500.000,00   EMA50: R$ 999,00
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         N/D/100
+  Valuation:         -6/100
+  Risco:             4000000000000/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 12 dias
+
+════════════════════════════════════════════════════════════════════════════════
+  LISTA COMPLETA PONTUADA — FORA DO RANKING (1 ativos)
+════════════════════════════════════════════════════════════════════════════════
+  TCK913      Score:   N/D/100  D: 70  M:N/D  B:  0  ⏳ AGUARDAR      N/D             Bancos
+             Audit: Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx(-15) | undefined(-100) | Fator 2 xxxxxxxxxxx(+2.5)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  FIM DO RELATÓRIO  |  <DATA> <HORA>
+════════════════════════════════════════════════════════════════════════════════
+",
+  "════════════════════════════════════════════════════════════════════════════════
+  VÉRTICE INVEST — RANKING QUANTITATIVO
+  Gerado em: <DATA> às <HORA>
+  ────────────────────────────────────────────────────────────────────────────
+  Contexto Macro:
+    SELIC:      5000.00%    CDI:        N/D
+    IPCA:       0.40%    Risk Free:  N/D
+    NTN-B Long: 3300000000.00%    Dólar:      R$ 1,01
+    Ibovespa:   0 pts (+0.40%)
+    BTC:        $N/D (N/D)
+════════════════════════════════════════════════════════════════════════════════
+
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: ATIVOS GLOBAIS (S&P 500)
+  Total no Ranking: 3   GOLD: 1  SILVER: 0  BRONZE: 1
+  COMPRAR: 2   AGUARDAR: 1   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  TCK318  —  N/D  [STOCK_US]
+  Setor: Logística
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: N/D
+  Score:   12.3/100   Delta Posição: 🆕 Novo
+  ············································································
+  Scores por Perfil:
+    Defensivo:   12.3/100
+    Moderado:     0.0/100
+    Arrojado:   999.0/100
+  ············································································
+  Preço Atual:    $ 70,00               Preço Alvo: $ 0,00
+  ············································································
+  TESE: N/D
+
+  Bull Thesis:
+    + Alta 1
+    + Alta 2
+
+  Bear Thesis:
+    - Baixa 1
+
+  AUDIT LOG:
+  [Geral]
+    ○ Fator 0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [   0 pts] (base)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       $ 3,300,000,000.00   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  $ -0.00
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    $ Infinity bi/dia
+  Volatilidade:      N/D   Beta: N/D
+  SMA200:            N/D   EMA50: N/D
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               -20000000.00   P/VP:         N/D
+  EV/EBITDA:         N/D   EV/EBIT:      N/D
+  PSR:               2500000.00   P/EBIT:       -5.50
+  P/Ativos:          3300000000.00   P/Cap.Giro:   0.00
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               0.00%   ROIC:         -5.50%
+  Margem Líquida:    999.00%   Margem EBIT:  3300000000.00%
+  Crescimento 5a:    0.00%
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         N/D   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: $ 70
+  Receita Líquida:   $ 2.50 mi   Lucro Líq.:   $ Infinity tri
+  Total Ativos:      $ 999
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    5000.00%   Payout:       999.00%
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         12/100
+  Valuation:         1/100
+  Risco:             N/D/100
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  TCK642  —  N/D  [undefined]
+  Setor: Technology
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: X               Perfil: Defensivo
+  Score:   5000.0/100   Delta Posição: ⬇️ -1 (era #1)
+  ············································································
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: R$ -5,50
+  ············································································
+  TESE: Tese curta
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 70,00   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  R$ 999,00
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 5000
+  Liquidez Média:    N/D
+  Volatilidade:      4000000000000.00%   Beta: N/D
+  SMA200:            R$ -20.000.000,00   EMA50: R$ 5.000,00
+
+  ⚠ Defasagem dos Dados Fundamentais: 0 dias
+  ⚠ Campos Ausentes: dy
+
+────────────────────────────────────────────────────────────────────────────────
+  #3  TCK487  —  N/D  [CRYPTO]
+  Setor: Technology
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥉 BRONZE       Perfil: Moderado
+  Score:   0.0/100   Delta Posição: 🆕 Novo
+  ············································································
+  ············································································
+  Preço Atual:    N/D                   Preço Alvo: $ 70,00
+  ············································································
+  TESE: N/D
+
+  Bull Thesis:
+    + Alta 1
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       N/D   Método: Bazin
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         70.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 2.50 mi
+  Liquidez Média:    $ -20000000/dia
+  Volatilidade:      -5.50%   Beta: N/D
+  SMA200:            R$ 4.000.000.000.000,00   EMA50: N/D
+
+  ── Indicadores Cripto ────────────────────────────────
+  Market Cap:        R$ 2.50 mi
+  Volatilidade:      -5.50%   Beta: N/D
+  Liquidez:          R$ -20000000/dia
+
+
+════════════════════════════════════════════════════════════════════════════════
+  FIM DO RELATÓRIO  |  <DATA> <HORA>
+════════════════════════════════════════════════════════════════════════════════
+",
+]
+`;
+
+exports[`caracterização do TXT do ranking > um item de cada tipo, texto completo 1`] = `
+"════════════════════════════════════════════════════════════════════════════════
+  VÉRTICE INVEST — RANKING QUANTITATIVO
+  Gerado em: <DATA> às <HORA>
+  ────────────────────────────────────────────────────────────────────────────
+════════════════════════════════════════════════════════════════════════════════
+
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: BRASIL 10
+  Total no Ranking: 1   GOLD: 1  SILVER: 0  BRONZE: 0
+  COMPRAR: 1   AGUARDAR: 0   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  X_ETF  —  Nome  [ETF]
+  Setor: Índice
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
+  Score:   81.3/100   Delta Posição: ⬆️ +1 (era #2)
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    R$ 12,50              Preço Alvo: R$ 15,00
+  Upside/Downside: +20.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  (sem registros)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       N/D   Método: N/D
+  Preço Graham:      N/D   Preço Bazin:  N/D
+  PEG Ratio:         N/D
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        N/D
+  Liquidez Média:    N/D
+  Volatilidade:      N/D   Beta: N/D
+  SMA200:            N/D   EMA50: N/D
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: AÇÕES
+  Total no Ranking: 2   GOLD: 2  SILVER: 0  BRONZE: 0
+  COMPRAR: 1   AGUARDAR: 1   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  X_STOCK  —  Nome  [STOCK]
+  Setor: Bancos
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
+  Score:   81.3/100   Delta Posição: ⬆️ +1 (era #2)
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    R$ 12,50              Preço Alvo: R$ 15,00
+  Upside/Downside: +20.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▲ ROE                                                     [ +10 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 14,00   Método: N/D
+  Preço Graham:      R$ 13,00   Preço Bazin:  R$ 0,00
+  PEG Ratio:         -1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 2.00 bi
+  Liquidez Média:    R$ 3.00 mi/dia
+  Volatilidade:      25.00%   Beta: 1.10
+  SMA200:            R$ 11,00   EMA50: R$ 12,00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               9.00   P/VP:         0.00
+  EV/EBITDA:         N/A (financeiro)   EV/EBIT:      N/D
+  PSR:               N/D   P/EBIT:       N/D
+  P/Ativos:          N/D   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               15.00%   ROIC:         0.00%
+  Margem Líquida:    N/A (financeiro)   Margem EBIT:  N/A (financeiro)
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         N/D   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: N/D
+  Receita Líquida:   N/D   Lucro Líq.:   N/D
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    6.00%   Payout:       N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         60/100
+  Risco:             50/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 3 dias
+  ⚠ Campos Ausentes: roic
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  X_STOCK  —  Nome  [STOCK]
+  Setor: Energia
+  ············································································
+  Ação:    ⏳ AGUARDAR          Tier: 🥇 GOLD         Perfil: Defensivo
+  Score:   81.3/100   Delta Posição: ➡️ Manteve
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    R$ 12,50              Preço Alvo: R$ 15,00
+  Upside/Downside: +20.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▲ ROE                                                     [ +10 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 14,00   Método: N/D
+  Preço Graham:      R$ 13,00   Preço Bazin:  R$ 0,00
+  PEG Ratio:         -1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 2.00 bi
+  Liquidez Média:    R$ 3.00 mi/dia
+  Volatilidade:      25.00%   Beta: 1.10
+  SMA200:            R$ 11,00   EMA50: R$ 12,00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               9.00   P/VP:         0.00
+  EV/EBITDA:         0.00   EV/EBIT:      N/D
+  PSR:               N/D   P/EBIT:       N/D
+  P/Ativos:          N/D   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               15.00%   ROIC:         0.00%
+  Margem Líquida:    10.00%   Margem EBIT:  12.00%
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         N/D   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: N/D
+  Receita Líquida:   N/D   Lucro Líq.:   N/D
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    6.00%   Payout:       N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         60/100
+  Risco:             50/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 3 dias
+  ⚠ Campos Ausentes: roic
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: FIIs
+  Total no Ranking: 1   GOLD: 1  SILVER: 0  BRONZE: 0
+  COMPRAR: 1   AGUARDAR: 0   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  X_FII  —  Nome  [FII]
+  Setor: Logística
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Moderado
+  Score:   81.3/100   Delta Posição: ⬆️ +1 (era #2)
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    R$ 12,50              Preço Alvo: R$ 15,00
+  Upside/Downside: +20.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▲ ROE                                                     [ +10 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 14,00   Método: N/D
+  Preço Graham:      R$ 13,00   Preço Bazin:  R$ 0,00
+  PEG Ratio:         -1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 2.00 bi
+  Liquidez Média:    R$ 3.00 mi/dia
+  Volatilidade:      25.00%   Beta: 1.10
+  SMA200:            R$ 11,00   EMA50: R$ 12,00
+
+  ── Indicadores de FII ────────────────────────────────
+  P/VP:              0.00   Dividend Yield: 6.00%
+  Vacância:          4.00%   Cap Rate:     N/D
+  Qtd. Imóveis:      N/D   FFO Yield:    N/D
+  VPA por Cota:      N/D   FFO/Cota:     N/D
+  Preço/m²:          N/D   Renda/m²:     N/D
+  Market Cap:        R$ 2.00 bi
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         60/100
+  Risco:             50/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 3 dias
+  ⚠ Campos Ausentes: roic
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: CRIPTOMOEDAS
+  Total no Ranking: 1   GOLD: 1  SILVER: 0  BRONZE: 0
+  COMPRAR: 1   AGUARDAR: 0   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  X_CRYPTO  —  Nome  [CRYPTO]
+  Setor: N/D
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Arrojado
+  Score:   81.3/100   Delta Posição: ⬆️ +1 (era #2)
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    $ 0,00                Preço Alvo: $ 15,00
+  Upside/Downside: +149999900.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▲ ROE                                                     [ +10 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       R$ 14,00   Método: N/D
+  Preço Graham:      R$ 13,00   Preço Bazin:  R$ 0,00
+  PEG Ratio:         -1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        R$ 2.00 bi
+  Liquidez Média:    $ 3.00 mi/dia
+  Volatilidade:      25.00%   Beta: 1.10
+  SMA200:            R$ 11,00   EMA50: R$ 12,00
+
+  ── Indicadores Cripto ────────────────────────────────
+  Market Cap:        R$ 2.00 bi
+  Volatilidade:      25.00%   Beta: 1.10
+  Liquidez:          R$ 3.00 mi/dia
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         60/100
+  Risco:             50/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 3 dias
+  ⚠ Campos Ausentes: roic
+
+════════════════════════════════════════════════════════════════════════════════
+  CLASSE: ATIVOS GLOBAIS (S&P 500)
+  Total no Ranking: 2   GOLD: 2  SILVER: 0  BRONZE: 0
+  COMPRAR: 2   AGUARDAR: 0   Descartados: 0
+════════════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────────────
+  #1  X_STOCK_US  —  Nome  [STOCK_US]
+  Setor: Insurance
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
+  Score:   81.3/100   Delta Posição: ⬆️ +1 (era #2)
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    $ 12,50               Preço Alvo: $ 15,00
+  Upside/Downside: +20.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▲ ROE                                                     [ +10 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       $ 14.00   Método: N/D
+  Preço Graham:      $ 13.00   Preço Bazin:  $ 0.00
+  PEG Ratio:         -1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        $ 2.00 bi
+  Liquidez Média:    $ 3.00 mi/dia
+  Volatilidade:      25.00%   Beta: 1.10
+  SMA200:            $ 11.00   EMA50: $ 12.00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               9.00   P/VP:         N/D
+  EV/EBITDA:         N/A (financeiro)   EV/EBIT:      N/D
+  PSR:               N/D   P/EBIT:       N/D
+  P/Ativos:          N/D   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               15.00%   ROIC:         N/D
+  Margem Líquida:    N/A (financeiro)   Margem EBIT:  N/A (financeiro)
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         N/D   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: N/D
+  Receita Líquida:   N/D   Lucro Líq.:   N/D
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    6.00%   Payout:       N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         60/100
+  Risco:             50/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 3 dias
+  ⚠ Campos Ausentes: roic
+
+────────────────────────────────────────────────────────────────────────────────
+  #2  X_STOCK_US  —  Nome  [STOCK_US]
+  Setor: Technology
+  ············································································
+  Ação:    ✅ COMPRAR           Tier: 🥇 GOLD         Perfil: Defensivo
+  Score:   81.3/100   Delta Posição: ➡️ Manteve
+  ············································································
+  Scores por Perfil:
+    Defensivo:   81.3/100
+    Moderado:    60.0/100
+    Arrojado:    40.0/100
+  ············································································
+  Preço Atual:    $ 12,50               Preço Alvo: $ 15,00
+  Upside/Downside: +20.0%
+  ············································································
+  TESE: N/D
+
+  AUDIT LOG:
+  [Qualidade]
+    ▲ ROE                                                     [ +10 pts] (bônus)
+
+  MÉTRICAS:
+  ── Valuation ─────────────────────────────────────────
+  Preço Justo:       $ 14.00   Método: N/D
+  Preço Graham:      $ 13.00   Preço Bazin:  $ 0.00
+  PEG Ratio:         -1.00
+
+  ── Indicadores de Mercado ────────────────────────────
+  Market Cap:        $ 2.00 bi
+  Liquidez Média:    $ 3.00 mi/dia
+  Volatilidade:      25.00%   Beta: 1.10
+  SMA200:            $ 11.00   EMA50: $ 12.00
+
+  ── Múltiplos Fundamentais ────────────────────────────
+  P/L:               9.00   P/VP:         N/D
+  EV/EBITDA:         N/D   EV/EBIT:      N/D
+  PSR:               N/D   P/EBIT:       N/D
+  P/Ativos:          N/D   P/Cap.Giro:   N/D
+  P/Ativ.Circ.Liq:   N/D   Earnings Yield: N/D
+
+  ── Rentabilidade e Eficiência ────────────────────────
+  ROE:               15.00%   ROIC:         N/D
+  Margem Líquida:    10.00%   Margem EBIT:  12.00%
+  Crescimento 5a:    N/D
+
+  ── Endividamento e Saúde Financeira ──────────────────
+  Dívida/PL:         N/D   Corrente:     N/D
+  Patrimônio Líq.:   N/D   Dív. Líquida: N/D
+  Receita Líquida:   N/D   Lucro Líq.:   N/D
+  Total Ativos:      N/D
+
+  ── Dividendos ────────────────────────────────────────
+  Dividend Yield:    6.00%   Payout:       N/D
+
+  ── Scores Estruturais (0–100) ────────────────────────
+  Qualidade:         70/100
+  Valuation:         60/100
+  Risco:             50/100
+
+  ⚠ Defasagem dos Dados Fundamentais: 3 dias
+  ⚠ Campos Ausentes: roic
+
+
+════════════════════════════════════════════════════════════════════════════════
+  FIM DO RELATÓRIO  |  <DATA> <HORA>
+════════════════════════════════════════════════════════════════════════════════
+"
+`;

@@ -2,256 +2,17 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { fmt, fmtBRL, fmtPct, line, actionLabel } from './rankingExport/formatters.js';
+import { formatRankingItem } from './rankingExport/rankingItemText.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const REPORTS_DIR = path.resolve(__dirname, '../../reports');
 
-const fmt = (val, decimals = 2, fallback = 'N/D') => {
-    if (val === null || val === undefined || val === '' || (typeof val === 'number' && (isNaN(val) || !isFinite(val)))) return fallback;
-    if (typeof val === 'number') return val.toFixed(decimals);
-    return String(val);
-};
-
-const fmtBRL = (val, fallback = 'N/D') => {
-    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return fallback;
-    return `R$ ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-const fmtPct = (val, fallback = 'N/D') => {
-    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return fallback;
-    return `${Number(val).toFixed(2)}%`;
-};
-
-const fmtMarketCap = (val) => {
-    if (!val || isNaN(val)) return 'N/D';
-    if (val >= 1e12) return `R$ ${(val / 1e12).toFixed(2)} tri`;
-    if (val >= 1e9) return `R$ ${(val / 1e9).toFixed(2)} bi`;
-    if (val >= 1e6) return `R$ ${(val / 1e6).toFixed(2)} mi`;
-    return `R$ ${val.toFixed(0)}`;
-};
-
-const fmtLiquidity = (val) => {
-    if (!val || isNaN(val)) return 'N/D';
-    if (val >= 1e9) return `R$ ${(val / 1e9).toFixed(2)} bi/dia`;
-    if (val >= 1e6) return `R$ ${(val / 1e6).toFixed(2)} mi/dia`;
-    if (val >= 1e3) return `R$ ${(val / 1e3).toFixed(0)} mil/dia`;
-    return `R$ ${val.toFixed(0)}/dia`;
-};
-
-const fmtLiquidityUSD = (val) => {
-    if (!val || isNaN(val)) return 'N/D';
-    if (val >= 1e9) return `$ ${(val / 1e9).toFixed(2)} bi/dia`;
-    if (val >= 1e6) return `$ ${(val / 1e6).toFixed(2)} mi/dia`;
-    if (val >= 1e3) return `$ ${(val / 1e3).toFixed(0)} mil/dia`;
-    return `$ ${val.toFixed(0)}/dia`;
-};
-
-const fmtUSD = (val, fallback = 'N/D') => {
-    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return fallback;
-    return `$ ${Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-const fmtMarketCapUSD = (val) => {
-    if (!val || isNaN(val)) return 'N/D';
-    if (val >= 1e12) return `$ ${(val / 1e12).toFixed(2)} tri`;
-    if (val >= 1e9) return `$ ${(val / 1e9).toFixed(2)} bi`;
-    if (val >= 1e6) return `$ ${(val / 1e6).toFixed(2)} mi`;
-    return `$ ${val.toFixed(0)}`;
-};
-
-const line = (char = '─', len = 80) => char.repeat(len);
-
-const actionLabel = (action) => {
-    if (action === 'BUY') return '✅ COMPRAR';
-    if (action === 'SELL') return '🔴 VENDER';
-    return '⏳ AGUARDAR';
-};
-
-const tierLabel = (tier) => {
-    if (tier === 'GOLD') return '🥇 GOLD';
-    if (tier === 'SILVER') return '🥈 SILVER';
-    if (tier === 'BRONZE') return '🥉 BRONZE';
-    return tier || 'N/D';
-};
-
-const profileLabel = (profile) => {
-    if (profile === 'DEFENSIVE') return 'Defensivo';
-    if (profile === 'MODERATE') return 'Moderado';
-    if (profile === 'BOLD') return 'Arrojado';
-    return profile || 'N/D';
-};
-
 const assetClassLabel = (cls) => {
     const map = { STOCK: 'AÇÕES', FII: 'FIIs', CRYPTO: 'CRIPTOMOEDAS', BRASIL_10: 'BRASIL 10', STOCK_US: 'ATIVOS GLOBAIS (S&P 500)' };
     return map[cls] || cls;
-};
-
-const deltaSymbol = (curr, prev) => {
-    if (prev === null || prev === undefined) return '🆕 Novo';
-    const diff = prev - curr;
-    if (diff > 0) return `⬆️ +${diff} (era #${prev})`;
-    if (diff < 0) return `⬇️ ${diff} (era #${prev})`;
-    return '➡️ Manteve';
-};
-
-const formatAuditLog = (auditLog) => {
-    if (!auditLog || auditLog.length === 0) return '  (sem registros)\n';
-
-    const grouped = {};
-    auditLog.forEach(entry => {
-        const cat = entry.category || 'Geral';
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push(entry);
-    });
-
-    let out = '';
-    for (const [category, entries] of Object.entries(grouped)) {
-        out += `  [${category}]\n`;
-        entries.forEach(e => {
-            const sign = e.points > 0 ? `+${e.points}` : `${e.points}`;
-            const typeTag = e.type === 'base' ? 'base' : e.type === 'bonus' ? 'bônus' : 'penalidade';
-            out += `    ${e.points > 0 ? '▲' : e.points < 0 ? '▼' : '○'} ${String(e.factor).padEnd(55)} [${sign.padStart(4)} pts] (${typeTag})\n`;
-        });
-    }
-    return out;
-};
-
-const formatMetrics = (m, type, sector) => {
-    if (!m) return '  (sem métricas)\n';
-    const fmtP = type === 'STOCK_US' ? fmtUSD : fmtBRL;
-    const fmtCap = type === 'STOCK_US' ? fmtMarketCapUSD : fmtMarketCap;
-    const fmtLiq = (type === 'STOCK_US' || type === 'CRYPTO') ? fmtLiquidityUSD : fmtLiquidity;
-    const isFinancialSector = !!(sector?.includes('Banco') || sector?.includes('Segur') || sector?.includes('Financeiro') || sector?.includes('Holding') || sector?.includes('Financial') || sector?.includes('Insurance'));
-    // Para STOCK_US, campos não coletados são zerados no DB; exibir N/D em vez de 0.00
-    const fmtUsZero = (val, decimals = 2) => (type === 'STOCK_US' && (val === 0 || val === null || val === undefined)) ? 'N/D' : fmt(val, decimals);
-    const fmtUsZeroPct = (val) => (type === 'STOCK_US' && (val === 0 || val === null || val === undefined)) ? 'N/D' : fmtPct(val);
-    let out = '';
-
-    out += `  ── Valuation ─────────────────────────────────────────\n`;
-    out += `  Preço Justo:       ${fmtP(m.fairPrice)}   Método: ${m.method || 'N/D'}\n`;
-    out += `  Preço Graham:      ${fmtP(m.grahamPrice)}   Preço Bazin:  ${fmtP(m.bazinPrice)}\n`;
-    out += `  PEG Ratio:         ${fmt(m.pegRatio, 2)}\n`;
-
-    out += `\n  ── Indicadores de Mercado ────────────────────────────\n`;
-    out += `  Market Cap:        ${fmtCap(m.marketCap)}\n`;
-    out += `  Liquidez Média:    ${fmtLiq(m.avgLiquidity)}\n`;
-    out += `  Volatilidade:      ${fmtPct(m.volatility)}   Beta: ${fmt(m.beta, 2)}\n`;
-    out += `  SMA200:            ${fmtP(m.sma200)}   EMA50: ${fmtP(m.ema50)}\n`;
-
-    if (type === 'STOCK' || type === 'STOCK_US') {
-        out += `\n  ── Múltiplos Fundamentais ────────────────────────────\n`;
-        out += `  P/L:               ${fmt(m.pl, 2)}   P/VP:         ${fmtUsZero(m.pvp)}\n`;
-        out += `  EV/EBITDA:         ${isFinancialSector ? 'N/A (financeiro)' : fmtUsZero(m.evEbitda)}   EV/EBIT:      ${fmt(m.evEbit, 2)}\n`;
-        out += `  PSR:               ${fmt(m.psr, 2)}   P/EBIT:       ${fmt(m.pEbit, 2)}\n`;
-        out += `  P/Ativos:          ${fmt(m.pAtivos, 2)}   P/Cap.Giro:   ${fmt(m.pCapGiro, 2)}\n`;
-        out += `  P/Ativ.Circ.Liq:   ${fmt(m.pAtivCircLiq, 2)}   Earnings Yield: ${fmtPct(m.earningsYield)}\n`;
-
-        out += `\n  ── Rentabilidade e Eficiência ────────────────────────\n`;
-        out += `  ROE:               ${fmtPct(m.roe)}   ROIC:         ${fmtUsZeroPct(m.roic)}\n`;
-        out += `  Margem Líquida:    ${isFinancialSector ? 'N/A (financeiro)' : fmtPct(m.netMargin)}   Margem EBIT:  ${isFinancialSector ? 'N/A (financeiro)' : fmtPct(m.ebitMargin)}\n`;
-        out += `  Crescimento 5a:    ${fmtPct(m.revenueGrowth)}\n`;
-
-        out += `\n  ── Endividamento e Saúde Financeira ──────────────────\n`;
-        out += `  Dívida/PL:         ${fmt(m.debtToEquity, 2)}   Corrente:     ${fmt(m.currentRatio, 2)}\n`;
-        out += `  Patrimônio Líq.:   ${fmtCap(m.patrimLiq)}   Dív. Líquida: ${fmtCap(m.netDebt)}\n`;
-        out += `  Receita Líquida:   ${fmtCap(m.netRevenue)}   Lucro Líq.:   ${fmtCap(m.netIncome)}\n`;
-        out += `  Total Ativos:      ${fmtCap(m.totalAssets)}\n`;
-
-        out += `\n  ── Dividendos ────────────────────────────────────────\n`;
-        out += `  Dividend Yield:    ${fmtPct(m.dy)}   Payout:       ${fmtPct(m.payout)}\n`;
-    }
-
-    if (type === 'FII') {
-        out += `\n  ── Indicadores de FII ────────────────────────────────\n`;
-        out += `  P/VP:              ${fmt(m.pvp, 2)}   Dividend Yield: ${fmtPct(m.dy)}\n`;
-        out += `  Vacância:          ${fmtPct(m.vacancy)}   Cap Rate:     ${fmtPct(m.capRate)}\n`;
-        out += `  Qtd. Imóveis:      ${fmt(m.qtdImoveis, 0)}   FFO Yield:    ${fmtPct(m.ffoYield)}\n`;
-        out += `  VPA por Cota:      ${fmtBRL(m.vpCota)}   FFO/Cota:     ${fmtBRL(m.ffoCota)}\n`;
-        out += `  Preço/m²:          ${fmtBRL(m.priceM2)}   Renda/m²:     ${fmtBRL(m.rentM2)}\n`;
-        out += `  Market Cap:        ${fmtMarketCap(m.marketCap)}\n`;
-    }
-
-    if (type === 'CRYPTO') {
-        out += `\n  ── Indicadores Cripto ────────────────────────────────\n`;
-        out += `  Market Cap:        ${fmtMarketCap(m.marketCap)}\n`;
-        out += `  Volatilidade:      ${fmtPct(m.volatility)}   Beta: ${fmt(m.beta, 2)}\n`;
-        out += `  Liquidez:          ${fmtLiquidity(m.avgLiquidity)}\n`;
-    }
-
-    if (m.structural) {
-        out += `\n  ── Scores Estruturais (0–100) ────────────────────────\n`;
-        out += `  Qualidade:         ${fmt(m.structural.quality, 0)}/100\n`;
-        out += `  Valuation:         ${fmt(m.structural.valuation, 0)}/100\n`;
-        out += `  Risco:             ${fmt(m.structural.risk, 0)}/100\n`;
-    }
-
-    if (m._staleDays !== null && m._staleDays !== undefined) {
-        out += `\n  ⚠ Defasagem dos Dados Fundamentais: ${m._staleDays} dias\n`;
-    }
-    if (m._missing && Object.keys(m._missing).length > 0) {
-        const missing = Object.entries(m._missing).filter(([, v]) => v).map(([k]) => k);
-        if (missing.length > 0) {
-            out += `  ⚠ Campos Ausentes: ${missing.join(', ')}\n`;
-        }
-    }
-
-    return out;
-};
-
-const formatRankingItem = (item, _idx) => {
-    const m = item.metrics || {};
-    const currency = item.type === 'CRYPTO' || item.type === 'STOCK_US' ? '$' : 'R$';
-    const priceStr = (val) => {
-        if (val === null || val === undefined || isNaN(val)) return 'N/D';
-        return `${currency} ${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    };
-
-    const upside = (item.currentPrice && item.targetPrice && item.currentPrice > 0)
-        ? (((item.targetPrice - item.currentPrice) / item.currentPrice) * 100).toFixed(1)
-        : null;
-
-    let out = '';
-    out += `\n${line('─')}\n`;
-    out += `  #${item.position}  ${item.ticker}  —  ${item.name || 'N/D'}  [${item.type}]\n`;
-    out += `  Setor: ${item.sector || 'N/D'}\n`;
-    out += `  ${line('·', 76)}\n`;
-    out += `  Ação:    ${actionLabel(item.action).padEnd(18)}  Tier: ${tierLabel(item.tier).padEnd(14)}  Perfil: ${profileLabel(item.riskProfile)}\n`;
-    out += `  Score:   ${fmt(item.score, 1)}/100   Delta Posição: ${deltaSymbol(item.position, item.previousPosition)}\n`;
-    out += `  ${line('·', 76)}\n`;
-
-    if (item.scores) {
-        out += `  Scores por Perfil:\n`;
-        out += `    Defensivo:  ${fmt(item.scores['DEFENSIVE'], 1).padStart(5)}/100\n`;
-        out += `    Moderado:   ${fmt(item.scores['MODERATE'], 1).padStart(5)}/100\n`;
-        out += `    Arrojado:   ${fmt(item.scores['BOLD'], 1).padStart(5)}/100\n`;
-    }
-
-    out += `  ${line('·', 76)}\n`;
-    out += `  Preço Atual:    ${priceStr(item.currentPrice).padEnd(20)}  Preço Alvo: ${priceStr(item.targetPrice)}\n`;
-    if (upside !== null) out += `  Upside/Downside: ${upside >= 0 ? '+' : ''}${upside}%\n`;
-    if (item.isDividendAristocrat) out += `  🏆 DIVIDEND ARISTOCRAT\n`;
-    out += `  ${line('·', 76)}\n`;
-
-    out += `  TESE: ${item.thesis || 'N/D'}\n`;
-
-    if (item.bullThesis && item.bullThesis.length > 0) {
-        out += `\n  Bull Thesis:\n`;
-        item.bullThesis.forEach(t => { out += `    + ${t}\n`; });
-    }
-    if (item.bearThesis && item.bearThesis.length > 0) {
-        out += `\n  Bear Thesis:\n`;
-        item.bearThesis.forEach(t => { out += `    - ${t}\n`; });
-    }
-
-    out += `\n  AUDIT LOG:\n`;
-    out += formatAuditLog(item.auditLog);
-
-    out += `\n  MÉTRICAS:\n`;
-    out += formatMetrics(m, item.type, item.sector);
-
-    return out;
 };
 
 const formatDiscardSection = (discardLogs, assetClass) => {
@@ -313,8 +74,8 @@ const generateTxtContent = (allData, macro) => {
         if (ranking.length === 0) {
             txt += `  (nenhum ativo no ranking para esta classe)\n`;
         } else {
-            ranking.forEach((item, idx) => {
-                txt += formatRankingItem(item, idx);
+            ranking.forEach(item => {
+                txt += formatRankingItem(item);
             });
         }
 
