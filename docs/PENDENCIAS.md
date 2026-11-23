@@ -19,9 +19,38 @@ mesmo commit que o resolve.
   (38), `auditTreasuryCatalog` (37), `_runFullSync` (30), `updateOfficialRates`
   (29), `buildFundamentusAssetUpdate` (28), `_parseNtnbFromCsv` (25),
   `_persistUsdHistory` (22) e mais sete entre 16 e 18. O teto segue
-  `utils/weeklyRetention.js` (43); depois PerformanceChart (41). Faltam as
-  ondas 3–5: dados de mercado, motores, telas. `dataHealthRules.js` ainda tem
+  `utils/weeklyRetention.js` (43); depois PerformanceChart (41). Onda 3
+  (23/11): `extractFundamentals` e `parseTreasuryPriceCsv` (35),
+  `getMarketDataMap` e `syncBrEtfFundamentals` (32), `getMarketDataByTicker`
+  e `healWalletCandleGaps` (31), `describeTesouroDownloadProblem` (30),
+  `buildFundamentalsOp` e `ingestTreasuryPrices` (26),
+  `parseTesouroDiretoQuotes` (25), `ensureWalletDayCandles` (22),
+  `detectExDateDividends` (20), `retireStaleInactiveAssets` (16). Faltam as
+  ondas 4–5: motores (`signalEngine.runScanner` 37 é o próximo), telas. `dataHealthRules.js` ainda tem
   7 funções acima de 15 (24, 23, 19, 19, 18, 18, 17).
+- **(dono, 2026-11-23) Estranhezas congeladas na onda 3** (mesma regra):
+  - Fundamentos US/ETF (`yahooFundamentalsMapper`), regra 13: `pvp`, `beta` e
+    `vpa` são gravados com o que vier truthy do Yahoo (objeto `{raw}`, texto,
+    `Infinity`, negativo); `debtToEquity` divide sem checar tipo (`'47.49'` →
+    0,4749, `{raw}` → NaN); `roe`/margem/crescimentos/payout usam truthy, então
+    `Infinity` passa e ROE real de 0 vira nulo; DY negativo é aceito;
+    `avgLiquidity` não checa finitude nem sinal. `syncBrEtfFundamentals` cai
+    inteiro se `quoteSummary` resolve `undefined` ou se o histórico de
+    proventos vem `undefined` (TypeError fora de try), sem gravar o lote.
+  - Candles da carteira, regra 13: candle de fim de semana de classe só de
+    dias úteis (STOCK_US no sábado) volta como fechamento do dia e conta
+    `fetched`, mas a mescla o descarta — o snapshot usa um close que não foi
+    gravado, e sem série guardada faz upsert de `history: []`.
+    `healWalletCandleGaps`: `AssetHistory.find` e a B3 sem try/catch (o erro
+    sobe), ao contrário do aggregate, que é fail-open.
+  - Tesouro: `toIso` não valida dia/mês (`32/13/2026` entra como
+    `2026-13-32`); título repetido no JSON do Tesouro Direto: vale o primeiro;
+    Data Base repetida no CSV: vale o último.
+  - `marketDataService`: `getMarketDataByTicker` ordena `history.history` no
+    lugar (o lote ordena cópia) e aceita fallback com `length > 0` que não é
+    lista; o lote conta dois acertos para ticker repetido e consulta a chave
+    `''` para entrada nula; `detectExDateDividends` devolve 0 se um
+    `updateOne` falha no meio, mesmo tendo gravado eventos antes.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 2** (mesma regra: cada
   uma é decisão própria; a caracterização trava o comportamento atual):
   - `updateProfile`: `cpf` que não é texto (ex.: número) lança `TypeError` e

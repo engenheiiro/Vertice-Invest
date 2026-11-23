@@ -26,7 +26,7 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.server.models` — Cobertura de linhas — server/models (%) | 91 | 91.3 | 91.3 |
 | `cobertura.server.routes` — Cobertura de linhas — server/routes (%) | 81.5 | 81.6 | 81.6 |
 | `cobertura.server.schemas` — Cobertura de linhas — server/schemas (%) | 94 | 94.2 | 94.2 |
-| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 82 | 76.5 | 82.4 |
+| `cobertura.server.services` — Cobertura de linhas — server/services (%) | 84 | 76.5 | 84.2 |
 | `cobertura.server.services/engines` — Cobertura de linhas — server/services/engines (%) | 94.5 | 93.7 | 94.7 |
 | `cobertura.server.utils` — Cobertura de linhas — server/utils (%) | 97 | 96.4 | 97.2 |
 | `cobertura.client.components` — Cobertura de linhas — client/src/components (%) | 82.5 | 82.4 | 82.7 |
@@ -35,12 +35,12 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `cobertura.client.pages` — Cobertura de linhas — client/src/pages (%) | 89.5 | 89.3 | 89.6 |
 | `cobertura.client.services` — Cobertura de linhas — client/src/services (%) | 87 | 87.1 | 87.1 |
 | `cobertura.client.utils` — Cobertura de linhas — client/src/utils (%) | 89 | 89.1 | 89.1 |
-| `testes.server` — Casos de teste do server | 3560 | 3404 | 3560 |
+| `testes.server` — Casos de teste do server | 3605 | 3404 | 3605 |
 | `testes.client` — Casos de teste do client | 2170 | 2110 | 2170 |
-| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 40.1 |
-| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 38.4 |
-| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 34 | 37 | 34 |
-| `linhasLongas` — Linhas com mais de 160 caracteres | 1040 | 1079 | 1040 |
+| `tempo.testes.server` — Suíte do server com cobertura (s) | 60 | 36 | 40.6 |
+| `tempo.testes.client` — Suíte do client com cobertura (s) | 60 | 44.8 | 38.3 |
+| `arquivosGrandes` — Arquivos acima de 600 linhas (teto = tamanho de hoje) | 33 | 37 | 33 |
+| `linhasLongas` — Linhas com mais de 160 caracteres | 1039 | 1079 | 1039 |
 | `eslintDisable` — Regras do ESLint desligadas por comentário | 14 | 14 | 14 |
 | `eslintDisableSemMotivo` — Regra do ESLint desligada sem "-- motivo" na linha | 0 | 0 | 0 |
 | `asAny` — Ocorrências de "as any" (TS) | 145 | 145 | 145 |
@@ -56,9 +56,9 @@ como contagem. O detalhe item a item está em `docs/metricas.json`.
 | `lint.erros` — Erros do ESLint | 0 | 0 | 0 |
 | `lint.avisos` — Avisos do ESLint (fora a11y e complexidade) | 11 | 13 | 11 |
 | `lint.a11y` — Avisos de acessibilidade (jsx-a11y) | 0 | 0 | 0 |
-| `complexidade` — Funções com complexidade > 15, por arquivo | 91 | 105 | 91 |
+| `complexidade` — Funções com complexidade > 15, por arquivo | 87 | 105 | 87 |
 | `complexidadeMax` — Maior complexidade ciclomática de uma função | 43 | 45 | 43 |
-| `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.47 | 0.49 | 0.47 |
+| `duplicacaoPct` — Linhas duplicadas (%) — jscpd | 0.46 | 0.49 | 0.46 |
 | `codigoMorto` — Arquivos/exports sem uso de produção | 0 | 0 | 0 |
 | `vulnAltas` — Vulnerabilidades altas/críticas (npm audit) | 0 | 0 | 0 |
 | `depsMajorAtras` — Dependências mais de uma versão maior atrás | 0 | 0 | 0 |
