@@ -135,6 +135,16 @@ describe('getTaxReportPdf — geração do PDF', () => {
         expect(res.sent.slice(0, 5).toString('latin1')).toBe('%PDF-');
     });
 
+    it('erro ao montar o relatório vai para o next, sem PDF pela metade', async () => {
+        taxReportService.computeReport.mockRejectedValue(new Error('boom'));
+        const res = makeRes();
+        const next = vi.fn();
+        await getTaxReportPdf({ params: { year: '2025' }, user: { id: 'u1' } }, res, next);
+        expect(next).toHaveBeenCalledWith(expect.any(Error));
+        expect(res.send).not.toHaveBeenCalled();
+        expect(res.headers).toEqual({});
+    });
+
     it('ano inválido não gera PDF (400)', async () => {
         const res = makeRes();
         await getTaxReportPdf({ params: { year: '1999' }, user: { id: 'u1' } }, res, vi.fn());
