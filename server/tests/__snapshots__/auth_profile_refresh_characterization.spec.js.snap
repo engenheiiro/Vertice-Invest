@@ -76,7 +76,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "ecee4dedd06bf759eb1e474f76c1c327f68328c00ab804455bd396848dc56d10",
+              "token": "hex#1",
             },
           ],
         ],
@@ -133,7 +133,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "1e6ddcb476554c2618e383dec9364b11db7399a6eb0337dee98ea60cb419ec9d",
+              "token": "hex#1",
             },
           ],
         ],
@@ -151,7 +151,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDMtb3V0cm8iLCJlbWFpbCI6InVzZXItNDMtb3V0cm9AeC5jb20iLCJwbGFuIjoiUFJPIiwicm9sZSI6IlVTRVIiLCJzdiI6MSwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.7pDST2_BFOfPZ2loyhZHqBStfQWVe6wbXJ4U_-NwgNk",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-43-outro@x.com",
               "exp": 1795436100,
@@ -168,7 +168,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "67b30db9ac995992e2cff09989cf2d9e7befd6e8bf23478e555cdcaab4ca6e42",
+                "token": "sha(tok#2)",
                 "user": "user-43-outro",
               },
             ],
@@ -176,7 +176,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "1e6ddcb476554c2618e383dec9364b11db7399a6eb0337dee98ea60cb419ec9d",
+                "token": "hex#1",
               },
             ],
           ],
@@ -217,7 +217,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDMtb3V0cm8iLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.TMrLbxGSkGMFOtNcu2AWhHnAFk8ZYOjpVYhkA9wBxSg",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -260,7 +260,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
     "out": {
       "body": {
         "accessToken": {
-          "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJlbWFpbCI6InVzZXItNjNAeC5jb20iLCJwbGFuIjoiR1VFU1QiLCJyb2xlIjoiQURNSU4iLCJzdiI6MCwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.-dz4I-NiVPj5BYQk7HZY89YQDCTcfjwgvU1JMe8P36A",
+          "jwt": "tok#1",
           "payload": {
             "email": "user-63@x.com",
             "exp": 1795436100,
@@ -277,7 +277,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           [
             {
               "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-              "token": "06a571fe85125d2a7362e16710aae97b2a9a3a2fd13a360380c706c891a1a0a8",
+              "token": "sha(tok#2)",
               "user": "user-63",
             },
           ],
@@ -285,7 +285,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "fa2e83176d9320afbe8d02e31cd25a0412712031014964e77617a36024adf2f0",
+              "token": "hex#1",
             },
           ],
         ],
@@ -326,7 +326,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             "secure": false,
           },
           "value": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.dDZu3XhAEl3TwIovySGPQMyLRSljSW9oadvRxZRs-08",
+            "jwt": "tok#2",
             "payload": {
               "exp": 1796040000,
               "iat": 1795435200,
@@ -339,7 +339,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJlbWFpbCI6InVzZXItNjNAeC5jb20iLCJwbGFuIjoiUFJPIiwicm9sZSI6IlVTRVIiLCJzdiI6MSwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.4oKlgaZP56-00oHlEF9na47AO2SnfE9FmNIf4kmupLI",
+            "jwt": "tok#3",
             "payload": {
               "email": "user-63@x.com",
               "exp": 1795436100,
@@ -356,7 +356,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "06a571fe85125d2a7362e16710aae97b2a9a3a2fd13a360380c706c891a1a0a8",
+                "token": "sha(tok#2)",
                 "user": "user-63",
               },
             ],
@@ -364,7 +364,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "fa2e83176d9320afbe8d02e31cd25a0412712031014964e77617a36024adf2f0",
+                "token": "hex#1",
               },
             ],
           ],
@@ -405,7 +405,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNjMiLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.dDZu3XhAEl3TwIovySGPQMyLRSljSW9oadvRxZRs-08",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -453,7 +453,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItODMtb3V0cm8iLCJlbWFpbCI6InVzZXItODMtb3V0cm9AeC5jb20iLCJwbGFuIjoiUFJPIiwicm9sZSI6IlVTRVIiLCJzdiI6MSwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTU0MzYxMDB9.jgFSqkeEuPYL2a0lDuyVa6V9N7ZW8fw6fSaPj3-B9fU",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-83-outro@x.com",
               "exp": 1795436100,
@@ -470,7 +470,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "b03c1b1ee54ef838e2da50348bc89a376f142757ca1055bc68741c3f416f3d0c",
+                "token": "sha(tok#2)",
                 "user": "user-83-outro",
               },
             ],
@@ -478,7 +478,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "f09368eed88b7ae07cb29aca38b9784755a3ae5255f2c80b27915847e133c010",
+                "token": "hex#1",
               },
             ],
           ],
@@ -519,7 +519,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItODMtb3V0cm8iLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NjA0MDAwMH0.OMU8Jm_OKmlVEwKLekPsxTVE79JG8Hd2aosnsE8N110",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -568,7 +568,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "fdc0617b404b791a3d3cf6bcbce39ba177deca6ddbf59d8c32b46bbeee1e0920",
+              "token": "hex#1",
             },
           ],
         ],
@@ -631,7 +631,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "02c7a0df7a80213ac6b0a56cf57b3128b756ae55381092720df54193dbbd6cb9",
+              "token": "hex#1",
             },
           ],
         ],
@@ -641,7 +641,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTIzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTEyMy1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.9pW2svchBzkbtD7Q74GjdHp2Oofp5-bnwIsfu8XeZrg",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-123-outro@x.com",
               "exp": 1795436100,
@@ -658,7 +658,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "d2b2540e646fd5851a7581ff129ea28e554a060070a377a91a8588b3bb35c881",
+                "token": "sha(tok#2)",
                 "user": "user-123-outro",
               },
             ],
@@ -666,7 +666,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "02c7a0df7a80213ac6b0a56cf57b3128b756ae55381092720df54193dbbd6cb9",
+                "token": "hex#1",
               },
             ],
           ],
@@ -707,7 +707,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTIzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.QNmRcqtmpb58tArt2Lun-V6F__pr-FKdOqJrnzu-bcY",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -782,7 +782,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "cdf6c01a33df7b4c0c5c490bd006c80796a9cbd8bbf0569b673a72abfed1b57a",
+              "token": "hex#1",
             },
           ],
         ],
@@ -805,7 +805,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTYzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTE2My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.ly2q2P8wiG6PaBmmM7biMCM-x5EvJH68Ae0O79Lkb5Y",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-163-outro@x.com",
               "exp": 1795436100,
@@ -822,7 +822,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "74f370d47f38e93d90602a5221628088133404387c12533c0af05a7d7256acf0",
+                "token": "sha(tok#2)",
                 "user": "user-163-outro",
               },
             ],
@@ -830,7 +830,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "cdf6c01a33df7b4c0c5c490bd006c80796a9cbd8bbf0569b673a72abfed1b57a",
+                "token": "hex#1",
               },
             ],
           ],
@@ -871,7 +871,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTYzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.1UVUY3W9DjKBcBV-doYPWCle9UBc3zIkJqEbNmBkQFo",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -951,7 +951,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "ae90e24356515220b94f7eb0cd55c8198ae0e76b0384fc63463816d24e87c1d3",
+              "token": "hex#1",
             },
           ],
         ],
@@ -961,7 +961,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTgzIiwiZW1haWwiOiJ1c2VyLTE4M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.cI_W0LHGcgqVzkwYgaF42RqpXaqNDMxPMBPNt1GhP30",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-183@x.com",
               "exp": 1795436100,
@@ -978,7 +978,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "4314642cc705a65deb43f662ed34aede227d445fc2c07855580e2669eb0a90ed",
+                "token": "sha(tok#2)",
                 "user": "user-183",
               },
             ],
@@ -986,7 +986,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "ae90e24356515220b94f7eb0cd55c8198ae0e76b0384fc63463816d24e87c1d3",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1027,7 +1027,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMTgzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.e5eBxh9AxIMnmayVTBotBmW-vDOA8x3eLJpLOHPlCh4",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1077,7 +1077,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjAzIiwiZW1haWwiOiJ1c2VyLTIwM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.jmEnc5L8M7GCf7MD6zsKkynHjDZxTceGE_enjsXBwms",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-203@x.com",
               "exp": 1795436100,
@@ -1094,7 +1094,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "4dede721c661e230a297bad4860452148e794ba1d628743b35e8ae908f6ac326",
+                "token": "sha(tok#2)",
                 "user": "user-203",
               },
             ],
@@ -1102,7 +1102,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "2979bca4b9a3a9235f215e8fd316d3bd1b74ed98cee12e3c95abd283e10c995b",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1143,7 +1143,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjAzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.fBP0RkG-Bt-rIR1Mk9DTJormTvzIWoR9ry_0jAkVEN4",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1222,7 +1222,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjQzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTI0My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.5UqTsKmW4B8A-6CueanlIoMAHJCyvAKHgAbV_8vieuQ",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-243-outro@x.com",
               "exp": 1795436100,
@@ -1239,7 +1239,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "5040986919052e146c184de9619add0ffe004b7d544eacf80fea15546dced0c7",
+                "token": "sha(tok#2)",
                 "user": "user-243-outro",
               },
             ],
@@ -1247,7 +1247,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "3f2aeb4f5db391fad81712f3c4c6be5c5038d09f6f2a766c6113fbf3a640cc3f",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1288,7 +1288,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjQzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.OHRiVEalTigiSzr2TSEs6KBn1wXsMrcAIgP4v2JvCfg",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1377,7 +1377,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjgzIiwiZW1haWwiOiJ1c2VyLTI4M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.eQnnDXvTVZKUGzmSqWaIs3JCvvVG2RapOSQI8HI7vbw",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-283@x.com",
               "exp": 1795436100,
@@ -1394,7 +1394,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "8040957a7e991010c42745a1462d490fbbdfa6c00f288bbbbdca73a21e83e54c",
+                "token": "sha(tok#2)",
                 "user": "user-283",
               },
             ],
@@ -1402,7 +1402,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "80129d976710f3f1d398f76af3f18bad2e8d7113e9c508353b4064f22640c00d",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1443,7 +1443,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMjgzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.O7pL4V457NBg4_9U1uibCNfKfb2siyqCJxwdEN6nrMM",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1497,7 +1497,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "7aefcc32eba17e2cff689d2572539829bc028dbd8c7341b1979dad62fd3801a8",
+              "token": "hex#1",
             },
           ],
         ],
@@ -1520,7 +1520,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzAzIiwiZW1haWwiOiJ1c2VyLTMwM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.aQ8KSLdKmmSxXrrCTqPItI8l92fFD6cRySbQ9lfYS_I",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-303@x.com",
               "exp": 1795436100,
@@ -1537,7 +1537,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "9bd9620f3d3209473b450a615478839583b39b6c2e0695f280b21f936208914d",
+                "token": "sha(tok#2)",
                 "user": "user-303",
               },
             ],
@@ -1545,7 +1545,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "7aefcc32eba17e2cff689d2572539829bc028dbd8c7341b1979dad62fd3801a8",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1586,7 +1586,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzAzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.CEu-sQEypFj0zznpTG7mdC3B593T-RlMM-Jhwhuhols",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1636,7 +1636,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzIzIiwiZW1haWwiOiJ1c2VyLTMyM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.EuW51jLbAa6pfXtvFsf5vHAEF_7RDne7NsabYG0F-xI",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-323@x.com",
               "exp": 1795436100,
@@ -1653,7 +1653,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "bf4ea55dd0d436394cc5b6b3e9f5a7aeb9b3b16acf1c3c9dda6580ffdfb48c00",
+                "token": "sha(tok#2)",
                 "user": "user-323",
               },
             ],
@@ -1661,7 +1661,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "479fff73ac6684733005150b2ceb98c07d36d96e46bc904aa4702a7fe32411b6",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1702,7 +1702,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzIzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.Rj4yBiuoVCj0GKeCpO33I9-lKAnX4CyhEr8pvcDn_UA",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1741,7 +1741,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "76cd878d5ef16e035369a800d678f6cfd56c72a244960eb0873a5792c76e0f74",
+              "token": "hex#1",
             },
           ],
         ],
@@ -1758,7 +1758,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzQzIiwiZW1haWwiOiJ1c2VyLTM0M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.v-e-eq3BGoKqml5Lxna6JKB8DD212uuqzgF1Rn_Fybw",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-343@x.com",
               "exp": 1795436100,
@@ -1775,7 +1775,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "ec55ebe5072e949f73184fc5287417d1402a4d71c1afd1c0b7711cd823f4dec4",
+                "token": "sha(tok#2)",
                 "user": "user-343",
               },
             ],
@@ -1783,7 +1783,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "76cd878d5ef16e035369a800d678f6cfd56c72a244960eb0873a5792c76e0f74",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1824,7 +1824,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzQzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.eE_b_uXH-PDnFZMTjuCBf0tE5S9W9eD_3is3iG05sCM",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1877,7 +1877,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzYzIiwiZW1haWwiOiJ1c2VyLTM2M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.tvTONog40ZU756pybp9Rx2WADckhqXdvxHMUOJIrcGs",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-363@x.com",
               "exp": 1795436100,
@@ -1894,7 +1894,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "90ff6e9c405faf47ad00c3d68c5f02704555b6c90e62efa9132e54d148c38067",
+                "token": "sha(tok#2)",
                 "user": "user-363",
               },
             ],
@@ -1902,7 +1902,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "6a30458d448a5828df5b0027e74ee01735c7de5670f5a7a7eabb9e44688091ae",
+                "token": "hex#1",
               },
             ],
           ],
@@ -1943,7 +1943,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzYzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.7YvICUUjnKpvATGTJsugaDDtjORRBz9plUJcopE4p_s",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -1990,7 +1990,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "68ff85c1709d263e7451de39ce97dc0bbfc9c433902ec80c271fc8f1011a8eb9",
+              "token": "hex#1",
             },
           ],
         ],
@@ -2007,7 +2007,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzgzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTM4My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.xCagEaeSDoLUKw2WrQs_1-U1cgWDZVIj4VhKhQsJitM",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-383-outro@x.com",
               "exp": 1795436100,
@@ -2024,7 +2024,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "a1b81c3f52205af8d5c682f2c9731333b6d6700e7484ccaa37788dac1cef7bb9",
+                "token": "sha(tok#2)",
                 "user": "user-383-outro",
               },
             ],
@@ -2032,7 +2032,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "68ff85c1709d263e7451de39ce97dc0bbfc9c433902ec80c271fc8f1011a8eb9",
+                "token": "hex#1",
               },
             ],
           ],
@@ -2073,7 +2073,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItMzgzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.TXeaXf1eV4QoM1H4luLEJcbVrHPBps_K7zs5wLcbOno",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -2143,7 +2143,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "824334922a8f942e90a804ba531c3e39acf1173b44fac02d6a8eea8468a8b823",
+              "token": "hex#1",
             },
           ],
         ],
@@ -2197,7 +2197,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "8c2831311bebd26fcf4316c0694b43994ca31a65522446e52ea20eb68e87e1f5",
+              "token": "hex#1",
             },
           ],
         ],
@@ -2215,7 +2215,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDIzIiwiZW1haWwiOiJ1c2VyLTQyM0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.0GyIWITbwo0d6QZRMeWjen4rxmWyJWE7Fg_mk-ILPFg",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-423@x.com",
               "exp": 1795436100,
@@ -2232,7 +2232,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "fd717a1f814d12263be5cb02c0f3c6ba5366a4b52c99d06bd5461eca08b32431",
+                "token": "sha(tok#2)",
                 "user": "user-423",
               },
             ],
@@ -2240,7 +2240,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "8c2831311bebd26fcf4316c0694b43994ca31a65522446e52ea20eb68e87e1f5",
+                "token": "hex#1",
               },
             ],
           ],
@@ -2281,7 +2281,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDIzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.Efr5OxjVtHYCGoOC_axn5Y2Uk_GACQW9ifofhBSGr_k",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -2317,7 +2317,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
     "out": {
       "body": {
         "accessToken": {
-          "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzIiwiZW1haWwiOiJ1c2VyLTQ0M0B4LmNvbSIsInBsYW4iOiJHVUVTVCIsInJvbGUiOiJBRE1JTiIsInN2IjowLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.FFU9egBbaAwZ-gTXD6BSxW20UnPNwrbhaP7yojVaD0I",
+          "jwt": "tok#1",
           "payload": {
             "email": "user-443@x.com",
             "exp": 1795436100,
@@ -2334,7 +2334,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           [
             {
               "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-              "token": "c4f8224917c70625e539751cad60b21752c04f39ef94fa2aac2a3b0a3998facc",
+              "token": "sha(tok#2)",
               "user": "user-443",
             },
           ],
@@ -2342,7 +2342,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "1582b617026d0f2371c32a5bbcaf4b9c96dcce05c18b8f2f4c5d2a369001baf5",
+              "token": "hex#1",
             },
           ],
         ],
@@ -2383,7 +2383,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             "secure": false,
           },
           "value": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.Cx0irtGXO5kBRGyx7uVJX9YXn6OCehF5bw3BgaVIK3o",
+            "jwt": "tok#2",
             "payload": {
               "exp": 1796040000,
               "iat": 1795435200,
@@ -2396,7 +2396,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzLW91dHJvIiwiZW1haWwiOiJ1c2VyLTQ0My1vdXRyb0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.rwH25NFrVgk2mReAFjwjjwt5TqvaCAwv7X9l3oNLrNU",
+            "jwt": "tok#3",
             "payload": {
               "email": "user-443-outro@x.com",
               "exp": 1795436100,
@@ -2413,7 +2413,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "2891148a64ab4e2af986032f96f5f72a79c815a0ce91be087060b89853611bd8",
+                "token": "sha(tok#4)",
                 "user": "user-443-outro",
               },
             ],
@@ -2421,7 +2421,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "1582b617026d0f2371c32a5bbcaf4b9c96dcce05c18b8f2f4c5d2a369001baf5",
+                "token": "hex#1",
               },
             ],
           ],
@@ -2462,7 +2462,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDQzLW91dHJvIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.CzRTuyP821pMigIXsQV17HrBp5RS-j5Zqzoi4ZzV3tQ",
+              "jwt": "tok#4",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -2503,7 +2503,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
     "out": {
       "body": {
         "accessToken": {
-          "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiZW1haWwiOiJ1c2VyLTQ2M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoyLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.1OozgGsc5AD56c8dcJMKw-Y9_1WaJBABV7AzKHmHXoQ",
+          "jwt": "tok#1",
           "payload": {
             "email": "user-463@x.com",
             "exp": 1795436100,
@@ -2519,7 +2519,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "f20a5dc452f5c7327a7bc6c985a8a15734f24444005978cea2252dc7b9b02b49",
+              "token": "hex#1",
             },
           ],
         ],
@@ -2545,7 +2545,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             "secure": false,
           },
           "value": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.D0hXyUVm2D-lBZDcrYVmW5hDtJHtXmvdBDuVoW1ABO8",
+            "jwt": "tok#2",
             "payload": {
               "exp": 1796040000,
               "iat": 1795435200,
@@ -2558,7 +2558,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiZW1haWwiOiJ1c2VyLTQ2M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.O4SgWefWJJy5DczWrmW6x-88OwRCVwccegwdeCDv_gs",
+            "jwt": "tok#3",
             "payload": {
               "email": "user-463@x.com",
               "exp": 1795436100,
@@ -2575,7 +2575,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "706f8049633d1ce6016dcd6de2be0ce7e5760411764ccfa3ec76b555e350ff35",
+                "token": "sha(tok#2)",
                 "user": "user-463",
               },
             ],
@@ -2583,7 +2583,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "f20a5dc452f5c7327a7bc6c985a8a15734f24444005978cea2252dc7b9b02b49",
+                "token": "hex#1",
               },
             ],
           ],
@@ -2624,7 +2624,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDYzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.D0hXyUVm2D-lBZDcrYVmW5hDtJHtXmvdBDuVoW1ABO8",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,
@@ -2671,7 +2671,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           [
             {
               "expiryDate": "__date(2026-11-30T12:00:14.000Z)",
-              "token": "66bd5b59f31789871bbdd204a6fd466db1fc99b4153106dde5b86dfbe60a1d53",
+              "token": "hex#1",
               "user": "user-483",
             },
           ],
@@ -2679,7 +2679,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
         "RT.findOne": [
           [
             {
-              "token": "7c275c4e3b64cb314393e45ae5e7b86fc762362f813dd66e26f8ca289685d35b",
+              "token": "hex#2",
             },
           ],
         ],
@@ -2716,7 +2716,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
       "primed": {
         "body": {
           "accessToken": {
-            "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDgzIiwiZW1haWwiOiJ1c2VyLTQ4M0B4LmNvbSIsInBsYW4iOiJQUk8iLCJyb2xlIjoiVVNFUiIsInN2IjoxLCJpYXQiOjE3OTU0MzUyMDAsImV4cCI6MTc5NTQzNjEwMH0.EVUzcKtfP3a_-SdFgjJo12jeIDx_vQr7s26VqdCLW5o",
+            "jwt": "tok#1",
             "payload": {
               "email": "user-483@x.com",
               "exp": 1795436100,
@@ -2733,7 +2733,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
             [
               {
                 "expiryDate": "__date(2026-11-30T12:00:00.000Z)",
-                "token": "03610045bc394a1c4180dcc1523af332d4504daf85c61f670d9a573250ce23e2",
+                "token": "sha(tok#2)",
                 "user": "user-483",
               },
             ],
@@ -2741,7 +2741,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
           "RT.findOne": [
             [
               {
-                "token": "7c275c4e3b64cb314393e45ae5e7b86fc762362f813dd66e26f8ca289685d35b",
+                "token": "hex#2",
               },
             ],
           ],
@@ -2782,7 +2782,7 @@ exports[`caracterização — refreshToken > cenários legíveis 1`] = `
               "secure": false,
             },
             "value": {
-              "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InVzZXItNDgzIiwiaWF0IjoxNzk1NDM1MjAwLCJleHAiOjE3OTYwNDAwMDB9.RPhmhMZ16M6fFnNkA2BgkvgfiU4TvYY_uh67685KNCU",
+              "jwt": "tok#2",
               "payload": {
                 "exp": 1796040000,
                 "iat": 1795435200,

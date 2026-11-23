@@ -73,6 +73,31 @@ const norm = (v) => {
   return v;
 };
 const stable = (v) => JSON.stringify(norm(v));
+
+// Cenários legíveis: JWT e sha256 de token viram apelidos (`tok#1`, `sha(tok#1)`,
+// `hex#1`) na ordem em que aparecem. Mantém quem é igual a quem sem gravar no
+// snapshot string com cara de credencial (o Secret Scan acusava os tokens de teste).
+const JWT_RE = /^[\w-]+\.[\w-]+\.[\w-]+$/;
+const HEX64_RE = /^[0-9a-f]{64}$/;
+const walkStrings = (v, fn) => {
+  if (typeof v === 'string') return fn(v);
+  if (Array.isArray(v)) return v.map((x) => walkStrings(x, fn));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walkStrings(x, fn)]));
+  return v;
+};
+const aliasTokens = (v) => {
+  const tokens = new Map();
+  walkStrings(v, (s) => { if (JWT_RE.test(s) && !tokens.has(s)) tokens.set(s, `tok#${tokens.size + 1}`); return s; });
+  const known = new Map([...tokens].map(([t, a]) => [createHash('sha256').update(t).digest('hex'), `sha(${a})`]));
+  const others = new Map();
+  return walkStrings(v, (s) => {
+    if (tokens.has(s)) return tokens.get(s);
+    if (!HEX64_RE.test(s)) return s;
+    if (known.has(s)) return known.get(s);
+    if (!others.has(s)) others.set(s, `hex#${others.size + 1}`);
+    return others.get(s);
+  });
+};
 const sha = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16);
 
 const mockRes = () => {
@@ -343,7 +368,7 @@ describe('caracterização — refreshToken', () => {
 
   it('cenários legíveis', () => {
     const sample = refreshResults.filter(({ seed }) => seed % 20 === 3)
-      .map(({ seed, sc, out }) => ({ seed, sc: norm(sc), out: norm(out) }));
+      .map(({ seed, sc, out }) => ({ seed, sc: aliasTokens(norm(sc)), out: aliasTokens(norm(out)) }));
     expect(sample).toMatchSnapshot();
   });
 

@@ -164,10 +164,10 @@ describe('syncDailyEconomicIndexes — caracterização', () => {
         const hashes = [];
         for (let i = 0; i < 200; i++) {
             const sc = {
-                lastEntry: pick(rand, [null, { date: new Date('2026-11-10T00:00:00Z') }, { date: new Date('2026-11-18T00:00:00Z') },
-                    { date: new Date('2026-12-01T00:00:00Z') }]),
+                lastEntry: pick(rand, [null, { date: new Date('2026-11-10T12:00:00Z') }, { date: new Date('2026-11-18T12:00:00Z') },
+                    { date: new Date('2026-12-01T12:00:00Z') }]),
                 lastEntryError: maybe(rand, 0.1) ? 'mongo fora' : null,
-                legacy: pick(rand, [null, new Date('2026-06-01T00:00:00Z'), new Date('2026-12-30T00:00:00Z')]),
+                legacy: pick(rand, [null, new Date('2026-06-01T12:00:00Z'), new Date('2026-12-30T12:00:00Z')]),
                 outcomes: [genOutcome(rand), genOutcome(rand)],
             };
             reset();

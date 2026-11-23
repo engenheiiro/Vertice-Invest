@@ -32,7 +32,12 @@ mesmo commit que o resolve.
   - `performMacroSync`: `usd: undefined` passa no `!== null` e gravaria
     `dollar = undefined` sem marcar o câmbio como defasado (hoje a fonte só
     devolve número ou null). `syncDailyEconomicIndexes` com resposta que não é
-    lista (HTML) não tenta o endpoint `ultimos/50`.
+    lista (HTML) não tenta o endpoint `ultimos/50`. A data de início da
+    consulta ao BCB sai de `setDate`/`toLocaleDateString` no fuso do PROCESSO:
+    no Render (UTC) é o dia seguinte ao último gravado; numa máquina em
+    Brasília, a data gravada à meia-noite UTC cai na véspera e a consulta
+    começa um dia antes (a caracterização usa meio-dia UTC para não depender
+    do fuso).
   - `_runFullSync`: o ramo "Nenhum ativo válido encontrado." é inalcançável (a
     validação de ingestão exige ≥ 50 aceitos por classe antes).
   - `auditTreasuryCatalog`: `rate: null` é auditado como taxa 0 (`Number(null)`),
