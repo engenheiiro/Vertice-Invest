@@ -27,13 +27,11 @@ import JobRun from '../models/JobRun.js';
 import logger from '../config/logger.js';
 import { isTransientMongoError } from '../utils/mongoResilience.js';
 import { JOB_CATALOG, getJobMaxRuntimeMinutes } from '../config/jobCatalog.js';
-import { brazilDayKey, isBrBusinessDay } from '../utils/walletSnapshot.js';
 import { buildCandleClock, summarizeCandleStaleness } from '../utils/candleStaleness.js';
-import { auditTreasuryCatalog } from '../utils/treasuryCatalogAudit.js';
+import { assembleHealthFacts, resolveCollectionWindows } from '../utils/dataHealthFacts.js';
 import { verifyEmailTransport } from './emailService.js';
 import {
     COVERAGE_SPEC,
-    DEFAULT_THRESHOLDS,
     HEALTH_STATUS,
     PLAUSIBILITY_RANGES,
     buildHealthReport,
@@ -72,30 +70,6 @@ const outOfRangeExpr = (field, { min, max }) => ({
 });
 
 const sumIf = (condition) => ({ $sum: { $cond: [condition, 1, 0] } });
-
-/**
- * Dias ÚTEIS entre a data do último PU ('YYYY-MM-DD') e hoje.
- *
- * Em horas o check acusaria ~52h todo domingo, porque o Tesouro só publica em dia
- * útil e a última data disponível no fim de semana é sempre a sexta. Contar em
- * dias úteis (pulando feriado, via holidayService) faz "0 = em dia" valer também
- * no domingo, e um atraso de verdade aparecer no primeiro dia útil sem publicação.
- */
-const businessDaysStale = (latestDateStr, now) => {
-    if (!latestDateStr) return null;
-    const todayKey = brazilDayKey(now);
-    let count = 0;
-    let cursor = latestDateStr;
-    // Teto de 30 iterações: série abandonada não deve virar laço longo.
-    for (let i = 0; i < 30; i += 1) {
-        const d = new Date(`${cursor}T12:00:00.000Z`);
-        d.setUTCDate(d.getUTCDate() + 1);
-        cursor = brazilDayKey(d);
-        if (cursor > todayKey) break;
-        if (isBrBusinessDay(cursor)) count += 1;
-    }
-    return count;
-};
 
 /** Posições de mercado da carteira: só o que tem candle. Espelha loadSnapshotContext. */
 const NON_MARKET_WALLET_TYPES = ['CASH', 'FIXED_INCOME'];
@@ -402,26 +376,9 @@ const resolveAll = async (mapa) => Object.fromEntries(
 const collectFacts = async (now) => {
     const thresholdDoc = await SystemConfig.findOne({ key: THRESHOLD_KEY }).lean();
     const overrides = thresholdDoc?.value || null;
-    const staleAfterHours = Number(overrides?.priceStaleAfterHours)
-        || DEFAULT_THRESHOLDS.priceStaleAfterHours;
-    const staleCutoff = new Date(now.getTime() - staleAfterHours * 3600000);
-    const since24h = new Date(now.getTime() - 24 * 3600000);
-    const fundamentalsDays = Number(overrides?.fundamentalsDateStaleAfterDays)
-        || DEFAULT_THRESHOLDS.fundamentalsDateStaleAfterDays;
-    const fundamentalsCutoff = new Date(now.getTime() - fundamentalsDays * 86400000);
-    // Tolerâncias de atraso do candle (em dias). Precisam ser resolvidas ANTES da
-    // coleta: quem separa "parado" de "em dia" aqui é a régua, não o corte de datas.
-    const candleTolerances = {
-        timeSeriesWalletDaysStale: Number(overrides?.timeSeriesWalletDaysStale)
-            || DEFAULT_THRESHOLDS.timeSeriesWalletDaysStale,
-        timeSeriesWalletDaysStaleCrypto: Number(overrides?.timeSeriesWalletDaysStaleCrypto)
-            || DEFAULT_THRESHOLDS.timeSeriesWalletDaysStaleCrypto,
-        timeSeriesUniverseDaysStale: Number(overrides?.timeSeriesUniverseDaysStale)
-            || DEFAULT_THRESHOLDS.timeSeriesUniverseDaysStale,
-    };
-    const frozenDays = Number(overrides?.frozenPriceAfterDays)
-        || DEFAULT_THRESHOLDS.frozenPriceAfterDays;
-    const frozenCutoff = new Date(now.getTime() - frozenDays * 86400000);
+    const {
+        staleCutoff, since24h, fundamentalsCutoff, candleTolerances, frozenCutoff,
+    } = resolveCollectionWindows(overrides, now);
 
     // Coleta em paralelo, por NOME.
     //
@@ -431,23 +388,7 @@ const collectFacts = async (now) => {
     // vizinho — `macroConfig` recebeu um número. Nada quebrou na coleta; a aba
     // inteira respondeu 500 na hora de montar o relatório, e a causa não estava
     // perto do sintoma. Com chaves, inserir no meio é inofensivo por construção.
-    const {
-        assetFacts,
-        totalAll,
-        totalInactive,
-        macroConfig,
-        treasuryRows,
-        treasuryCatalogRows,
-        candleFacts,
-        errors24h,
-        walletPayloadRows,
-        jobs,
-        oldestRun,
-        frozenAssets,
-        retiredButActive,
-        dividendPayment,
-        priceDelivery,
-    } = await resolveAll({
+    const collected = await resolveAll({
         assetFacts: collectAssetFacts(staleCutoff, fundamentalsCutoff),
         totalAll: MarketAsset.countDocuments({}),
         totalInactive: MarketAsset.countDocuments({ isActive: false, failCount: { $gte: 10 } }),
@@ -517,87 +458,16 @@ const collectFacts = async (now) => {
         ]),
     });
 
-    const treasury = treasuryRows[0] || {};
-    const treasuryCatalog = auditTreasuryCatalog(treasuryCatalogRows, { now });
+    // Handshake com o SMTP — não envia nada. É o único fato coletado de um serviço
+    // externo de SAÍDA, e vem com teto de tempo próprio para não pendurar a sentinela.
+    const email = await verifyEmailTransport();
 
     return {
-        facts: {
-            now,
-            totals: {
-                all: totalAll,
-                active: assetFacts.activeTotal,
-                inactive: totalInactive,
-                retiredButActive,
-            },
-            assets: assetFacts.assets,
-            implausible: assetFacts.implausible,
-            macro: macroConfig
-                ? {
-                    selic: macroConfig.selic,
-                    ipca: macroConfig.ipca,
-                    cdi: macroConfig.cdi,
-                    ibov: macroConfig.ibov,
-                    dollar: macroConfig.dollar,
-                    btc: macroConfig.btc,
-                    updatedAt: macroConfig.lastUpdated || null,
-                    // Origem efetiva das taxas oficiais. Alimenta o painel de
-                    // FONTES: sem isto dá para ver que a Selic está fresca, mas
-                    // não que ela veio da secundária porque o BCB caiu.
-                    ratesSources: macroConfig.ratesSources || null,
-                    ratesUpdatedAt: macroConfig.ratesUpdatedAt || null,
-                    ratesStale: !!macroConfig.ratesStale,
-                    // Frescor do bloco de MOEDAS, medido à parte. `lastUpdated`
-                    // avança a cada run do cron mesmo com a fonte de câmbio fora
-                    // do ar, então sozinho ele dava saúde verde para um dólar de
-                    // ontem — 04/09/2026, um dia inteiro sem ninguém ver.
-                    currenciesUpdatedAt: macroConfig.currenciesUpdatedAt || null,
-                    currenciesStale: !!macroConfig.currenciesStale,
-                    currenciesSources: macroConfig.currenciesSources || null,
-                    // Mesma separação, agora para os ÍNDICES. Sem estes três, o
-                    // painel só tinha `lastUpdated` para responder pelo Ibovespa,
-                    // e `lastUpdated` responde pelo documento inteiro.
-                    indicesUpdatedAt: macroConfig.indicesUpdatedAt || null,
-                    indicesStale: !!macroConfig.indicesStale,
-                    indicesSources: macroConfig.indicesSources || null,
-                }
-                : {},
-            treasury: {
-                titles: treasury.titles || 0,
-                // history.date é 'YYYY-MM-DD'; ancorar ao meio-dia UTC evita que o
-                // fuso jogue o dia para trás na conversão.
-                latestDate: treasury.latest ? new Date(`${treasury.latest}T12:00:00.000Z`) : null,
-                businessDaysStale: businessDaysStale(treasury.latest, now),
-            },
-            treasuryCatalog,
-            timeSeries: candleFacts,
-            fundamentals: {
-                healthy: macroConfig?.lastSyncStats?.fundamentalsHealthy === true,
-                timestamp: macroConfig?.lastSyncStats?.timestamp || null,
-                errorCode: macroConfig?.lastSyncStats?.errorCode || null,
-            },
-            jobs,
-            // Handshake com o SMTP — não envia nada. É o único fato coletado de
-            // um serviço externo de SAÍDA, e vem com teto de tempo próprio para
-            // não pendurar a sentinela.
-            email: await verifyEmailTransport(),
-            errors: { last24h: errors24h[0]?.total || 0 },
-            // Carteiras degradadas: total nas 24h e QUAIS buscas caíram — é o que
-            // decide o conserto.
-            walletPayload: summarizeWalletPayloadFailures(walletPayloadRows),
-            instrumentationSince: oldestRun?.startedAt || now,
-            frozen: {
-                count: frozenAssets.length,
-                // Só os 10 mais parados no detalhe — a lista inteira não cabe num card.
-                tickers: frozenAssets.slice(0, 10).map((a) => a.ticker),
-            },
-            dividendPayment,
-            // Chave = `priceSource` gravado no ativo; valor = quando aquela fonte
-            // escreveu preço pela última vez, e para quantos ativos. É o relógio
-            // de ENTREGA da cadeia de cotação — ver a consulta em `collectFacts`.
-            priceDelivery: Object.fromEntries(
-                (priceDelivery || []).map((r) => [r._id, { at: r.at || null, assets: r.assets || 0 }]),
-            ),
-        },
+        facts: assembleHealthFacts(now, {
+            ...collected,
+            email,
+            walletPayload: summarizeWalletPayloadFailures(collected.walletPayloadRows),
+        }),
         overrides,
     };
 };

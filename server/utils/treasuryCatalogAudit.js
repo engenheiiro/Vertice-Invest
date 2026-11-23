@@ -67,64 +67,82 @@ const daysBetween = (from, to) => {
  *            wrongIndex:Array, minAbovePu:Array, missingPrice:Array,
  *            oldestDays:number|null, issues:number}}
  */
-export const auditTreasuryCatalog = (bonds = [], { now = new Date() } = {}) => {
-    const list = Array.isArray(bonds) ? bonds : [];
-
+const findDuplicates = (list) => {
     const byNormalized = new Map();
     for (const b of list) {
         const key = normalize(b?.title).toLowerCase();
         if (!byNormalized.has(key)) byNormalized.set(key, []);
         byNormalized.get(key).push(b);
     }
-
-    const duplicates = [...byNormalized.values()]
+    return [...byNormalized.values()]
         .filter((group) => group.length > 1)
         .map((group) => ({
             title: normalize(group[0]?.title),
             variants: group.map((b) => b?.title),
         }));
+};
 
-    const glued = list.filter((b) => normalize(b?.title) !== String(b?.title || '').trim())
-        .map((b) => b.title);
+const findGlued = (list) => list
+    .filter((b) => normalize(b?.title) !== String(b?.title || '').trim())
+    .map((b) => b.title);
 
-    const implausibleRate = [];
-    const wrongIndex = [];
-    const minAbovePu = [];
-    const missingPrice = [];
+const isRateOutOfRange = (rate, range) => rate === null || rate < range.min || rate > range.max;
+
+const checkRate = (b, out) => {
+    const range = CATALOG_RATE_RANGES[b?.type];
+    const rate = num(b?.rate);
+    if (range && isRateOutOfRange(rate, range)) {
+        out.implausibleRate.push({ title: b?.title, type: b?.type, rate });
+    }
+};
+
+const checkIndex = (b, out) => {
+    const expected = EXPECTED_INDEX[b?.type];
+    if (expected && b?.index && b.index !== expected) {
+        out.wrongIndex.push({ title: b?.title, type: b?.type, index: b.index });
+    }
+};
+
+const checkPrice = (b, out) => {
+    const pu = num(b?.unitPrice) ?? 0;
+    const min = num(b?.minInvestment) ?? 0;
+    if (pu <= 0) out.missingPrice.push(b?.title);
+    else if (min > pu) out.minAbovePu.push({ title: b?.title, min, pu });
+};
+
+const bondAgeDays = (b, now) => (b?.updatedAt ? daysBetween(b.updatedAt, now) : null);
+
+const olderOf = (oldest, age) => {
+    if (age === null) return oldest;
+    return oldest === null || age > oldest ? age : oldest;
+};
+
+export const auditTreasuryCatalog = (bonds = [], { now = new Date() } = {}) => {
+    const list = Array.isArray(bonds) ? bonds : [];
+    const duplicates = findDuplicates(list);
+    const glued = findGlued(list);
+
+    const out = { implausibleRate: [], wrongIndex: [], minAbovePu: [], missingPrice: [] };
     let oldestDays = null;
 
     for (const b of list) {
-        const range = CATALOG_RATE_RANGES[b?.type];
-        const rate = num(b?.rate);
-        if (range && (rate === null || rate < range.min || rate > range.max)) {
-            implausibleRate.push({ title: b?.title, type: b?.type, rate });
-        }
-
-        const expected = EXPECTED_INDEX[b?.type];
-        if (expected && b?.index && b.index !== expected) {
-            wrongIndex.push({ title: b?.title, type: b?.type, index: b.index });
-        }
-
-        const pu = num(b?.unitPrice) ?? 0;
-        const min = num(b?.minInvestment) ?? 0;
-        if (pu <= 0) missingPrice.push(b?.title);
-        else if (min > pu) minAbovePu.push({ title: b?.title, min, pu });
-
-        const age = b?.updatedAt ? daysBetween(b.updatedAt, now) : null;
-        if (age !== null && (oldestDays === null || age > oldestDays)) oldestDays = age;
+        checkRate(b, out);
+        checkIndex(b, out);
+        checkPrice(b, out);
+        oldestDays = olderOf(oldestDays, bondAgeDays(b, now));
     }
 
     return {
         total: list.length,
         duplicates,
         glued,
-        implausibleRate,
-        wrongIndex,
-        minAbovePu,
-        missingPrice,
+        implausibleRate: out.implausibleRate,
+        wrongIndex: out.wrongIndex,
+        minAbovePu: out.minAbovePu,
+        missingPrice: out.missingPrice,
         oldestDays,
-        issues: duplicates.length + implausibleRate.length + wrongIndex.length
-            + minAbovePu.length + missingPrice.length,
+        issues: duplicates.length + out.implausibleRate.length + out.wrongIndex.length
+            + out.minAbovePu.length + out.missingPrice.length,
     };
 };
 
