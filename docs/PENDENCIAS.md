@@ -30,10 +30,30 @@ mesmo commit que o resolve.
   `calculateStockCalibrationConfidence` (32), `passesBuyAndHoldGate` e
   `formatMetrics` (31), `applyBrasil10Retention` (29),
   `detectBullishDivergence` (25), `scoreBuyAndHold` e `formatRankingItem`
-  (18), `runBacktest` (17). O teto agora é PerformanceChart (41); depois
-  CoursePlayer (35), SecuritySection e AssetSection (33), DayMoversModal (30)
-  — a onda 5 (telas). `dataHealthRules.js` ainda tem
+  (18), `runBacktest` (17). Onda 5 (telas, 23/11): PerformanceChart (41),
+  CoursePlayer (35), SecuritySection e AssetSection (33), DayMoversModal (30).
+  Nenhuma função passa mais de 29: o topo agora é TaxReport, AdminSuporteTab e
+  `timeSeriesWorker` (29), depois ResearchAporteModal, CheckoutSuccess,
+  `validateTransaction` e `goalCoach` (28). Sobram 118 funções acima de 15 em
+  77 arquivos (61 entre 20 e 29, 57 entre 16 e 19). `dataHealthRules.js` ainda tem
   7 funções acima de 15 (24, 23, 19, 19, 18, 18, 17).
+- **(dono, 2026-11-23) Estranhezas congeladas na onda 5 (telas)** (mesma regra):
+  - SecuritySection: o `Button` espalha as props depois do próprio `disabled`
+    de carregando, então "Continuar" (senha do MFA) e "Desativar" seguem
+    clicáveis durante a requisição; resposta do `setupMfa` sem `secret`/`qr`
+    abre o QR com `img` sem `src`; status de MFA que falha (500/corpo vazio)
+    mostra 2FA desligado sem avisar.
+  - CoursePlayer: curso sem aulas mostra "Marcar esta aula como concluída" (o
+    clique só gera `console.error`); falha de rede no progresso derruba a tela
+    para "Acesso Restrito", mas resposta recusada é ignorada; escolher aula
+    recarrega curso e progresso e some com conclusão que o servidor não
+    devolveu; aula sem `duration` mostra "NaN min".
+  - PerformanceChart: a ordenação muta o array da API; o timer da demo não é
+    cancelado ao desmontar; o eixo X agrupa mês com `getUTCMonth` sobre data
+    local à meia-noite (erraria a leste de UTC).
+  - DayMoversModal/AssetSection: total do dia NaN sai em vermelho; classe fora
+    da lista mostraria "TICKER · undefined"; resultado de busca sem `type` gera
+    etiqueta vazia.
 - **(dono, 2026-11-23) Estranhezas congeladas na onda 4** (mesma regra):
   - `signalEngine.runScanner`: se um check lança depois de outro já ter
     gravado, o upsert do primeiro fica mas o ticker sai de `scannedTickers`
