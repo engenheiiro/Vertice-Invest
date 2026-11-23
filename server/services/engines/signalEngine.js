@@ -5,6 +5,9 @@ import AssetHistory from '../../models/AssetHistory.js';
 import QuantSignal from '../../models/QuantSignal.js';
 import SystemConfig from '../../models/SystemConfig.js';
 import { externalMarketService } from '../externalMarketService.js';
+import { resolveDivergenceOpts, findPivotLows, evaluateDivergence } from './signals/divergence.js';
+import { eligibleAssetsFilter, buildHistoryMap, newScanState, scanAsset, persistScan } from './signals/scanner.js';
+import { auditSignals } from './signals/backtest.js';
 
 const DEFENSIVE_SECTORS = ['Saneamento', 'Elétricas', 'Seguros', 'Bancos', 'Telecom'];
 
@@ -167,55 +170,15 @@ export const signalEngine = {
     // possível virada. `closes` ordenado do mais recente para o mais antigo.
     // Retorna detalhes do par de fundos ou null se não houver divergência.
     detectBullishDivergence(closes, period = 14, opts = {}) {
-        const wing = opts.wing ?? 2;                 // pregões de cada lado p/ confirmar o pivô
-        const minSeparation = opts.minSeparation ?? 3; // distância mínima entre os dois fundos
-        const maxLookback = opts.maxLookback ?? 40;  // janela de busca de pivôs
-        const rsiZone = opts.rsiZone ?? 45;          // fundo recente precisa estar em zona fraca
-        const maxRecentAge = opts.maxRecentAge ?? 6; // frescor: pivô recente precisa estar perto de hoje
+        const o = resolveDivergenceOpts(opts);
 
         if (!Array.isArray(closes)) return null;
-        const minLen = period + wing + minSeparation + 2;
+        const minLen = period + o.wing + o.minSeparation + 2;
         if (closes.length < minLen) return null;
 
         const rsi = this._rsiSeries(closes, period);
-
-        // Coleta pivôs de baixa (mínimos locais) dentro da janela de lookback.
-        const pivots = [];
-        const limit = Math.min(closes.length - wing, maxLookback);
-        for (let i = wing; i < limit; i++) {
-            if (rsi[i] == null) continue;
-            let isLow = true;
-            for (let k = 1; k <= wing; k++) {
-                if (!(closes[i] < closes[i - k]) || !(closes[i] < closes[i + k])) { isLow = false; break; }
-            }
-            if (isLow) pivots.push(i);
-        }
-
-        if (pivots.length < 2) return null;
-
-        const recent = pivots[0];               // menor índice = pivô mais recente
-        if (recent > maxRecentAge) return null;       // pivô recente precisa ser fresco
-        if (!(closes[0] > closes[recent])) return null; // preço já reagindo acima do fundo
-
-        let older = null;
-        for (let j = 1; j < pivots.length; j++) {
-            if (pivots[j] - recent >= minSeparation) { older = pivots[j]; break; }
-        }
-        if (older === null) return null;
-
-        const priceLowerLow = closes[recent] < closes[older];
-        const rsiHigherLow = rsi[recent] > rsi[older];
-
-        if (priceLowerLow && rsiHigherLow && rsi[recent] < rsiZone) {
-            return {
-                rsiAtLow: rsi[recent],
-                priorRsiLow: rsi[older],
-                priceLow: closes[recent],
-                priorPriceLow: closes[older],
-                barsBetween: older - recent,
-            };
-        }
-        return null;
+        const pivots = findPivotLows(closes, rsi, o.wing, o.maxLookback);
+        return evaluateDivergence(closes, rsi, pivots, o);
     },
 
     // --- SCANNER PRINCIPAL ---
@@ -229,26 +192,11 @@ export const signalEngine = {
             logger.debug(`🌍 [Macro] Petróleo: ${macroContext.oilChange.toFixed(2)}% | IBOV: ${macroContext.ibovChange.toFixed(2)}%`);
         }
 
-        // Pares (ticker-type) que AINDA atendem condições nesta varredura
-        const processedPairs = new Set();
-        // Tickers que tiveram histórico disponível e foram efetivamente analisados
-        const scannedTickers = new Set();
-        // Operações de upsert para o bulkWrite
-        const upsertOps = [];
-        let correlationBlocks = 0;
+        const scan = newScanState();
 
         try {
             // 1. CARREGAR ATIVOS
-            const assets = await MarketAsset.find({
-                isActive: true,
-                isIgnored: false,
-                isBlacklisted: false,
-                type: { $in: ['STOCK', 'FII', 'STOCK_US'] },
-                $or: [
-                    { liquidity: { $gt: 500000 } },
-                    { avgLiquidity: { $gt: 500000 } }
-                ]
-            }).lean();
+            const assets = await MarketAsset.find(eligibleAssetsFilter()).lean();
 
             if (assets.length === 0) {
                 logger.warn("⛔ [Radar Alpha] Nenhum ativo elegível.");
@@ -263,13 +211,7 @@ export const signalEngine = {
                 { ticker: { $in: tickers } },
                 { ticker: 1, history: { $slice: -60 } }
             ).lean();
-
-            const historyMap = new Map();
-            allHistories.forEach(h => {
-                if (h.history && h.history.length > 15) {
-                    historyMap.set(h.ticker, h.history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-                }
-            });
+            const historyMap = buildHistoryMap(allHistories);
 
             // 3. CARREGAR TODOS OS SINAIS ATIVOS (sem filtro de data — UPSERT mantém frescor)
             const activeSignals = await QuantSignal.find({ status: 'ACTIVE' })
@@ -277,210 +219,11 @@ export const signalEngine = {
 
             // 4. LOOP DE ANÁLISE
             for (const asset of assets) {
-                try {
-                    const history = historyMap.get(asset.ticker);
-                    if (!history) continue;
-
-                    scannedTickers.add(asset.ticker);
-
-                    const closes = history.map(h => h.adjClose || h.close).filter(v => v > 0);
-                    const currentPrice = asset.lastPrice;
-                    const riskProfile = this.determineRiskProfile(asset);
-
-                    // Confirmação de volume (7.3): volume atual >= 1.2x média dos
-                    // últimos 20 pregões. Degrada com segurança se não houver dado.
-                    const volume = this._volumeStats(history);
-                    const hasVolumeConfirmation = volume.confirmed;
-                    const volumeRatio = volume.ratio;
-
-                    // --- CHECK 1: RSI OVERSOLD (GOLD only: RSI < 30 + reversão + volume) ---
-                    if (asset.netMargin > -5) {
-                        const rsi = this.calculateRSI(closes, 14);
-                        // Exige que o preço de hoje esteja acima de ontem (rebate confirmado, não faca caindo)
-                        const isReverting = closes.length >= 3 && closes[0] > closes[1];
-
-                        if (rsi !== null && rsi < 30 && isReverting && hasVolumeConfirmation) {
-                            // Filtro de tendência: bloqueia downtrends moderados (preço > 15% abaixo da SMA200)
-                            const trendBlock = asset.sma200 > 0 && currentPrice < asset.sma200 * 0.85;
-
-                            if (trendBlock) {
-                                correlationBlocks++;
-                            } else {
-                                const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext, asset.type);
-
-                                if (!correlationCheck.valid) {
-                                    correlationBlocks++;
-                                } else {
-                                    const quality = 'GOLD';
-                                    const urgencyLevel = this._rsiUrgency(rsi);
-                                    const message = `${rsi < 20 ? 'Sobrevenda Extrema' : 'Sobrevenda Técnica'}: RSI em ${rsi.toFixed(0)}. Anomalia estatística detectada.`;
-
-                                    processedPairs.add(`${asset.ticker}-RSI_OVERSOLD`);
-                                    upsertOps.push({
-                                        updateOne: {
-                                            filter: { ticker: asset.ticker, type: 'RSI_OVERSOLD', status: 'ACTIVE' },
-                                            update: {
-                                                $set: { quality, value: rsi, message, urgencyLevel, volumeRatio },
-                                                $setOnInsert: {
-                                                    timestamp: new Date(),
-                                                    ticker: asset.ticker,
-                                                    type: 'RSI_OVERSOLD',
-                                                    assetType: asset.type,
-                                                    riskProfile,
-                                                    sector: asset.sector || 'Outros',
-                                                    priceAtSignal: currentPrice,
-                                                    status: 'ACTIVE'
-                                                }
-                                            },
-                                            upsert: true
-                                        }
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    // --- CHECK 3: DIVERGÊNCIA ALTISTA (preço faz fundo mais baixo, RSI faz fundo mais alto) ---
-                    // Filtra por mesma trava de qualidade do RSI: margem saudável, volume
-                    // confirmando e sem downtrend severo. Sinal de virada antecipada.
-                    if (asset.netMargin > -5 && hasVolumeConfirmation) {
-                        const divergence = this.detectBullishDivergence(closes, 14);
-                        const trendBlock = asset.sma200 > 0 && currentPrice < asset.sma200 * 0.85;
-
-                        if (divergence && !trendBlock) {
-                            const correlationCheck = this.isValidCorrelation(asset.ticker, 'RSI_OVERSOLD', macroContext, asset.type);
-
-                            if (!correlationCheck.valid) {
-                                correlationBlocks++;
-                            } else {
-                                const quality = 'GOLD';
-                                const urgencyLevel = this._divergenceUrgency(divergence.rsiAtLow);
-                                const message = `Divergência Altista: preço em novo fundo, mas RSI subindo (${divergence.rsiAtLow.toFixed(0)} vs ${divergence.priorRsiLow.toFixed(0)}). Possível virada.`;
-
-                                processedPairs.add(`${asset.ticker}-BULLISH_DIVERGENCE`);
-                                upsertOps.push({
-                                    updateOne: {
-                                        filter: { ticker: asset.ticker, type: 'BULLISH_DIVERGENCE', status: 'ACTIVE' },
-                                        update: {
-                                            $set: { quality, value: divergence.rsiAtLow, message, urgencyLevel, volumeRatio },
-                                            $setOnInsert: {
-                                                timestamp: new Date(),
-                                                ticker: asset.ticker,
-                                                type: 'BULLISH_DIVERGENCE',
-                                                assetType: asset.type,
-                                                riskProfile,
-                                                sector: asset.sector || 'Outros',
-                                                priceAtSignal: currentPrice,
-                                                status: 'ACTIVE'
-                                            }
-                                        },
-                                        upsert: true
-                                    }
-                                });
-                            }
-                        }
-                    }
-
-                    // --- CHECK 2: DEEP VALUE Graham (GOLD only: desconto < 70% + ROE > 0 + sem downtrend) ---
-                    const inDowntrend = asset.sma200 > 0 && currentPrice < asset.sma200;
-                    if (asset.pl > 0 && asset.p_vp > 0 && asset.type === 'STOCK' && asset.roe > 0 && !inDowntrend) {
-                        const grahamNumber = Math.sqrt(22.5 * (currentPrice / asset.pl) * (currentPrice / asset.p_vp));
-                        const discount = currentPrice / grahamNumber;
-
-                        if (grahamNumber > 0 && discount < 0.70) {
-                            const quality = 'GOLD';
-                            const urgencyLevel = this._grahamUrgency(discount);
-                            const message = `Deep Value: Negociando a ${(discount * 100).toFixed(0)}% do Valor Intrínseco. ROE: ${asset.roe?.toFixed(1)}%.`;
-
-                            processedPairs.add(`${asset.ticker}-DEEP_VALUE`);
-                            upsertOps.push({
-                                updateOne: {
-                                    filter: { ticker: asset.ticker, type: 'DEEP_VALUE', status: 'ACTIVE' },
-                                    update: {
-                                        $set: { quality, value: grahamNumber, message, urgencyLevel },
-                                        $setOnInsert: {
-                                            timestamp: new Date(),
-                                            ticker: asset.ticker,
-                                            type: 'DEEP_VALUE',
-                                            assetType: asset.type,
-                                            riskProfile: 'DEFENSIVE',
-                                            sector: asset.sector || 'Outros',
-                                            priceAtSignal: currentPrice,
-                                            status: 'ACTIVE'
-                                        }
-                                    },
-                                    upsert: true
-                                }
-                            });
-                        }
-                    }
-
-                } catch {
-                    // Exceção no meio da análise: as condições do ativo NÃO foram
-                    // avaliadas. Fica fora de scannedTickers, senão a auto-invalidação
-                    // abaixo encerraria os sinais ativos dele como "condição revertida".
-                    scannedTickers.delete(asset.ticker);
-                    continue;
-                }
+                scanAsset(this, asset, historyMap, macroContext, scan);
             }
 
-            // 5. PERSISTÊNCIA — UPSERT atômico (sem acúmulo: máximo 1 ACTIVE por ticker/tipo)
-            //
-            // `timestamp` é a data de EMISSÃO e só entra na inserção. Quando ia no $set,
-            // toda varredura de 15 min o renovava: a idade do sinal no backtest nunca
-            // passava do horizonte (o sinal não expirava e o preço de entrada, fixo no
-            // $setOnInsert, ficava com outra data), e o atraso do plano ESSENTIAL
-            // (`timestamp <= agora - atraso`) nunca alcançava um sinal ainda ativo.
-            if (upsertOps.length > 0) {
-                await QuantSignal.bulkWrite(upsertOps, { ordered: false });
-            }
-
-            // 6. AUTO-INVALIDAÇÃO — fecha sinais cujas condições não são mais válidas
-            // Apenas para tickers que foram efetivamente analisados nesta varredura
-            const scannedTickersArr = [...scannedTickers];
-            const staleSignals = activeSignals.filter(
-                s => scannedTickersArr.includes(s.ticker) && !processedPairs.has(`${s.ticker}-${s.type}`)
-            );
-
-            let staleCount = 0;
-            if (staleSignals.length > 0) {
-                await QuantSignal.updateMany(
-                    { _id: { $in: staleSignals.map(s => s._id) } },
-                    { $set: { status: 'NEUTRAL', auditDate: new Date(), message: 'Condição revertida durante varredura.' } }
-                );
-                staleCount = staleSignals.length;
-            }
-
-            // 7. METADATA DO SCAN — salva no SystemConfig para o frontend
-            const totalActiveAfter = await QuantSignal.countDocuments({ status: 'ACTIVE' });
-            await SystemConfig.findOneAndUpdate(
-                { key: 'RADAR_SCAN_META' },
-                {
-                    $set: {
-                        value: {
-                            lastScanAt: new Date(),
-                            assetsScanned: assets.length,
-                            assetsWithHistory: scannedTickers.size,
-                            upsertedSignals: upsertOps.length,
-                            staleSignalsClosed: staleCount,
-                            activeSignalsTotal: totalActiveAfter
-                        }
-                    }
-                },
-                { upsert: true }
-            );
-
-            const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-            logger.info(`✅ [Radar Alpha] ${duration}s. Upserts: ${upsertOps.length} | Inativados: ${staleCount} | Ativos: ${totalActiveAfter} | Bloqueados: ${correlationBlocks}`);
-
-            return {
-                success: true,
-                signals: upsertOps.length,
-                staleInactivated: staleCount,
-                blocked: correlationBlocks,
-                analyzed: assets.length,
-                ignored: 0
-            };
+            // 5–7. PERSISTÊNCIA, AUTO-INVALIDAÇÃO E METADADOS DO SCAN
+            return await persistScan(assets, activeSignals, scan, startTime);
 
         } catch (error) {
             logger.error(`❌ [Radar Alpha] Erro: ${error.message}`);
@@ -496,9 +239,6 @@ export const signalEngine = {
             const config = await SystemConfig.findOne({ key: 'MACRO_INDICATORS' });
             const horizonDays = config?.backtestHorizon || 14;
 
-            const TAKE_PROFIT_PCT = 3.5;
-            const STOP_LOSS_PCT = -3.5;
-
             const activeSignals = await QuantSignal.find({ status: 'ACTIVE' });
 
             if (activeSignals.length === 0) {
@@ -509,59 +249,14 @@ export const signalEngine = {
             const assets = await MarketAsset.find({ ticker: { $in: tickers } }).select('ticker lastPrice');
             const priceMap = new Map(assets.map(a => [a.ticker, a.lastPrice]));
 
-            let processed = 0;
-            let hits = 0;
-            let misses = 0;
-            let expired = 0;
-            const updates = [];
-            const now = new Date();
-
-            for (const signal of activeSignals) {
-                const currentPrice = priceMap.get(signal.ticker);
-
-                if (!currentPrice || currentPrice <= 0 || !signal.priceAtSignal) continue;
-
-                const resultPercent = ((currentPrice - signal.priceAtSignal) / signal.priceAtSignal) * 100;
-                const signalAgeDays = (now.getTime() - new Date(signal.timestamp).getTime()) / (1000 * 3600 * 24);
-
-                let newStatus = null;
-
-                if (resultPercent >= TAKE_PROFIT_PCT) {
-                    newStatus = 'HIT';
-                } else if (resultPercent <= STOP_LOSS_PCT) {
-                    newStatus = 'MISS';
-                } else if (signalAgeDays >= horizonDays) {
-                    newStatus = 'NEUTRAL';
-                }
-
-                if (newStatus) {
-                    updates.push({
-                        updateOne: {
-                            filter: { _id: signal._id },
-                            update: {
-                                $set: {
-                                    status: newStatus,
-                                    finalPrice: currentPrice,
-                                    resultPercent: resultPercent,
-                                    auditDate: new Date()
-                                }
-                            }
-                        }
-                    });
-
-                    processed++;
-                    if (newStatus === 'HIT') hits++;
-                    if (newStatus === 'MISS') misses++;
-                    if (newStatus === 'NEUTRAL') expired++;
-                }
-            }
+            const { updates, tally } = auditSignals(activeSignals, priceMap, horizonDays);
 
             if (updates.length > 0) {
                 await QuantSignal.bulkWrite(updates);
             }
 
-            logger.info(`✅ [Backtest] ${processed} sinais encerrados. (Hits: ${hits} | Stops: ${misses} | Expirados: ${expired})`);
-            return { processed, hits, misses };
+            logger.info(`✅ [Backtest] ${tally.processed} sinais encerrados. (Hits: ${tally.hits} | Stops: ${tally.misses} | Expirados: ${tally.expired})`);
+            return { processed: tally.processed, hits: tally.hits, misses: tally.misses };
 
         } catch (error) {
             logger.error(`❌ [Backtest] Erro: ${error.message}`);
