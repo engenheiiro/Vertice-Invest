@@ -4,83 +4,59 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '../components/dashboard/Header';
 import { researchService, ResearchReport, RankingItem } from '../services/research';
 import { ResearchViewer } from '../components/research/ResearchViewer';
-import { AssetDetailModal } from '../components/research/AssetDetailModal'; // Importado
-import { ExplainableAIRenderer } from '../components/research/ExplainableAIRenderer';
+import { AssetDetailModal } from '../components/research/AssetDetailModal';
 import { ResearchAporteModal } from '../components/research/ResearchAporteModal';
 import { TreasuryPanel } from '../components/research/TreasuryPanel';
-import { Bot, Newspaper, Trophy, Lock, Crown, Info, RefreshCcw } from 'lucide-react';
-import { SkeletonCard, SkeletonTableRows } from '../components/ui';
+import { ResearchToolbar } from '../components/research/ResearchToolbar';
+import { ResearchLoading, ResearchLocked, ResearchNotice, ResearchWeeklyAnalysis } from '../components/research/ResearchPanels';
+import {
+    RESEARCH_ASSETS, hasResearchAccess, readResearchDeepLink, researchPanel, researchPlanLine, type AnalysisProfile,
+} from '../components/research/researchPageView';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { ResearchAporteRequest } from '../utils/researchAporte';
 import { STALE_TIME } from '../config/queryConfig';
 
-// minPlan espelha o gate autoritativo do backend (RESEARCH_FEATURE_BY_CLASS em
-// researchController + LIMITS_CONFIG). A Carteira Brasil TOP 10 é a vitrine do
-// Free: o GUEST vê o ranking inteiro — é a única classe aberta.
-const ASSETS = [
-    { id: 'BRASIL_10', label: 'Brasil 10 (Mix)', color: 'bg-emerald-600', minPlan: 'GUEST' },
-    { id: 'STOCK', label: 'Ações BR', color: 'bg-blue-600', minPlan: 'PRO' },
-    { id: 'FII', label: 'FIIs', color: 'bg-indigo-600', minPlan: 'PRO' },
-    { id: 'CRYPTO', label: 'Cripto', color: 'bg-purple-600', minPlan: 'PRO' },
-    { id: 'STOCK_US', label: 'Exterior', color: 'bg-slate-700', minPlan: 'ELITE' },
-    { id: 'ETF', label: 'ETFs', color: 'bg-teal-600', minPlan: 'PRO' },
-    { id: 'FIXED_INCOME', label: 'Renda Fixa', color: 'bg-emerald-700', minPlan: 'ESSENTIAL' },
-];
-
 export const Research = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation(); // Hook de location para pegar state
-    
+
     // Deep link do Aporte Inteligente da Carteira. Lido UMA vez, no estado inicial:
     // aplicado por efeito, a página buscaria BRASIL_10 primeiro e a classe pedida
     // depois — duas respostas concorrentes, e a mais lenta sobrescrevia a outra
     // (o modal abria com o ranking errado).
-    const [aporteLink] = useState<ResearchAporteRequest | null>(
-        () => (location.state as { aporte?: ResearchAporteRequest } | null)?.aporte ?? null
-    );
+    const [deepLink] = useState(() => readResearchDeepLink(location.state));
+    const aporteLink: ResearchAporteRequest | null = deepLink.aporte;
 
-    const [selectedAsset, setSelectedAsset] = useState(aporteLink?.assetClass || 'BRASIL_10');
+    const [selectedAsset, setSelectedAsset] = useState(deepLink.initialAsset);
     // Dentro do Exterior, alterna entre dois rankings INDEPENDENTES: Ações US (STOCK_US)
     // e REITs (classe própria). Não é filtro client-side — troca a fonte buscada.
-    const [exteriorView, setExteriorView] = useState<'STOCK' | 'REIT'>(aporteLink?.exteriorView || 'STOCK');
+    const [exteriorView, setExteriorView] = useState<'STOCK' | 'REIT'>(deepLink.initialExteriorView);
     // Aba ETFs: origem visível (Nacional B3 / Internacional US). Espelha o sub-filtro do
     // TopPicksCard aqui em cima para que o modal de Aporte respeite a mesma seleção.
-    const [etfOrigin, setEtfOrigin] = useState<'BR' | 'US'>(aporteLink?.etfOrigin || 'US');
+    const [etfOrigin, setEtfOrigin] = useState<'BR' | 'US'>(deepLink.initialEtfOrigin);
     const [viewMode, setViewMode] = useState<'ANALYSIS' | 'RANKING'>('RANKING');
     // Ticker do deep link (location.state.openTicker), consumido uma única vez.
-    const pendingOpenTicker = useRef<string | null>(
-        (location.state as { openTicker?: string } | null)?.openTicker ?? null
-    );
+    const pendingOpenTicker = useRef<string | null>(deepLink.openTicker);
 
     // Estado para controle do modal de asset direto
     const [directAsset, setDirectAsset] = useState<RankingItem | null>(null);
     // Modal "Aporte Inteligente" por ativo (distribui valor entre os COMPRAR).
-    const [showAporte, setShowAporte] = useState(!!aporteLink?.amount);
+    const [showAporte, setShowAporte] = useState(!!deepLink.initialAmount);
     // Valor herdado do Aporte Inteligente da Carteira (deep link). Zerado ao fechar
     // o modal para não re-semear um valor antigo numa abertura manual posterior.
-    const [aporteSeed, setAporteSeed] = useState<number | null>(aporteLink?.amount ?? null);
+    const [aporteSeed, setAporteSeed] = useState<number | null>(deepLink.initialAmount);
     // Perfil selecionado na aba "Relatório Semanal" (narrativa por perfil).
-    const [analysisProfile, setAnalysisProfile] = useState<'DEFENSIVE' | 'MODERATE' | 'BOLD'>('DEFENSIVE');
+    const [analysisProfile, setAnalysisProfile] = useState<AnalysisProfile>('DEFENSIVE');
 
-    const isAdmin = user?.role === 'ADMIN';
     // Renda Fixa é uma vitrine informativa (Tesouro) — não usa MarketAnalysis/ranking.
     const isFixedIncome = selectedAsset === 'FIXED_INCOME';
     const isExterior = selectedAsset === 'STOCK_US';
     // Classe efetivamente buscada: no Exterior, o sub-toggle pode apontar para REIT.
     const effectiveAsset = isExterior && exteriorView === 'REIT' ? 'REIT' : selectedAsset;
 
-    const checkAccess = (assetId: string) => {
-        if (isAdmin) return true;
-        const asset = ASSETS.find(a => a.id === assetId);
-        if (!asset || !user) return false;
-        const planLevels: Record<string, number> = { 'GUEST': 0, 'ESSENTIAL': 1, 'PRO': 2, 'ELITE': 3, 'BLACK': 4 };
-        const userLevel = planLevels[user.plan || 'GUEST'] || 0;
-        const requiredLevel = planLevels[asset.minPlan];
-        return userLevel >= requiredLevel;
-    };
-
+    const checkAccess = (assetId: string) => hasResearchAccess(user, assetId);
     const hasAccessToSelected = checkAccess(selectedAsset);
     // Renda Fixa não tem relatório de ranking — o TreasuryPanel busca seus próprios dados.
     const canFetchReport = !isFixedIncome && hasAccessToSelected;
@@ -122,191 +98,56 @@ export const Research = () => {
         if (aporteLink) window.history.replaceState({}, document.title);
     }, [aporteLink]);
 
-    const requiredPlanLabel = ASSETS.find(a => a.id === selectedAsset)?.minPlan || 'PRO';
+    const selectedMeta = RESEARCH_ASSETS.find(a => a.id === selectedAsset);
+    const panel = researchPanel({ isLoading, hasAccess: hasAccessToSelected, isFixedIncome, report, viewMode });
+
+    const renderPanel = () => {
+        switch (panel) {
+            case 'loading': return <ResearchLoading />;
+            case 'locked': return (
+                <ResearchLocked planLabel={selectedMeta?.minPlan || 'PRO'} assetLabel={selectedMeta?.label} onUpgrade={() => navigate('/pricing')} />
+            );
+            case 'fixedIncome': return <TreasuryPanel />;
+            case 'missing': return (
+                <ResearchNotice title="Análise não encontrada" text="Use o painel admin para gerar o relatório inaugural desta categoria." />
+            );
+            case 'analysis': return <ResearchWeeklyAnalysis report={report as ResearchReport} profile={analysisProfile} onProfile={setAnalysisProfile} />;
+            case 'ranking': return (
+                <ResearchViewer
+                    report={report as ResearchReport}
+                    view="RANKING"
+                    onAporte={() => setShowAporte(true)}
+                    onExteriorViewChange={isExterior ? setExteriorView : undefined}
+                    onEtfOriginChange={setEtfOrigin}
+                    initialEtfOrigin={aporteLink?.etfOrigin}
+                />
+            );
+            default: return <ResearchNotice title="Ranking ainda não publicado" text="O admin ainda não publicou o Top 10 desta categoria." />;
+        }
+    };
 
     return (
         <div className="min-h-screen bg-deep text-white font-sans selection:bg-blue-500/30 pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
             <Header />
 
             <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto p-4 md:p-8">
-                
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 md:mb-12">
-                    {/* Título */}
-                    <div className="shrink-0">
-                        <h1 className="text-2xl md:text-4xl font-black text-white tracking-tighter flex items-center gap-3 md:gap-4">
-                            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20 shrink-0">
-                                <Bot size={22} className="md:hidden" />
-                                <Bot size={28} className="hidden md:block" />
-                            </div>
-                            RESEARCH CENTER
-                        </h1>
-                        <p className="text-slate-500 text-xs md:text-sm font-medium mt-1 md:mt-2">
-                            {isAdmin ? 'ADMIN ACCESS: Todas as categorias liberadas' : `Plano Ativo: ${user?.plan || 'INICIANTE'}`}
-                        </p>
-                    </div>
-
-                    {/* Controles */}
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex bg-deep border border-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar gap-0.5 shadow-inner w-full md:w-auto">
-                            {ASSETS.map(asset => {
-                                const allowed = checkAccess(asset.id);
-                                return (
-                                    <button
-                                        key={asset.id}
-                                        onClick={() => setSelectedAsset(asset.id)}
-                                        className={`px-3 md:px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                                            selectedAsset === asset.id
-                                                ? `${asset.color} text-white shadow-lg`
-                                                : 'text-slate-500 hover:text-slate-300'
-                                        } ${!allowed ? 'opacity-50 grayscale' : ''}`}
-                                    >
-                                        {asset.label}
-                                        {!allowed && <Lock size={11} />}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className={`flex bg-deep border border-slate-800 p-1 rounded-xl gap-0.5 shadow-inner shrink-0 ${isFixedIncome ? 'hidden' : ''}`}>
-                            <button
-                                onClick={() => setViewMode('RANKING')}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
-                                    viewMode === 'RANKING' ? 'bg-base text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
-                                }`}
-                            >
-                                <Trophy size={14} className="text-yellow-400" /> Top 10
-                            </button>
-                            <button
-                                onClick={() => setViewMode('ANALYSIS')}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-black whitespace-nowrap transition-all ${
-                                    viewMode === 'ANALYSIS' ? 'bg-base text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
-                                }`}
-                            >
-                                <Newspaper size={14} className="text-blue-400" /> Semanal
-                            </button>
-                        </div>
-
-                        {!isFixedIncome && (
-                            <button
-                                onClick={() => { void reportQuery.refetch(); }}
-                                disabled={reportQuery.isFetching || !hasAccessToSelected}
-                                className="bg-base border border-slate-800 p-2.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-50 shrink-0"
-                                title="Atualizar Dados"
-                                aria-label="Atualizar dados"
-                            >
-                                <RefreshCcw size={16} className={reportQuery.isFetching ? 'animate-spin' : ''} />
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <ResearchToolbar
+                    planLine={researchPlanLine(user)}
+                    selectedAsset={selectedAsset}
+                    canAccess={checkAccess}
+                    onSelectAsset={setSelectedAsset}
+                    viewMode={viewMode}
+                    onViewMode={setViewMode}
+                    isFixedIncome={isFixedIncome}
+                    isFetching={reportQuery.isFetching}
+                    canRefresh={hasAccessToSelected}
+                    onRefresh={() => { void reportQuery.refetch(); }}
+                />
 
                 <div className="min-h-[400px]">
-                    {isLoading ? (
-                        <div className="space-y-4 animate-fade-in" aria-busy="true" aria-label="Carregando análise Vértice">
-                            <SkeletonCard className="h-28" />
-                            <div className="bg-card border border-slate-800 rounded-2xl p-5">
-                                <SkeletonTableRows rows={6} />
-                            </div>
-                        </div>
-                    ) : !hasAccessToSelected ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-base border border-slate-800 rounded-3xl p-10 text-center">
-                            <Crown size={40} className="text-blue-500 mb-6" />
-                            <h2 className="text-2xl font-black text-white mb-3">Conteúdo Exclusivo {requiredPlanLabel}</h2>
-                            <p className="text-slate-400 max-w-sm mb-8">
-                                A análise estratégica de {ASSETS.find(a => a.id === selectedAsset)?.label} é reservada para assinantes do plano {requiredPlanLabel} ou superior.
-                            </p>
-                            <button onClick={() => navigate('/pricing')} className="px-8 py-3 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-900/20">
-                                Fazer Upgrade
-                            </button>
-                        </div>
-                    ) : isFixedIncome ? (
-                        <TreasuryPanel />
-                    ) : !report ? (
-                        <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
-                            <Info size={48} className="text-slate-700 mb-4" />
-                            <h3 className="text-xl font-black text-slate-500 uppercase">Análise não encontrada</h3>
-                            <p className="text-slate-600 text-sm mt-2 max-w-sm">Use o painel admin para gerar o relatório inaugural desta categoria.</p>
-                        </div>
-                    ) : viewMode === 'ANALYSIS' ? (
-                        (() => {
-                            const byProfile = report.generatedExplainableAIByProfile || {};
-                            const PROFILES = [
-                                { id: 'DEFENSIVE', label: 'Defensivo' },
-                                { id: 'MODERATE', label: 'Moderado' },
-                                { id: 'BOLD', label: 'Arrojado' },
-                            ] as const;
-                            const profilesWithText = PROFILES.filter(p => (byProfile[p.id] || '').trim());
-                            const effectiveProfile = profilesWithText.some(p => p.id === analysisProfile)
-                                ? analysisProfile
-                                : (profilesWithText[0]?.id ?? analysisProfile);
-                            const activeText = profilesWithText.length > 0
-                                ? (byProfile[effectiveProfile] || '')
-                                : (report.generatedExplainableAI || '');
-                            return (
-                        <div className="animate-fade-in space-y-8 pb-20">
-                            {/* Análise Explainable IA */}
-                            {report.isExplainableAIPublished && activeText ? (
-                                <div className="bg-base border border-indigo-900/30 rounded-3xl overflow-hidden shadow-xl">
-                                    <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                        <div>
-                                            <h2 className="text-lg font-black text-white flex items-center gap-3">
-                                                <Bot size={20} className="text-indigo-400" />
-                                                Análise Explainable IA
-                                            </h2>
-                                            <p className="text-slate-500 text-xs mt-1">Gerado por inteligência artificial com base nos dados quantitativos</p>
-                                        </div>
-                                        {/* Seletor de perfil (só quando há narrativa por perfil) */}
-                                        {profilesWithText.length > 1 && (
-                                            <div className="flex bg-base border border-slate-800 p-1 rounded-xl gap-1 shrink-0">
-                                                {profilesWithText.map(p => (
-                                                    <button
-                                                        key={p.id}
-                                                        onClick={() => setAnalysisProfile(p.id)}
-                                                        className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
-                                                            effectiveProfile === p.id ? 'bg-indigo-900/40 text-indigo-300' : 'text-slate-500 hover:text-slate-300'
-                                                        }`}
-                                                    >
-                                                        {p.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="p-6">
-                                        <ExplainableAIRenderer text={activeText} />
-                                    </div>
-                                </div>
-                            ) : null}
-
-                            {/* Sem conteúdo publicado ainda */}
-                            {!report.isExplainableAIPublished && (
-                                <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
-                                    <Info size={48} className="text-slate-700 mb-4" />
-                                    <h3 className="text-xl font-black text-slate-500 uppercase">Relatório ainda não publicado</h3>
-                                    <p className="text-slate-600 text-sm mt-2 max-w-sm">O admin ainda não publicou o relatório semanal desta categoria.</p>
-                                </div>
-                            )}
-                        </div>
-                            );
-                        })()
-                    ) : report.isRankingPublished ? (
-                        <ResearchViewer
-                            report={report!}
-                            view="RANKING"
-                            onAporte={() => setShowAporte(true)}
-                            onExteriorViewChange={isExterior ? setExteriorView : undefined}
-                            onEtfOriginChange={setEtfOrigin}
-                            initialEtfOrigin={aporteLink?.etfOrigin}
-                        />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-20 bg-base border border-dashed border-slate-800 rounded-3xl text-center">
-                            <Info size={48} className="text-slate-700 mb-4" />
-                            <h3 className="text-xl font-black text-slate-500 uppercase">Ranking ainda não publicado</h3>
-                            <p className="text-slate-600 text-sm mt-2 max-w-sm">O admin ainda não publicou o Top 10 desta categoria.</p>
-                        </div>
-                    )}
+                    {renderPanel()}
                 </div>
-                
+
                 {/* Modal de Link Direto (Renderizado se houver ativo selecionado via state) */}
                 {directAsset && (
                     <AssetDetailModal

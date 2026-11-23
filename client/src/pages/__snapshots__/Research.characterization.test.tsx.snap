@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Research — caracterização > acesso: cada usuário × cada aba (relatório publicado) 1`] = `"43cfa145cef66b6c"`;
+
+exports[`Research — caracterização > conteúdo do relatório naoPublicado: abas × Top 10 / Semanal × perfil 1`] = `"4454abf0f986afb9"`;
+
+exports[`Research — caracterização > conteúdo do relatório nenhum: abas × Top 10 / Semanal × perfil 1`] = `"fca8ec4a58a35fa9"`;
+
+exports[`Research — caracterização > conteúdo do relatório porPerfil: abas × Top 10 / Semanal × perfil 1`] = `"9842dee4c2d4459e"`;
+
+exports[`Research — caracterização > conteúdo do relatório publicado: abas × Top 10 / Semanal × perfil 1`] = `"758a0d4ccd78f9fb"`;
+
+exports[`Research — caracterização > conteúdo do relatório publicadoSemTexto: abas × Top 10 / Semanal × perfil 1`] = `"0e1a60defe1d3549"`;
+
+exports[`Research — caracterização > conteúdo do relatório umPerfil: abas × Top 10 / Semanal × perfil 1`] = `"ecb4b85312b3c454"`;
+
+exports[`Research — caracterização > deep links: Aporte da Carteira e ticker direto 1`] = `
+[
+  "7f11b8b5f6ea3c0d",
+  "ETF",
+  "8aa273ca355a4281",
+  "ae778a6e0da50170",
+  "cf83e764ca5474f1",
+  "cf83e764ca5474f1",
+]
+`;
+
+exports[`Research — caracterização > fluxo do Top 10: atualizar, Aporte, origem do ETF e REIT do Exterior 1`] = `
+[
+  "135ccc60db3c45bd",
+  "58dc9fef0abea100",
+  "9cec9780c601feaf",
+  "6c3e89b109b155bc",
+  "BRASIL_10,BRASIL_10,ETF,STOCK_US,REIT,CRYPTO",
+]
+`;
