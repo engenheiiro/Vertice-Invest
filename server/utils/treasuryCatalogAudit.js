@@ -60,13 +60,7 @@ const daysBetween = (from, to) => {
     return Math.floor((to.getTime() - a.getTime()) / 86400000);
 };
 
-/**
- * @param {Array} bonds documentos de TreasuryBond (lean)
- * @param {Object} [opts] `{ now }`
- * @returns {{total:number, duplicates:Array, glued:Array, implausibleRate:Array,
- *            wrongIndex:Array, minAbovePu:Array, missingPrice:Array,
- *            oldestDays:number|null, issues:number}}
- */
+/** Títulos agrupados pelo nome normalizado; só os grupos com mais de um. */
 const findDuplicates = (list) => {
     const byNormalized = new Map();
     for (const b of list) {
@@ -117,6 +111,13 @@ const olderOf = (oldest, age) => {
     return oldest === null || age > oldest ? age : oldest;
 };
 
+/**
+ * @param {Array} bonds documentos de TreasuryBond (lean)
+ * @param {Object} [opts] `{ now }`
+ * @returns {{total:number, duplicates:Array, glued:Array, implausibleRate:Array,
+ *            wrongIndex:Array, minAbovePu:Array, missingPrice:Array,
+ *            oldestDays:number|null, issues:number}}
+ */
 export const auditTreasuryCatalog = (bonds = [], { now = new Date() } = {}) => {
     const list = Array.isArray(bonds) ? bonds : [];
     const duplicates = findDuplicates(list);
