@@ -3,6 +3,12 @@ import {
   STOCK_ARCHETYPES,
   classifyStockArchetype,
 } from '../../config/stockCalibration.js';
+import {
+  coverageCap,
+  legacyConfidenceCap,
+  liquidityDiscount,
+  operationalDiscount,
+} from './stockCalibrationConfidence.js';
 
 const clamp = value => Math.min(100, Math.max(0, Number(value) || 0));
 
@@ -82,29 +88,12 @@ const oilGasEntry = asset => {
 // 74 (BUY), furando o teto de 70 que o legado já tinha imposto. Com o parâmetro,
 // o teto é o da MENOR confiança (mesma escada 70/85/100 do legado).
 export const calculateStockCalibrationConfidence = (asset, coverage, ratesStale = false, legacyConfidence = null) => {
+  const metrics = asset.metrics;
   let confidence = 100;
-  const isOperational = coverage?.archetype === STOCK_ARCHETYPES.OPERATIONAL;
-
-  if (isOperational && asset.metrics?._missing?.revenueGrowth) confidence -= 25;
-  if (isOperational && (asset.metrics?._missing?.roe || asset.metrics?._missing?.netMargin)) confidence -= 15;
-  if ((asset.metrics?.avgLiquidity || 0) < 1_000_000) confidence -= 30;
+  if (coverage?.archetype === STOCK_ARCHETYPES.OPERATIONAL) confidence -= operationalDiscount(metrics);
+  confidence -= liquidityDiscount(metrics);
   if (ratesStale) confidence -= 10;
-
-  const staleDays = asset.metrics?._staleDays;
-  if (isOperational) {
-    if (Number.isFinite(staleDays) && staleDays > 180) confidence -= 30;
-    else if (Number.isFinite(staleDays) && staleDays > 90) confidence -= 15;
-    else if (staleDays === null || staleDays === undefined) confidence -= 5;
-  }
-
-  const coverageCap = Number.isFinite(coverage?.requiredCoverage)
-    ? coverage.requiredCoverage
-    : 0;
-  const legacy = Number(legacyConfidence);
-  const legacyCap = legacyConfidence !== null && legacyConfidence !== undefined && Number.isFinite(legacy)
-    ? legacy
-    : 100;
-  return Math.max(0, Math.min(coverageCap, confidence, legacyCap));
+  return Math.max(0, Math.min(coverageCap(coverage), confidence, legacyConfidenceCap(legacyConfidence)));
 };
 
 export const calculateStockShadowAxes = asset => {

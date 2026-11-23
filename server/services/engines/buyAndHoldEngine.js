@@ -11,15 +11,17 @@
  */
 
 import { BUY_THRESHOLD } from '../../config/financialConstants.js';
-import { isCyclicalSector, isStateControlled } from '../../config/sectorTaxonomy.js';
+import { isStateControlled } from '../../config/sectorTaxonomy.js';
 import { BUY_AND_HOLD_CONFIG, BUY_AND_HOLD_VERSION } from '../../config/buyAndHold.js';
 import { classifyStockArchetype, resolveRoeReading } from '../../config/stockCalibration.js';
-
-const norm = value => String(value || '')
-  .normalize('NFD')
-  .replace(/[̀-ͯ]/g, '')
-  .toLowerCase()
-  .trim();
+import {
+  archetypeFailures,
+  curationFailures,
+  quantitativeFailures,
+  readMetric,
+  upper,
+} from './buyAndHoldGateRules.js';
+import { buyAndHoldReason, weightedComposite } from './buyAndHoldVerdict.js';
 
 const clamp = value => Math.min(100, Math.max(0, Number(value) || 0));
 
@@ -53,8 +55,6 @@ const averageObserved = parts => {
 
 const part = (metric, value, weight) => ({ metric, value, weight });
 
-const upper = ticker => String(ticker || '').trim().toUpperCase();
-
 /**
  * Teto de beta aplicável ao arquétipo (padrão quando não há override).
  * Banco é proxy do ciclo econômico local e tem beta estruturalmente acima de 1;
@@ -82,18 +82,11 @@ const controlResilience = (ticker, controlType) => {
   })[controlType] ?? 100;
 };
 
-const readMetric = (asset, key) => {
-  const sector = asset.sectorMetrics || {};
-  if (Object.hasOwn(sector, key) && sector[key] !== null && sector[key] !== undefined) return sector[key];
-  return asset.metrics?.[key];
-};
-
 /**
  * Portão de âncora. Retorna { passed, failures[], archetype }. Falhar qualquer
  * critério exclui o ativo do universo Buy-and-Hold.
  */
 export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
-  const failures = [];
   const ticker = upper(asset.ticker);
   const metrics = asset.metrics || {};
   const sector = asset.sector || metrics.sector;
@@ -107,55 +100,15 @@ export const passesBuyAndHoldGate = (asset, config = BUY_AND_HOLD_CONFIG) => {
   // classifyStockArchetype deduz do ticker/setor/nome e mantém o override do
   // campo com precedência, então a linha só age onde antes se chutava.
   const archetype = asset.stockArchetype || asset.archetype || classifyStockArchetype(asset);
-  const gate = config.gate;
-
-  const deny = (config.denyTickers || []).map(upper);
-  const allow = (config.allowTickers || []).map(upper);
-
-  if (deny.includes(ticker)) failures.push('denylist manual');
-  if (isCyclicalSector(sector)) failures.push('setor cíclico');
-
-  const sectorOk = config.anchorSectors.includes(norm(sector));
-  if (!sectorOk && !allow.includes(ticker)) {
-    failures.push(`setor fora do universo âncora (${sector || 'desconhecido'})`);
-  }
-
-  const marketCap = Number(metrics.marketCap ?? asset.marketCap);
-  if (!(marketCap >= gate.minMarketCap)) failures.push(`market cap abaixo de ${gate.minMarketCap}`);
 
   // Teto de beta é POR ARQUÉTIPO: 1,00 no geral, mais alto para banco. Beta
   // ausente continua reprovando — dado que falta não vira aprovação de graça.
-  const beta = Number(metrics.beta ?? asset.beta);
   const maxBeta = resolveMaxBeta(archetype, config);
-  if (!(Number.isFinite(beta) && beta <= maxBeta)) failures.push(`beta acima de ${maxBeta}`);
-
-  const liquidity = Number(metrics.avgLiquidity ?? asset.avgLiquidity);
-  if (!(liquidity >= gate.minAvgLiquidity)) failures.push(`liquidez abaixo de ${gate.minAvgLiquidity}`);
-
-  const roe = Number(readMetric(asset, 'roeTtm') ?? metrics.roe);
-  if (!(roe >= gate.minRoe)) failures.push(`ROE abaixo de ${gate.minRoe}`);
-
-  if (archetype === 'BANK') {
-    // Solidez de banco é Basileia + rentabilidade recorrente, ambas do IF.data.
-    // `roeTtm` ausente cai no ROE genérico já cobrado acima — aqui só reprova quando
-    // o dado EXISTE e está abaixo do piso, para não punir emissor sem cobertura.
-    const capitalRatio = Number(readMetric(asset, 'capitalRatio'));
-    if (!(capitalRatio >= gate.bank.minCapitalRatio)) failures.push(`Basileia abaixo de ${gate.bank.minCapitalRatio}`);
-    const bankRoe = Number(readMetric(asset, 'roeTtm'));
-    if (Number.isFinite(bankRoe) && bankRoe < gate.bank.minRoeTtm) {
-      failures.push(`ROE recorrente abaixo de ${gate.bank.minRoeTtm}`);
-    }
-  } else if (archetype === 'INSURER') {
-    const solvency = Number(readMetric(asset, 'solvencyRatio'));
-    const combined = Number(readMetric(asset, 'combinedRatio'));
-    if (!(solvency >= gate.insurer.minSolvency)) failures.push(`solvência abaixo de ${gate.insurer.minSolvency}`);
-    if (!(combined <= gate.insurer.maxCombined)) failures.push(`combined ratio acima de ${gate.insurer.maxCombined}`);
-  } else {
-    const netDebtEbitda = Number(readMetric(asset, 'netDebtEbitda'));
-    if (Number.isFinite(netDebtEbitda) && netDebtEbitda > gate.maxNetDebtEbitda) {
-      failures.push(`netDebt/EBITDA acima de ${gate.maxNetDebtEbitda}`);
-    }
-  }
+  const failures = [
+    ...curationFailures(ticker, sector, config),
+    ...quantitativeFailures(asset, metrics, maxBeta, config.gate),
+    ...archetypeFailures(asset, archetype, config.gate),
+  ];
 
   return { passed: failures.length === 0, failures, archetype };
 };
@@ -289,16 +242,7 @@ export const scoreBuyAndHold = (asset, config = BUY_AND_HOLD_CONFIG) => {
   }
 
   const axes = computeBuyAndHoldAxes(asset, gate.archetype, config);
-  const weights = config.weights;
-  const activeWeight = (axes.observed.durability ? weights.durability : 0)
-    + (axes.observed.resilience ? weights.resilience : 0)
-    + (axes.observed.consistency ? weights.consistency : 0);
-
-  const weightedSum = (axes.observed.durability ? axes.durability * weights.durability : 0)
-    + (axes.observed.resilience ? axes.resilience * weights.resilience : 0)
-    + (axes.observed.consistency ? axes.consistency * weights.consistency : 0);
-
-  const composite = activeWeight > 0 ? Math.round(weightedSum / activeWeight) : 0;
+  const composite = weightedComposite(axes, config.weights);
   const entry = computeEntryPenalty(asset, config);
   const rawScore = clamp(composite - entry.penalty);
 
@@ -326,25 +270,7 @@ export const scoreBuyAndHold = (asset, config = BUY_AND_HOLD_CONFIG) => {
   // aqui — o motor segue em shadow e a histerese precisa de estado entre runs
   // (a lista anterior), que este módulo, sendo função pura, não tem.
   const action = (score >= BUY_THRESHOLD && !entry.expensive) ? 'BUY' : 'WAIT';
-
-  let reason;
-  if (action === 'BUY') {
-    reason = 'Âncora segura com preço justo';
-  } else if (entry.expensive && composite >= BUY_THRESHOLD) {
-    // Convição de negócio suficiente; só o preço segura o BUY.
-    reason = 'Âncora segura, porém cara — aguarde preço';
-  } else {
-    // Limitante é o eixo mais fraco — considerando só os eixos efetivamente medidos.
-    const axisLabels = { durability: 'durabilidade', resilience: 'resiliência', consistency: 'consistência' };
-    const weakest = ['durability', 'resilience', 'consistency']
-      .filter(key => axes.observed[key])
-      .map(key => [axisLabels[key], axes[key]])
-      .sort((a, b) => a[1] - b[1])[0];
-    const suffix = weakest ? ` (${weakest[0]} ${weakest[1]}/100)` : '';
-    reason = entry.expensive
-      ? `Âncora, mas convicção e preço insuficientes${suffix}`
-      : `Âncora, mas convicção insuficiente${suffix}`;
-  }
+  const reason = buyAndHoldReason(action, entry, composite, axes);
 
   return {
     version: BUY_AND_HOLD_VERSION,
